@@ -15,15 +15,19 @@ else
 fi
 
 # Claude config
-jq -n '
+jq -n --arg reminder "~/.claude/claudemd-reminder.py" '
 .attribution = {
   commit: "",
   pr: "",
   sessionUrl: false
 }
+| .hooks = {
+  UserPromptSubmit: [ { hooks: [ { type: "command", command: $reminder } ] } ],
+  PostToolUse: [ { hooks: [ { type: "command", command: $reminder } ] } ]
+}
 ' > /tmp/settings.json
 
-# CLAUDE.md
+# CLAUDE.md and its reminder hook
 for d in /home/user/.claude /root/.claude; do
   mkdir -p "$d"
   if [ -f "$d/settings.json" ]; then
@@ -33,6 +37,7 @@ for d in /home/user/.claude /root/.claude; do
     cp /tmp/settings.json "$d/settings.json"
   fi
   cp "$repo/CLAUDE.md" "$d/"
+  install -m 755 "$repo/hooks/claudemd-reminder.py" "$d/"
 done
 
 chown -R user:user /home/user/.claude 2>/dev/null || true
