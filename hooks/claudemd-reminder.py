@@ -21,12 +21,14 @@ POINTER_REMINDER = (
 )
 
 
-def transcript_tail(transcript_path):
+def transcript_lines(transcript_path, tail_bytes):
     try:
         with open(transcript_path, "rb") as transcript:
-            transcript.seek(0, os.SEEK_END)
-            start = max(0, transcript.tell() - TRANSCRIPT_TAIL_BYTES)
-            transcript.seek(start)
+            start = 0
+            if tail_bytes is not None:
+                transcript.seek(0, os.SEEK_END)
+                start = max(0, transcript.tell() - tail_bytes)
+                transcript.seek(start)
             lines = transcript.read().split(b"\n")
     except OSError:
         return []
@@ -43,16 +45,23 @@ def main_loop_usage(line):
     return (entry.get("message") or {}).get("usage")
 
 
-def context_tokens(transcript_path):
-    for line in reversed(transcript_tail(transcript_path)):
+def latest_usage(lines):
+    for line in reversed(lines):
         usage = main_loop_usage(line)
-        if not usage:
-            continue
-        return (
-            usage.get("input_tokens", 0)
-            + usage.get("cache_read_input_tokens", 0)
-            + usage.get("cache_creation_input_tokens", 0)
-        )
+        if usage:
+            return usage
+    return None
+
+
+def context_tokens(transcript_path):
+    for tail_bytes in (TRANSCRIPT_TAIL_BYTES, None):
+        usage = latest_usage(transcript_lines(transcript_path, tail_bytes))
+        if usage:
+            return (
+                usage.get("input_tokens", 0)
+                + usage.get("cache_read_input_tokens", 0)
+                + usage.get("cache_creation_input_tokens", 0)
+            )
     return None
 
 
@@ -60,7 +69,7 @@ def mark_path(session_id):
     return os.path.join(MARK_DIR, re.sub(r"[^A-Za-z0-9_-]", "", session_id))
 
 
-def read_mark(session_id):
+def read_baseline(session_id):
     try:
         with open(mark_path(session_id), encoding="utf-8") as mark:
             return int(mark.read())
@@ -68,10 +77,18 @@ def read_mark(session_id):
         return None
 
 
-def write_mark(session_id, tokens):
+def write_baseline(session_id, tokens):
     os.makedirs(MARK_DIR, exist_ok=True)
     with open(mark_path(session_id), "w", encoding="utf-8") as mark:
         mark.write(str(tokens))
+
+
+def claim_full_copy(session_id, tokens):
+    baseline = read_baseline(session_id)
+    due = baseline is not None and tokens - baseline >= REMINDER_INTERVAL_TOKENS
+    if due or baseline is None or tokens < baseline:
+        write_baseline(session_id, tokens)
+    return due
 
 
 def read_claude_md():
@@ -92,12 +109,15 @@ def emit(event, context):
 def main():
     payload = json.loads(sys.stdin.read() or "{}")
     event = payload.get("hook_event_name")
-    session_id = payload.get("session_id")
-    transcript_path = payload.get("transcript_path")
-    if not (event and session_id and transcript_path):
+    if not event:
         return
     if event == "SessionStart":
         emit(event, POINTER_REMINDER)
+        return
+
+    session_id = payload.get("session_id")
+    transcript_path = payload.get("transcript_path")
+    if not (session_id and transcript_path):
         return
 
     tokens = context_tokens(transcript_path)
@@ -105,19 +125,11 @@ def main():
         if event == "UserPromptSubmit":
             emit(event, POINTER_REMINDER)
         return
-
-    mark = read_mark(session_id)
-    if mark is None or tokens < mark:
-        write_mark(session_id, tokens)
-        return
-    if tokens - mark < REMINDER_INTERVAL_TOKENS:
-        return
-
     claude_md = read_claude_md()
     if not claude_md:
         return
-    write_mark(session_id, tokens)
-    emit(event, f"{FULL_COPY_PREAMBLE}\n\n{claude_md}")
+    if claim_full_copy(session_id, tokens):
+        emit(event, f"{FULL_COPY_PREAMBLE}\n\n{claude_md}")
 
 
 if __name__ == "__main__":
