@@ -5,11 +5,13 @@ import json
 import os
 import re
 import sys
+import time
 
 REMINDER_INTERVAL_TOKENS = 50_000
 TRANSCRIPT_TAIL_BYTES = 1 << 20
 CLAUDE_MD_PATH = os.path.expanduser("~/.claude/CLAUDE.md")
 MARK_DIR = os.path.expanduser("~/.claude/claudemd-reminder")
+MARK_LIFETIME_SECONDS = 7 * 24 * 60 * 60
 SYNTHETIC_MODEL = "<synthetic>"
 FULL_COPY_PREAMBLE = (
     "Your CLAUDE.md in full, repeated because the conversation has grown by "
@@ -86,11 +88,24 @@ def write_baseline(mark, tokens):
     mark.write(str(tokens))
 
 
+def forget_marks_of_dead_sessions():
+    cutoff = time.time() - MARK_LIFETIME_SECONDS
+    for name in os.listdir(MARK_DIR):
+        path = os.path.join(MARK_DIR, name)
+        try:
+            if os.path.getmtime(path) < cutoff:
+                os.unlink(path)
+        except OSError:
+            continue
+
+
 def claim_full_copy(session_id, tokens):
     os.makedirs(MARK_DIR, exist_ok=True)
     with open(mark_path(session_id), "a+", encoding="utf-8") as mark:
         fcntl.flock(mark, fcntl.LOCK_EX)
         baseline = read_baseline(mark)
+        if baseline is None:
+            forget_marks_of_dead_sessions()
         due = baseline is not None and tokens - baseline >= REMINDER_INTERVAL_TOKENS
         if due or baseline is None or tokens < baseline:
             write_baseline(mark, tokens)
