@@ -10,6 +10,7 @@ REMINDER_INTERVAL_TOKENS = 50_000
 TRANSCRIPT_TAIL_BYTES = 1 << 20
 CLAUDE_MD_PATH = os.path.expanduser("~/.claude/CLAUDE.md")
 MARK_DIR = os.path.expanduser("~/.claude/claudemd-reminder")
+SYNTHETIC_MODEL = "<synthetic>"
 FULL_COPY_PREAMBLE = (
     "Your CLAUDE.md in full, repeated because the conversation has grown by "
     f"{REMINDER_INTERVAL_TOKENS // 1000}k tokens. It overrides your defaults. "
@@ -36,33 +37,34 @@ def transcript_lines(transcript_path, tail_bytes):
     return lines[1:] if start else lines
 
 
-def main_loop_usage(line):
-    try:
-        entry = json.loads(line)
-    except (UnicodeDecodeError, json.JSONDecodeError):
-        return None
-    if entry.get("type") != "assistant" or entry.get("isSidechain"):
-        return None
-    return (entry.get("message") or {}).get("usage")
-
-
-def latest_usage(lines):
+def newest_assistant(lines):
     for line in reversed(lines):
-        usage = main_loop_usage(line)
-        if usage:
-            return usage
+        try:
+            entry = json.loads(line)
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            continue
+        if entry.get("type") == "assistant":
+            return entry
     return None
+
+
+def main_loop_tokens(entry):
+    message = entry.get("message") or {}
+    if entry.get("isSidechain") or message.get("model") == SYNTHETIC_MODEL:
+        return None
+    usage = message.get("usage") or {}
+    return (
+        usage.get("input_tokens", 0)
+        + usage.get("cache_read_input_tokens", 0)
+        + usage.get("cache_creation_input_tokens", 0)
+    ) or None
 
 
 def context_tokens(transcript_path):
     for tail_bytes in (TRANSCRIPT_TAIL_BYTES, None):
-        usage = latest_usage(transcript_lines(transcript_path, tail_bytes))
-        if usage:
-            return (
-                usage.get("input_tokens", 0)
-                + usage.get("cache_read_input_tokens", 0)
-                + usage.get("cache_creation_input_tokens", 0)
-            )
+        entry = newest_assistant(transcript_lines(transcript_path, tail_bytes))
+        if entry is not None:
+            return main_loop_tokens(entry)
     return None
 
 
