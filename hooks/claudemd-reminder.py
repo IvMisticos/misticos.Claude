@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import fcntl
 import json
 import os
 import re
@@ -69,26 +70,29 @@ def mark_path(session_id):
     return os.path.join(MARK_DIR, re.sub(r"[^A-Za-z0-9_-]", "", session_id))
 
 
-def read_baseline(session_id):
+def read_baseline(mark):
+    mark.seek(0)
     try:
-        with open(mark_path(session_id), encoding="utf-8") as mark:
-            return int(mark.read())
-    except (OSError, ValueError):
+        return int(mark.read())
+    except ValueError:
         return None
 
 
-def write_baseline(session_id, tokens):
-    os.makedirs(MARK_DIR, exist_ok=True)
-    with open(mark_path(session_id), "w", encoding="utf-8") as mark:
-        mark.write(str(tokens))
+def write_baseline(mark, tokens):
+    mark.seek(0)
+    mark.truncate()
+    mark.write(str(tokens))
 
 
 def claim_full_copy(session_id, tokens):
-    baseline = read_baseline(session_id)
-    due = baseline is not None and tokens - baseline >= REMINDER_INTERVAL_TOKENS
-    if due or baseline is None or tokens < baseline:
-        write_baseline(session_id, tokens)
-    return due
+    os.makedirs(MARK_DIR, exist_ok=True)
+    with open(mark_path(session_id), "a+", encoding="utf-8") as mark:
+        fcntl.flock(mark, fcntl.LOCK_EX)
+        baseline = read_baseline(mark)
+        due = baseline is not None and tokens - baseline >= REMINDER_INTERVAL_TOKENS
+        if due or baseline is None or tokens < baseline:
+            write_baseline(mark, tokens)
+        return due
 
 
 def read_claude_md():
