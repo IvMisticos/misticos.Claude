@@ -16,14 +16,17 @@ fi
 
 # Claude config
 jq -n --arg reminder "~/.claude/claudemd-reminder.py" '
+def reminder_on(matcher):
+  [ { matcher: matcher, hooks: [ { type: "command", command: $reminder } ] } ];
 .attribution = {
   commit: "",
   pr: "",
   sessionUrl: false
 }
 | .hooks = {
-  UserPromptSubmit: [ { hooks: [ { type: "command", command: $reminder } ] } ],
-  PostToolUse: [ { hooks: [ { type: "command", command: $reminder } ] } ]
+  SessionStart: reminder_on("compact"),
+  UserPromptSubmit: reminder_on(""),
+  PostToolUse: reminder_on("")
 }
 ' > /tmp/settings.json
 

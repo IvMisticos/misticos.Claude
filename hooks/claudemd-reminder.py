@@ -9,19 +9,27 @@ REMINDER_INTERVAL_TOKENS = 50_000
 TRANSCRIPT_TAIL_BYTES = 1 << 20
 CLAUDE_MD_PATH = os.path.expanduser("~/.claude/CLAUDE.md")
 MARK_DIR = os.path.expanduser("~/.claude/claudemd-reminder")
-PREAMBLE = (
+FULL_COPY_PREAMBLE = (
     "Your CLAUDE.md in full, repeated because the conversation has grown by "
     f"{REMINDER_INTERVAL_TOKENS // 1000}k tokens. It overrides your defaults. "
     "Read it and correct whatever you have drifted from."
 )
+POINTER_REMINDER = (
+    "CLAUDE.md holds the standing rules for this session and overrides your "
+    f"defaults. Read {CLAUDE_MD_PATH} if it is not in your context, then "
+    "follow it."
+)
 
 
 def transcript_tail(transcript_path):
-    with open(transcript_path, "rb") as transcript:
-        transcript.seek(0, os.SEEK_END)
-        start = max(0, transcript.tell() - TRANSCRIPT_TAIL_BYTES)
-        transcript.seek(start)
-        lines = transcript.read().split(b"\n")
+    try:
+        with open(transcript_path, "rb") as transcript:
+            transcript.seek(0, os.SEEK_END)
+            start = max(0, transcript.tell() - TRANSCRIPT_TAIL_BYTES)
+            transcript.seek(start)
+            lines = transcript.read().split(b"\n")
+    except OSError:
+        return []
     return lines[1:] if start else lines
 
 
@@ -88,9 +96,14 @@ def main():
     transcript_path = payload.get("transcript_path")
     if not (event and session_id and transcript_path):
         return
+    if event == "SessionStart":
+        emit(event, POINTER_REMINDER)
+        return
 
     tokens = context_tokens(transcript_path)
     if tokens is None:
+        if event == "UserPromptSubmit":
+            emit(event, POINTER_REMINDER)
         return
 
     mark = read_mark(session_id)
@@ -104,7 +117,7 @@ def main():
     if not claude_md:
         return
     write_mark(session_id, tokens)
-    emit(event, f"{PREAMBLE}\n\n{claude_md}")
+    emit(event, f"{FULL_COPY_PREAMBLE}\n\n{claude_md}")
 
 
 if __name__ == "__main__":
