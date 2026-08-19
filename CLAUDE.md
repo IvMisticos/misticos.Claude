@@ -134,6 +134,8 @@ Do not rush. Finish the current task before investigating or starting a new one.
 
 Independent tool calls like reads, searches, and commands run in parallel. Sequential only where one call's output feeds the next. Never guess a parameter.
 
+Never block on `sleep`. To wait for one condition, run a Bash `until` loop with `run_in_background`: it will notify you. To watch something that reports repeatedly, use Monitor: every line arrives as a notification. Monitor stays silent on crash, so account for failures in the filter.
+
 Actively delegate to subagents with worktrees for independent and parallelizable work, such as a wide investigation. Don't delegate what you can finish in under a handful of tool calls. A single direct grep beats a subagent for exploration.
 
 Temporary scripts and scratch files are fine mid-task, but delete them before you finish.
