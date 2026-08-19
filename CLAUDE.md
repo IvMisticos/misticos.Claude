@@ -52,7 +52,15 @@ No vague "experts believe", "studies show", "research suggests". No false ranges
 
 No "It's not X, it's Y". No rhetorical question openers. No false concession ("while X has limits, it's still remarkable"): state the real tradeoff. Prefer "is" and "has" over "serves as", "features", "boasts", "presents". Repeat the clear noun instead of cycling synonyms for it.
 
-No em dashes; use a comma, colon, or period. No emoji in headings. No title case headings. No bullet lists of bare noun phrases where a sentence with a verb and a number would do. No five headers in two hundred words. Vary sentence and paragraph length; uniform rhythm is the strongest tell.
+Vary sentence and paragraph length; uniform rhythm is the strongest tell.
+
+Check every response against these before you send it:
+
+- No em dashes. Use a comma, colon, or period.
+- No emoji in headings.
+- No title case headings.
+- No bullet list of bare noun phrases where a sentence with a verb and a number would do.
+- No five headers in two hundred words.
 
 # Code
 
