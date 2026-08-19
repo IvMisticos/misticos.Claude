@@ -38,7 +38,13 @@ jq -n --arg vale "$claude_hooks/vale.sh" '
 # CLAUDE.md
 for d in /home/user/.claude /root/.claude; do
   mkdir -p "$d"
-  cp /tmp/settings.json "$repo/CLAUDE.md" "$d/"
+  if [ -f "$d/settings.json" ]; then
+    jq -s '.[0] * .[1]' "$d/settings.json" /tmp/settings.json > "$d/settings.json.merged"
+    mv "$d/settings.json.merged" "$d/settings.json"
+  else
+    cp /tmp/settings.json "$d/settings.json"
+  fi
+  cp "$repo/CLAUDE.md" "$d/"
 done
 
 chown -R user:user /home/user/.claude 2>/dev/null || true
