@@ -59,6 +59,13 @@ def main_loop_tokens(entry):
     ) or None
 
 
+def transcript_read_in_full(transcript_path):
+    try:
+        return os.path.getsize(transcript_path) <= TRANSCRIPT_TAIL_BYTES
+    except OSError:
+        return True
+
+
 def context_tokens(transcript_path):
     lines = transcript_lines(transcript_path, TRANSCRIPT_TAIL_BYTES)
     for entry in assistant_entries(lines):
@@ -141,7 +148,7 @@ def main():
 
     tokens = context_tokens(transcript_path)
     if tokens is None:
-        if event == "UserPromptSubmit":
+        if event == "UserPromptSubmit" and transcript_read_in_full(transcript_path):
             emit(event, POINTER_REMINDER)
         return
     claude_md = read_claude_md()
