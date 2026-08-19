@@ -33,7 +33,7 @@ def register(event; matcher):
 # CLAUDE.md and its reminder hook
 for d in /home/user/.claude /root/.claude; do
   mkdir -p "$d"
-  [ -f "$d/settings.json" ] || echo '{}' > "$d/settings.json"
+  [ -s "$d/settings.json" ] || echo '{}' > "$d/settings.json"
   jq --arg command "$reminder" "$register_reminder" "$d/settings.json" > "$d/settings.json.patched"
   mv "$d/settings.json.patched" "$d/settings.json"
   cp "$repo/CLAUDE.md" "$d/"
