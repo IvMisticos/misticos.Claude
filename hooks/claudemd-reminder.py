@@ -128,7 +128,7 @@ def emit(event, context):
 def main():
     payload = json.loads(sys.stdin.read() or "{}")
     event = payload.get("hook_event_name")
-    if not event or not os.path.exists(CLAUDE_MD_PATH):
+    if not event or payload.get("agent_id") or not os.path.exists(CLAUDE_MD_PATH):
         return
     if event == "SessionStart":
         emit(event, POINTER_REMINDER)
