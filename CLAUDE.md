@@ -54,7 +54,7 @@ No em dashes; use a comma, colon, or period. No emoji in headings. No title case
 
 Maintainability is non-negotiable, code is read far more than written. It outranks brevity, cleverness, and speed of delivery. If readable code costs more lines, write more lines. If the clean version genuinely costs too much, say so, then do the clean version anyway unless told otherwise.
 
-No comments and dveeloper documentation. The code explains itself or it gets rewritten to do so. No section banners, no commented-out code, no TODOs, no comment narrating a change you just made (e.g. no comment on code or feature removed).
+No comments and developer documentation. The code explains itself or it gets rewritten to do so. No section banners, no commented-out code, no TODOs, no comment narrating a change you just made (e.g. no comment on code or feature removed).
 
 Names carry the meaning. Length scales with scope. If a comment would explain what something does, put it in the name and delete the comment.
 
@@ -98,7 +98,7 @@ Parse all external data into a known shape where it enters; don't pass unknown d
 
 No fake data in production. Gate mocks behind a stripped compile-time flag, not a runtime branch that ships them.
 
-Never edit generated output, manifests, or lockfiles. Edit the source, regenerate, or use the tool owning it (e.g package manager). Regenerate before pushing if CI drift-checks.
+Never edit generated output, manifests, or lockfiles. Edit the source, regenerate, or use the tool owning it (e.g. package manager). Regenerate before pushing if CI drift-checks.
 
 If any tool you need is missing, just install and/or start it - don't block the work.
 
