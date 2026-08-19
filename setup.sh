@@ -5,10 +5,19 @@ set -euo pipefail
 # Dependencies and common tools
 apt-get update && apt-get install -y git-lfs ffmpeg curl jq gh
 
+# Repository
+if [ -f "${BASH_SOURCE[0]:-}" ]; then
+  repo=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+else
+  repo=/usr/local/share/misticos.claude
+  rm -rf "$repo"
+  git clone --depth 1 https://github.com/IvMisticos/misticos.Claude "$repo"
+fi
+
 # Claude hooks
 claude_hooks=/usr/local/share/claude-hooks
 mkdir -p $claude_hooks
-curl -fsSL -o "$claude_hooks/vale.sh" "https://gist.github.com/IvMisticos/25d43c86fe27d7cd90377dd04299c4d1/raw/vale.sh"
+cp "$repo/vale.sh" "$claude_hooks/vale.sh"
 chmod +x $claude_hooks/*
 
 # Claude config
@@ -27,12 +36,9 @@ jq -n --arg vale "$claude_hooks/vale.sh" '
 ' > /tmp/settings.json
 
 # CLAUDE.md
-curl -fsSL -o /tmp/CLAUDE.md "https://gist.github.com/IvMisticos/25d43c86fe27d7cd90377dd04299c4d1/raw/CLAUDE.md"
-[ -s /tmp/CLAUDE.md ] || { echo "CLAUDE.md is empty" >&2; exit 1; }
-
 for d in /home/user/.claude /root/.claude; do
   mkdir -p "$d"
-  cp /tmp/settings.json /tmp/CLAUDE.md "$d/"
+  cp /tmp/settings.json "$repo/CLAUDE.md" "$d/"
 done
 
 chown -R user:user /home/user/.claude 2>/dev/null || true
@@ -48,12 +54,9 @@ curl -fsSL -o /tmp/vale.tar.gz "https://github.com/vale-cli/vale/releases/downlo
 tar -xzf /tmp/vale.tar.gz -C /usr/local/bin vale
 
 # Vale config
-curl -fsSL -o /tmp/.vale.ini "https://gist.github.com/IvMisticos/25d43c86fe27d7cd90377dd04299c4d1/raw/.vale.ini"
-[ -s /tmp/.vale.ini ] || { echo ".vale.ini is empty" >&2; exit 1; }
-
 for d in /home/user/.config/vale /root/.config/vale; do
   mkdir -p "$d"
-  cp /tmp/.vale.ini "$d/"
+  cp "$repo/.vale.ini" "$d/"
 done
 
 vale sync
@@ -61,7 +64,7 @@ vale sync
 # Git hooks
 git_hooks=/usr/local/share/git-hooks
 mkdir -p $git_hooks
-curl -fsSL -o $git_hooks/commit-msg "https://gist.github.com/IvMisticos/25d43c86fe27d7cd90377dd04299c4d1/raw/commit-msg"
+cp "$repo/commit-msg" $git_hooks/commit-msg
 chmod +x $git_hooks/*
 
 git config --global core.hooksPath $git_hooks
