@@ -30,12 +30,22 @@ def register(event; matcher):
 | register("PostToolUse"; "")
 '
 
+register_reminder_in() {
+  local settings=$1
+  if [ ! -e "$settings" ] || ! grep -q '[^[:space:]]' "$settings"; then
+    echo '{}' > "$settings"
+  elif ! jq -e type "$settings" > /dev/null 2>&1; then
+    echo "setup: $settings holds no JSON, leaving it alone" >&2
+    return
+  fi
+  jq --arg command "$reminder" "$register_reminder" "$settings" > "$settings.new"
+  mv "$settings.new" "$settings"
+}
+
 # CLAUDE.md and its reminder hook
 for d in /home/user/.claude /root/.claude; do
   mkdir -p "$d"
-  [ -s "$d/settings.json" ] || echo '{}' > "$d/settings.json"
-  jq --arg command "$reminder" "$register_reminder" "$d/settings.json" > "$d/settings.json.patched"
-  mv "$d/settings.json.patched" "$d/settings.json"
+  register_reminder_in "$d/settings.json"
   cp "$repo/CLAUDE.md" "$d/"
   install -m 755 "$repo/hooks/claudemd-reminder.py" "$d/"
 done
