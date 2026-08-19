@@ -28,26 +28,23 @@ POINTER_REMINDER = (
 def transcript_lines(transcript_path, tail_bytes):
     try:
         with open(transcript_path, "rb") as transcript:
-            start = 0
-            if tail_bytes is not None:
-                transcript.seek(0, os.SEEK_END)
-                start = max(0, transcript.tell() - tail_bytes)
-                transcript.seek(start)
+            transcript.seek(0, os.SEEK_END)
+            start = max(0, transcript.tell() - tail_bytes)
+            transcript.seek(start)
             lines = transcript.read().split(b"\n")
     except OSError:
         return []
     return lines[1:] if start else lines
 
 
-def newest_assistant(lines):
+def assistant_entries(lines):
     for line in reversed(lines):
         try:
             entry = json.loads(line)
         except (UnicodeDecodeError, json.JSONDecodeError):
             continue
         if entry.get("type") == "assistant":
-            return entry
-    return None
+            yield entry
 
 
 def main_loop_tokens(entry):
@@ -63,10 +60,11 @@ def main_loop_tokens(entry):
 
 
 def context_tokens(transcript_path):
-    for tail_bytes in (TRANSCRIPT_TAIL_BYTES, None):
-        entry = newest_assistant(transcript_lines(transcript_path, tail_bytes))
-        if entry is not None:
-            return main_loop_tokens(entry)
+    lines = transcript_lines(transcript_path, TRANSCRIPT_TAIL_BYTES)
+    for entry in assistant_entries(lines):
+        tokens = main_loop_tokens(entry)
+        if tokens:
+            return tokens
     return None
 
 
