@@ -34,8 +34,8 @@ register_reminder_in() {
   local settings=$1
   if [ ! -e "$settings" ] || ! grep -q '[^[:space:]]' "$settings"; then
     echo '{}' > "$settings"
-  elif ! jq -e type "$settings" > /dev/null 2>&1; then
-    echo "setup: $settings holds no JSON, leaving it alone" >&2
+  elif ! jq -e 'type == "object"' "$settings" > /dev/null 2>&1; then
+    echo "setup: $settings holds no JSON object, leaving it alone" >&2
     return
   fi
   jq --arg command "$reminder" "$register_reminder" "$settings" > "$settings.new"
