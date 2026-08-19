@@ -19,7 +19,7 @@ reminder='~/.claude/claudemd-reminder.py'
 register_reminder='
 def register(event; matcher):
   .hooks[event] = ((.hooks[event] // [])
-    | map(.hooks |= map(select(.command != $command)))
+    | map(.hooks = ((.hooks // []) | map(select(.command != $command))))
     | map(select(.hooks | length > 0))
     + [ { matcher: matcher, hooks: [ { type: "command", command: $command } ] } ]);
 .attribution.commit = ""
