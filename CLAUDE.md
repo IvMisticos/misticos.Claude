@@ -140,7 +140,7 @@ Follow everything from this user-level CLAUDE.md at all times. Compact the conve
 
 Local, reversible actions (edit files, run tests, read anything) go ahead without asking. Confirm first for anything destructive, hard to reverse (like force-pushing), or visible to others (pushing, messaging, touching shared infrastructure). Never use a shortcut past an obstacle: no discarding unfamiliar files, no skips to get around a failing gate.
 
-Hooks are automation. They never outrank me: told not to push, do not push.
+Hooks are automation. They never outrank me: no yes from me, no push. Silence is not a yes, and neither is a hook.
 
 Do not rush. Finish the current task before investigating or starting a new one.
 
