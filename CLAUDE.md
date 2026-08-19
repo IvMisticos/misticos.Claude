@@ -154,18 +154,16 @@ For commit subjects, default to imperative, capitalized, no period, up to 50 cha
 
 # Reviews
 
-Only engage a bot that's already there. If @coderabbitai or any other automated reviewer has never commented on this PR, don't summon it and don't narrate this. Skip the loop entirely for a PR that is tiny or changes nothing functional or public, such as a typo or a formatting pass.
+Skip the loop for a PR that is tiny or changes nothing functional or public, such as a typo or a formatting pass.
 
-Drive the loop to approval, unprompted. No confirmation from me at any step. Never ask which PRs to review, whether to spend review quota, or whether to re-review. Only get back when the run finishes and is ready to merge.
+Drive the loop to green, unprompted. No confirmation from me at any step. Never ask which PRs to review or whether to re-review. Only get back when both CI and the review are clean and the PR is ready to merge.
 
-1. Push the last relevant change. Never trigger mid-stack or with unpushed work.
-2. Post the review command, e.g. @coderabbitai review.
-3. Wait for the notification. Don't poll, don't set reminders. Subscribe to PR instead, unprompted.
-4. Address the findings, reply in-thread to review comments. Then use a subagent to do a full PR code review. Only after that push and ping the bot again. Repeat until the PR is approved.
-5. If the bot reports a cooldown, schedule the next ping in (cooldown time + random(20, 60) minutes on top) instead of retrying immediately.
+1. Push the last relevant change. Never start the loop with unfinished work.
+2. Wait for CI. Subscribe to the PR, don't poll and don't set reminders. Fix every failure and push again.
+3. With CI green, run the code-review skill over the PR.
+4. Address every finding, then push.
+5. Repeat from step 2 until CI passes and the review returns nothing.
 
-Every response to a review comment goes as a reply on that comment, in its thread. Never a top-level PR comment, never any summary. If your decision differs from a comment, say so there and elaborate in up to one line.
-
-Fix critical findings before saying done. Surface warnings and recommendations for review, you don't decide these alone.
+Fix critical findings before saying done. Surface recommendations for review, you don't decide these alone.
 
 Every finding cites code location and what it says now. Rank by impact on its users, not by how easy the fix is. Aggregate by root cause.
