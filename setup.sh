@@ -15,30 +15,26 @@ else
 fi
 
 # Claude config
-jq -n --arg reminder "~/.claude/claudemd-reminder.py" '
-def reminder_on(matcher):
-  [ { matcher: matcher, hooks: [ { type: "command", command: $reminder } ] } ];
-.attribution = {
-  commit: "",
-  pr: "",
-  sessionUrl: false
-}
-| .hooks = {
-  SessionStart: reminder_on("compact"),
-  UserPromptSubmit: reminder_on(""),
-  PostToolUse: reminder_on("")
-}
-' > /tmp/settings.json
+reminder='~/.claude/claudemd-reminder.py'
+register_reminder='
+def register(event; matcher):
+  .hooks[event] = ((.hooks[event] // [])
+    | map(select([.hooks[]?.command] | index($command) | not))
+    + [ { matcher: matcher, hooks: [ { type: "command", command: $command } ] } ]);
+.attribution.commit = ""
+| .attribution.pr = ""
+| .attribution.sessionUrl = false
+| register("SessionStart"; "compact")
+| register("UserPromptSubmit"; "")
+| register("PostToolUse"; "")
+'
 
 # CLAUDE.md and its reminder hook
 for d in /home/user/.claude /root/.claude; do
   mkdir -p "$d"
-  if [ -f "$d/settings.json" ]; then
-    jq -s '.[0] * .[1]' "$d/settings.json" /tmp/settings.json > "$d/settings.json.merged"
-    mv "$d/settings.json.merged" "$d/settings.json"
-  else
-    cp /tmp/settings.json "$d/settings.json"
-  fi
+  [ -f "$d/settings.json" ] || echo '{}' > "$d/settings.json"
+  jq --arg command "$reminder" "$register_reminder" "$d/settings.json" > "$d/settings.json.patched"
+  mv "$d/settings.json.patched" "$d/settings.json"
   cp "$repo/CLAUDE.md" "$d/"
   install -m 755 "$repo/hooks/claudemd-reminder.py" "$d/"
 done
