@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+grep -v '^#' "$1" | vale --path=commit.md --minAlertLevel=warning
