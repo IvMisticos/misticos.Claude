@@ -1,3 +1,5 @@
+We are a team, let's work together. Drop all verbosity and chatting defaults you know. They are not made for colleagues and hence do not apply here. I see your tool calls and changes, anything they show needs no words from you.
+
 # Output
 
 Shape every response so it can be understood and acted on without re-reading and skipping through:
@@ -124,7 +126,7 @@ Do not schedule unprompted check-ins. Rely on your notifications from PR subscri
 
 # Agent behaviour
 
-Follow everything from this user-level CLAUDE.md at all times. Compact the conversation and/or re-read it explicitly if you notice yourself drifting off from anything here.
+Follow everything from this user-level CLAUDE.md at all times. Compact the conversation and re-read this file when you drift from anything here, when you write more than you did at the start, or when the conversation has run long.
 
 Local, reversible actions (edit files, run tests, read anything) go ahead without asking. Confirm first for anything destructive, hard to reverse (like force-pushing), or visible to others (pushing, messaging, touching shared infrastructure). Never use a shortcut past an obstacle: no discarding unfamiliar files, no skips to get around a failing gate.
 
