@@ -12,7 +12,11 @@ TAIL_BYTES = 1 << 20
 MARK_LIFETIME_SECONDS = 7 * 24 * 60 * 60
 CLAUDE_MD_PATH = os.path.expanduser("~/.claude/CLAUDE.md")
 MARK_DIR = os.path.expanduser("~/.claude/claudemd-reminder")
-SYNTHETIC_MODEL = "<synthetic>"
+CONTEXT_FIELDS = (
+    "input_tokens",
+    "cache_read_input_tokens",
+    "cache_creation_input_tokens",
+)
 POINTER_REMINDER = (
     "CLAUDE.md holds the standing rules for this session and overrides your "
     f"defaults. Read {CLAUDE_MD_PATH} if it is not in your context, then "
@@ -33,14 +37,10 @@ def turn_tokens(line):
     message = turn.get("message") or {}
     if turn.get("type") != "assistant" or turn.get("isSidechain"):
         return None
-    if message.get("model") == SYNTHETIC_MODEL:
+    if message.get("model") == "<synthetic>":
         return None
     usage = message.get("usage") or {}
-    return (
-        usage.get("input_tokens", 0)
-        + usage.get("cache_read_input_tokens", 0)
-        + usage.get("cache_creation_input_tokens", 0)
-    ) or None
+    return sum(usage.get(field, 0) for field in CONTEXT_FIELDS) or None
 
 
 def context_tokens(transcript_path):
