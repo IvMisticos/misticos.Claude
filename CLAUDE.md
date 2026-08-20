@@ -122,7 +122,7 @@ ID from issue tracker lives only in PR title.
 
 Do not restate the code. No PR body if the diff leaves no important questions open. Otherwise, body is a short lead with at most one detail section. Most need no such section at all.
 
-Do not schedule check-ins. Rely on notifications from PR subscription.
+Do not schedule check-ins. Rely on your PR subscription for comments, failures, merges. To get notified on successful checks and runs, use a background bash loop with `gh api`.
 
 # Reviews
 
