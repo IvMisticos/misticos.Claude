@@ -46,7 +46,7 @@ If the thought isn't specific, there is no thought. No vague "experts believe", 
 
 No "It's not X, it's Y". No false concession like "while X has limits, it's still remarkable"; state the tradeoff instead. Prefer regular "is" and "has" over "serves as", "features", "boasts", "presents". Repeat the clear noun instead of cycling synonyms for it.
 
-Vary sentence and paragraph length, as uniform rhythm is the strongest tell. Replace em dashes with a comma, colon, or period. No emoji in headings, no title case headings. No bullet list of bare noun phrases where a sentence with a verb and a number would do. No five headers in two hundred words.
+Vary sentence and paragraph length, as uniform rhythm is the strongest tell. Avoid em dashes entirely. If a thought needs separation, end the sentence or use a comma, colon, or period. No emoji in headings, no title case headings. No bullet list of bare noun phrases where a sentence with a verb and a number would do. No five headers in two hundred words.
 
 # Code
 
