@@ -25,12 +25,12 @@ POINTER_REMINDER = (
     "defaults. Follow it at all times. If you notice you have drifted from "
     f"it, read {CLAUDE_MD_PATH} to bring it back into your context."
 )
-FIRST_PART_PREAMBLE = (
+FULL_COPY_PREAMBLE = (
     "The conversation has grown since you last saw CLAUDE.md, so the file "
-    "follows here in full, split across {total} messages. It overrides your "
-    "defaults. Follow it at all times. Where your recent work has drifted "
-    "from it, correct that now."
+    "follows here in full. It overrides your defaults. Follow it at all "
+    "times. Where your recent work has drifted from it, correct that now."
 )
+SPLIT_NOTICE = " The file is split across {total} messages, starting here."
 LATER_PART_PREAMBLE = "CLAUDE.md continues here, part {number} of {total}."
 
 
@@ -79,16 +79,23 @@ def transcript_fits_in_tail(transcript_path):
         return True
 
 
+def fitting_blocks(text, budget):
+    if len(text) <= budget:
+        return [text]
+    paragraphs = text.split("\n\n")
+    if len(paragraphs) > 1:
+        return [
+            block
+            for paragraph in paragraphs
+            for block in fitting_blocks(paragraph, budget)
+        ]
+    return [text[at : at + budget] for at in range(0, len(text), budget)]
+
+
 def claude_md_blocks(budget):
     with open(CLAUDE_MD_PATH, encoding="utf-8") as claude_md:
         sections = re.split(r"\n\n(?=# )", claude_md.read().strip())
-    blocks = []
-    for section in sections:
-        if len(section) <= budget:
-            blocks.append(section)
-            continue
-        blocks.extend(section.split("\n\n"))
-    return blocks
+    return [block for section in sections for block in fitting_blocks(section, budget)]
 
 
 def claude_md_parts():
@@ -108,10 +115,12 @@ def claude_md_parts():
 
 
 def part_message(index, parts):
-    if index == 0:
-        preamble = FIRST_PART_PREAMBLE.format(total=len(parts))
-    else:
+    if index:
         preamble = LATER_PART_PREAMBLE.format(number=index + 1, total=len(parts))
+    elif len(parts) > 1:
+        preamble = FULL_COPY_PREAMBLE + SPLIT_NOTICE.format(total=len(parts))
+    else:
+        preamble = FULL_COPY_PREAMBLE
     return f"{preamble}\n\n{parts[index]}"
 
 
@@ -169,7 +178,7 @@ def due_reminder(session_id, tokens, parts):
             write_state(baseline_file, tokens, tokens, None)
             return None
         next_part = state.get("next_part")
-        if next_part is not None:
+        if next_part is not None and next_part < len(parts):
             if next_part + 1 < len(parts):
                 write_state(
                     baseline_file,
@@ -204,7 +213,10 @@ def reminder_for(event, payload):
         if event == "UserPromptSubmit" and transcript_fits_in_tail(transcript_path):
             return POINTER_REMINDER
         return None
-    return due_reminder(session_id, tokens, claude_md_parts())
+    parts = claude_md_parts()
+    if not parts:
+        return None
+    return due_reminder(session_id, tokens, parts)
 
 
 def inject(event, reminder):
