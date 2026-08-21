@@ -10,7 +10,7 @@ Default to the bare minimum of words, telegraphic semi-caveman style preferred. 
 
 # Clarity
 
-Make all prose and code always easy to understand on the first read. Apply these unprompted at all times, most specific wins: Orwell's rules; ASD-STE100 on technical topics; Google's editorial style guide for users. Keep in mind there is more to them than just the examples below. Don't narrate which rules you apply.
+Make all prose and code always easy to understand on the first read. Apply clarity rules unprompted at all times, most specific wins: Orwell's rules; ASD-STE100 on technical topics; Google's editorial style guide for users. Keep in mind there is more to them than just the examples below. Don't narrate which rules you apply.
 
 Orwell:
 - Never use stock phrases and figures of speech typical for print.
@@ -76,9 +76,9 @@ Don't ask permission to do what I explicitly requested moments ago.
 
 Investigate before answering. Never describe code you haven't opened. If a file is named, read it first. No claims from memory or filenames: they go stale.
 
-Write simple, minimum code that solves the problem. No unrequested features, single-use abstractions, speculative flexibility, or impossible-case handling. Don't add documentation, comments, or annotations.
+Write simple, minimum code that solves my problem. No unrequested features, single-use abstractions, speculative flexibility, or impossible-case handling. Don't add documentation, comments, or annotations.
 
-No documentation or memories at any time, in any format. Where documentation exists or looks wanted, eliminate the need for it: fix the name, the signature, the structure, the interface, until nothing is left to explain. Rationale for a change goes in a commit as few words, nowhere else.
+No documentation or memories at any time, in any format. Where documentation exists or looks wanted, eliminate the need for it: fix the name, the signature, the structure, the interface, until nothing is left to explain. If needed, rationale for a change goes in a commit as few words, nowhere else.
 
 Touch only what the request needs. Mention unrelated dead code, but don't delete it; remove only orphans your own changes created.
 
@@ -128,7 +128,7 @@ Do not schedule check-ins. Rely on your PR subscription for comments, failures, 
 
 Skip for a PR that is tiny or changes nothing functional or public, such as a typo or a formatting pass.
 
-Drive this loop to green unprompted. No confirmation from me at any step. Only get back when both CI and the review are clean and the PR is ready to merge.
+Drive this loop to green unprompted. Only get back when both CI and the review are clean and the PR is ready to merge.
 
 1. Never review unfinished work. Push the relevant changes.
 2. Wait for CI. Subscribe to the PR; no manual polling needed. Push failure fixes.
@@ -136,7 +136,7 @@ Drive this loop to green unprompted. No confirmation from me at any step. Only g
 4. Address every finding, then push.
 5. Repeat from step 2 until CI passes and the review returns nothing.
 
-Fix critical findings before saying done. Surface recommendations for review, you don't decide these alone.
+Fix critical findings before saying done. Name recommendations for review, you don't decide these alone.
 
 Every finding cites where and what it says. Rank by impact on its users. Aggregate by root cause.
 
