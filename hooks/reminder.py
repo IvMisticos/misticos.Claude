@@ -100,16 +100,20 @@ def forget_baselines_of_dead_sessions():
 def read_baselines(baseline_file):
     baseline_file.seek(0)
     try:
-        pointer, full_copy = (int(part) for part in baseline_file.read().split())
-    except ValueError:
+        baselines = json.loads(baseline_file.read())
+    except json.JSONDecodeError:
         return None, None
-    return pointer, full_copy
+    pointed_at = baselines.get("pointed_at")
+    copied_at = baselines.get("copied_at")
+    if pointed_at is None or copied_at is None:
+        return None, None
+    return pointed_at, copied_at
 
 
-def write_baselines(baseline_file, pointer, full_copy):
+def write_baselines(baseline_file, pointed_at, copied_at):
     baseline_file.seek(0)
     baseline_file.truncate()
-    baseline_file.write(f"{pointer} {full_copy}")
+    json.dump({"pointed_at": pointed_at, "copied_at": copied_at}, baseline_file)
 
 
 def advance_baselines(session_id, tokens):
