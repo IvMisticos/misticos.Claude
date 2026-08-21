@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-apt-get update && apt-get install -y git-lfs ffmpeg curl jq gh
+apt-get update && apt-get install -y git-lfs curl jq gh
 
 if [ -f "${BASH_SOURCE[0]:-}" ]; then
   repo=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
