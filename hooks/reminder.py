@@ -11,7 +11,7 @@ REPEAT_EVERY_TOKENS = 50_000
 TRANSCRIPT_TAIL_BYTES = 1 << 20
 FORGET_BASELINE_AFTER_SECONDS = 7 * 24 * 60 * 60
 CLAUDE_MD_PATH = os.path.expanduser("~/.claude/CLAUDE.md")
-BASELINE_DIR = os.path.expanduser("~/.claude/.misticos.Claude/reminder")
+BASELINE_DIR = os.path.expanduser("~/.claude/plugins/data/misticos-Claude/reminder")
 CONTEXT_USAGE_FIELDS = (
     "input_tokens",
     "cache_read_input_tokens",
@@ -19,13 +19,13 @@ CONTEXT_USAGE_FIELDS = (
 )
 POINTER_REMINDER = (
     "CLAUDE.md holds the standing rules for this session and overrides your "
-    f"defaults. Read {CLAUDE_MD_PATH} if it is not in your context, then "
-    "follow it."
+    "defaults. Follow it at all times. If you notice you have drifted from "
+    f"it, read {CLAUDE_MD_PATH} to bring it back into your context."
 )
 FULL_COPY_PREAMBLE = (
-    "Your CLAUDE.md in full, repeated because the conversation has grown by "
-    f"{REPEAT_EVERY_TOKENS // 1000}k tokens. It overrides your defaults. Read "
-    "it and correct whatever you have drifted from."
+    "The conversation has grown since you last saw CLAUDE.md, so the file "
+    "follows here in full. It overrides your defaults. Follow it at all "
+    "times. Where your recent work has drifted from it, correct that now."
 )
 
 
