@@ -9,9 +9,9 @@ import time
 
 INTERVAL_TOKENS = 50_000
 TAIL_BYTES = 1 << 20
-MARK_LIFETIME_SECONDS = 7 * 24 * 60 * 60
+BASELINE_LIFETIME_SECONDS = 7 * 24 * 60 * 60
 CLAUDE_MD_PATH = os.path.expanduser("~/.claude/CLAUDE.md")
-MARK_DIR = os.path.expanduser("~/.claude/claudemd-reminder")
+BASELINE_DIR = os.path.expanduser("~/.claude/claudemd-reminder")
 CONTEXT_FIELDS = (
     "input_tokens",
     "cache_read_input_tokens",
@@ -29,7 +29,7 @@ FULL_COPY_PREAMBLE = (
 )
 
 
-def turn_tokens(line):
+def turn_context_tokens(line):
     try:
         turn = json.loads(line)
     except (UnicodeDecodeError, json.JSONDecodeError):
@@ -49,56 +49,74 @@ def context_tokens(transcript_path):
             transcript.seek(0, os.SEEK_END)
             start = max(0, transcript.tell() - TAIL_BYTES)
             transcript.seek(start)
-            lines = transcript.read().split(b"\n")[1 if start else 0 :]
+            lines = transcript.read().split(b"\n")
     except OSError:
         return None
+    if start:
+        lines.pop(0)
     for line in reversed(lines):
-        tokens = turn_tokens(line)
+        tokens = turn_context_tokens(line)
         if tokens:
             return tokens
     return None
 
 
-def reaches_beyond_tail(transcript_path):
+def transcript_fits_in_tail(transcript_path):
     try:
-        return os.path.getsize(transcript_path) > TAIL_BYTES
+        return os.path.getsize(transcript_path) <= TAIL_BYTES
     except OSError:
-        return False
+        return True
 
 
-def forget_stale_marks():
-    cutoff = time.time() - MARK_LIFETIME_SECONDS
-    for name in os.listdir(MARK_DIR):
-        mark = os.path.join(MARK_DIR, name)
+def baseline_path(session_id):
+    return os.path.join(BASELINE_DIR, re.sub(r"[^A-Za-z0-9_-]", "-", session_id))
+
+
+def forget_baselines_of_dead_sessions():
+    cutoff = time.time() - BASELINE_LIFETIME_SECONDS
+    for name in os.listdir(BASELINE_DIR):
+        baseline = os.path.join(BASELINE_DIR, name)
         try:
-            if os.path.getmtime(mark) < cutoff:
-                os.unlink(mark)
+            if os.path.getmtime(baseline) < cutoff:
+                os.unlink(baseline)
         except OSError:
             continue
 
 
-def claim_full_copy(session_id, tokens):
-    os.makedirs(MARK_DIR, exist_ok=True)
-    path = os.path.join(MARK_DIR, re.sub(r"[^A-Za-z0-9_-]", "", session_id))
-    with open(path, "a+", encoding="utf-8") as mark:
-        fcntl.flock(mark, fcntl.LOCK_EX)
-        mark.seek(0)
-        try:
-            baseline = int(mark.read())
-        except ValueError:
-            baseline = None
-            forget_stale_marks()
-        due = baseline is not None and tokens - baseline >= INTERVAL_TOKENS
-        if due or baseline is None or tokens < baseline:
-            mark.seek(0)
-            mark.truncate()
-            mark.write(str(tokens))
-        return due
+def read_baseline(baseline_file):
+    baseline_file.seek(0)
+    try:
+        return int(baseline_file.read())
+    except ValueError:
+        return None
 
 
-def emit(event, context):
+def write_baseline(baseline_file, tokens):
+    baseline_file.seek(0)
+    baseline_file.truncate()
+    baseline_file.write(str(tokens))
+
+
+def claim_repeat(session_id, tokens):
+    os.makedirs(BASELINE_DIR, exist_ok=True)
+    path = baseline_path(session_id)
+    if not os.path.exists(path):
+        forget_baselines_of_dead_sessions()
+    with open(path, "a+", encoding="utf-8") as baseline_file:
+        fcntl.flock(baseline_file, fcntl.LOCK_EX)
+        baseline = read_baseline(baseline_file)
+        if baseline is None or tokens < baseline:
+            write_baseline(baseline_file, tokens)
+            return False
+        if tokens - baseline < INTERVAL_TOKENS:
+            return False
+        write_baseline(baseline_file, tokens)
+        return True
+
+
+def emit(event, reminder):
     json.dump(
-        {"hookSpecificOutput": {"hookEventName": event, "additionalContext": context}},
+        {"hookSpecificOutput": {"hookEventName": event, "additionalContext": reminder}},
         sys.stdout,
     )
 
@@ -119,10 +137,10 @@ def main():
 
     tokens = context_tokens(transcript_path)
     if tokens is None:
-        if event == "UserPromptSubmit" and not reaches_beyond_tail(transcript_path):
+        if event == "UserPromptSubmit" and transcript_fits_in_tail(transcript_path):
             emit(event, POINTER_REMINDER)
         return
-    if not claim_full_copy(session_id, tokens):
+    if not claim_repeat(session_id, tokens):
         return
 
     with open(CLAUDE_MD_PATH, encoding="utf-8") as claude_md:
