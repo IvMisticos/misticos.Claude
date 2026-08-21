@@ -14,7 +14,7 @@ fi
 
 d=/root/.claude
 mkdir -p "$d"
-[ -f "$d/settings.json" ] || echo '{}' > "$d/settings.json"
+[ -s "$d/settings.json" ] || echo '{}' > "$d/settings.json"
 
 jq --arg command '~/.claude/reminder.py' '
 def reminder(matcher):

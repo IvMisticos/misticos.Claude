@@ -97,7 +97,7 @@ def split_once(text, budget):
 
 
 def claude_md_parts():
-    with open(CLAUDE_MD_PATH, encoding="utf-8") as claude_md:
+    with open(CLAUDE_MD_PATH, encoding="utf-8", errors="replace") as claude_md:
         text = claude_md.read().strip()
     budget = MAX_INJECTED_CHARS - PREAMBLE_RESERVE_CHARS
     parts = []
