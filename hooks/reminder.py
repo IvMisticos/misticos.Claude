@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import enum
 import fcntl
 import json
 import os
@@ -7,7 +8,8 @@ import re
 import sys
 import time
 
-REPEAT_EVERY_TOKENS = 50_000
+FULL_COPY_EVERY_TOKENS = 50_000
+POINTER_EVERY_TOKENS = 10_000
 TRANSCRIPT_TAIL_BYTES = 1 << 20
 FORGET_BASELINE_AFTER_SECONDS = 7 * 24 * 60 * 60
 CLAUDE_MD_PATH = os.path.expanduser("~/.claude/CLAUDE.md")
@@ -27,6 +29,12 @@ FULL_COPY_PREAMBLE = (
     "follows here in full. It overrides your defaults. Follow it at all "
     "times. Where your recent work has drifted from it, correct that now."
 )
+
+
+class Due(enum.Enum):
+    NOTHING = enum.auto()
+    POINTER = enum.auto()
+    FULL_COPY = enum.auto()
 
 
 def is_conversation_turn(entry):
@@ -89,35 +97,39 @@ def forget_baselines_of_dead_sessions():
             continue
 
 
-def read_baseline(baseline_file):
+def read_baselines(baseline_file):
     baseline_file.seek(0)
     try:
-        return int(baseline_file.read())
+        pointer, full_copy = (int(part) for part in baseline_file.read().split())
     except ValueError:
-        return None
+        return None, None
+    return pointer, full_copy
 
 
-def write_baseline(baseline_file, tokens):
+def write_baselines(baseline_file, pointer, full_copy):
     baseline_file.seek(0)
     baseline_file.truncate()
-    baseline_file.write(str(tokens))
+    baseline_file.write(f"{pointer} {full_copy}")
 
 
-def advance_baseline(session_id, tokens):
+def advance_baselines(session_id, tokens):
     os.makedirs(BASELINE_DIR, exist_ok=True)
     path = baseline_path(session_id)
     if not os.path.exists(path):
         forget_baselines_of_dead_sessions()
     with open(path, "a+", encoding="utf-8") as baseline_file:
         fcntl.flock(baseline_file, fcntl.LOCK_EX)
-        tokens_at_last_repeat = read_baseline(baseline_file)
-        if tokens_at_last_repeat is None or tokens < tokens_at_last_repeat:
-            write_baseline(baseline_file, tokens)
-            return False
-        if tokens - tokens_at_last_repeat < REPEAT_EVERY_TOKENS:
-            return False
-        write_baseline(baseline_file, tokens)
-        return True
+        pointed_at, copied_at = read_baselines(baseline_file)
+        if pointed_at is None or tokens < pointed_at:
+            write_baselines(baseline_file, tokens, tokens)
+            return Due.NOTHING
+        if tokens - copied_at >= FULL_COPY_EVERY_TOKENS:
+            write_baselines(baseline_file, tokens, tokens)
+            return Due.FULL_COPY
+        if tokens - pointed_at >= POINTER_EVERY_TOKENS:
+            write_baselines(baseline_file, tokens, copied_at)
+            return Due.POINTER
+        return Due.NOTHING
 
 
 def full_copy():
@@ -141,8 +153,11 @@ def reminder_for(event, payload):
         if event == "UserPromptSubmit" and transcript_fits_in_tail(transcript_path):
             return POINTER_REMINDER
         return None
-    if advance_baseline(session_id, tokens):
+    due = advance_baselines(session_id, tokens)
+    if due is Due.FULL_COPY:
         return full_copy()
+    if due is Due.POINTER:
+        return POINTER_REMINDER
     return None
 
 
