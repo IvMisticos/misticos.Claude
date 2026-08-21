@@ -82,11 +82,11 @@ def transcript_fits_in_tail(transcript_path):
 
 def split_once(text, budget):
     window = text[:budget]
-    for boundary in SPLIT_PREFERENCES:
-        at = window.rfind(boundary)
-        if at > 0:
-            return text[:at], text[at:].lstrip("\n")
-    return text[:budget], text[budget:]
+    boundaries = [window.rfind(preference) for preference in SPLIT_PREFERENCES]
+    filling = [at for at in boundaries if at >= budget // 2]
+    if not filling:
+        return text[:budget], text[budget:]
+    return text[:filling[0]], text[filling[0] :].lstrip("\n")
 
 
 def claude_md_parts():
