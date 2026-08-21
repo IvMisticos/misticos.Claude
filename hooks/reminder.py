@@ -181,7 +181,9 @@ def read_baselines(baseline_file):
     baseline_file.seek(0)
     try:
         stored = json.loads(baseline_file.read())
-    except json.JSONDecodeError:
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return None
+    if not isinstance(stored, dict):
         return None
     if stored.get("pointed_at") is None or stored.get("copied_at") is None:
         return None
