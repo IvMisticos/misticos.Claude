@@ -170,10 +170,15 @@ def due_reminder(session_id, tokens, parts):
             return None
         next_part = state.get("next_part")
         if next_part is not None:
-            remaining = next_part + 1 if next_part + 1 < len(parts) else None
-            write_state(
-                baseline_file, state["pointed_at"], state["copied_at"], remaining
-            )
+            if next_part + 1 < len(parts):
+                write_state(
+                    baseline_file,
+                    state["pointed_at"],
+                    state["copied_at"],
+                    next_part + 1,
+                )
+            else:
+                write_state(baseline_file, tokens, tokens, None)
             return part_message(next_part, parts)
         if tokens - state["copied_at"] >= FULL_COPY_EVERY_TOKENS:
             return start_full_copy(baseline_file, tokens, parts)
