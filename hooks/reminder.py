@@ -82,13 +82,14 @@ def transcript_fits_in_tail(transcript_path):
 def fitting_blocks(text, budget):
     if len(text) <= budget:
         return [text]
-    paragraphs = text.split("\n\n")
-    if len(paragraphs) > 1:
-        return [
-            block
-            for paragraph in paragraphs
-            for block in fitting_blocks(paragraph, budget)
-        ]
+    for separator in ("\n\n", "\n"):
+        pieces = text.split(separator)
+        if len(pieces) > 1:
+            return [
+                block
+                for piece in pieces
+                for block in fitting_blocks(piece, budget)
+            ]
     return [text[at : at + budget] for at in range(0, len(text), budget)]
 
 
