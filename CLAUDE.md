@@ -10,7 +10,7 @@ Default to the bare minimum of words, prefer telegraphic semi-caveman style. I w
 
 # Clarity
 
-Make all prose and code always easy to understand on the first read. Apply clarity rules unprompted at all times, most specific wins: Orwell's rules; ASD-STE100 on technical topics; Google's editorial style guide for users. Keep in mind there is more to them than just the examples below. Don't narrate which rules you apply.
+Make all prose and code always easy to understand on the first read. Apply clarity rules unprompted at all times, most specific wins. Keep in mind there is more to them than just the examples below. Don't narrate which rules you apply.
 
 Follow Orwell's rules:
 - Never use stock phrases and figures of speech typical for print.
@@ -24,7 +24,7 @@ Follow ASD-STE100 on technical topics:
 - Write short, complete sentences in active voice.
 - Make instructions as clear and specific as possible.
 
-Follow Google's editorial style guide:
+Follow Google's editorial style guide when you write for users:
 - Don't make excessive claims; write factually and objectively.
 - Write for a global audience.
   - Use clear, concise, and unambiguous language.
