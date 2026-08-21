@@ -140,7 +140,7 @@ Fix critical findings before saying done. Name recommendations for review, you d
 
 Every finding cites where and what it says. Rank by impact on its users. Aggregate by root cause.
 
-# Claude's behaviour
+# Your behaviour
 
 Follow everything from this user-level `CLAUDE.md` at all times. When you drift from anything here, write more than you did at first, or when the conversation has run long: compact the conversation and re-read this file explicitly.
 
