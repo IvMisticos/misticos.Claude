@@ -11,7 +11,7 @@ REPEAT_EVERY_TOKENS = 50_000
 TRANSCRIPT_TAIL_BYTES = 1 << 20
 FORGET_BASELINE_AFTER_SECONDS = 7 * 24 * 60 * 60
 CLAUDE_MD_PATH = os.path.expanduser("~/.claude/CLAUDE.md")
-BASELINE_DIR = os.path.expanduser("~/.claude/plugins/data/misticos-Claude/reminder")
+BASELINE_DIR = os.path.expanduser("~/.claude/hooks/data/misticos.Claude/reminder")
 CONTEXT_USAGE_FIELDS = (
     "input_tokens",
     "cache_read_input_tokens",
