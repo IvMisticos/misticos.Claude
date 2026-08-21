@@ -33,7 +33,7 @@ def reminder(matcher):
 }
 ' > /tmp/settings.json
 
-d="$HOME/.claude"
+d=/root/.claude
 mkdir -p "$d"
 
 if [ -f "$d/settings.json" ]; then
