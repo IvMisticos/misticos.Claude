@@ -32,6 +32,7 @@ FULL_COPY_PREAMBLE = (
 )
 SPLIT_NOTICE = " The file is split across {total} messages, starting here."
 LATER_PART_PREAMBLE = "CLAUDE.md continues here, part {number} of {total}."
+SPLIT_PREFERENCES = ("\n\n# ", "\n\n", "\n")
 
 
 def is_conversation_turn(entry):
@@ -79,39 +80,25 @@ def transcript_fits_in_tail(transcript_path):
         return True
 
 
-def fitting_blocks(text, budget):
-    if len(text) <= budget:
-        return [text]
-    for separator in ("\n\n", "\n"):
-        pieces = text.split(separator)
-        if len(pieces) > 1:
-            return [
-                block
-                for piece in pieces
-                for block in fitting_blocks(piece, budget)
-            ]
-    return [text[at : at + budget] for at in range(0, len(text), budget)]
-
-
-def claude_md_blocks(budget):
-    with open(CLAUDE_MD_PATH, encoding="utf-8") as claude_md:
-        sections = re.split(r"\n\n(?=# )", claude_md.read().strip())
-    return [block for section in sections for block in fitting_blocks(section, budget)]
+def split_once(text, budget):
+    window = text[:budget]
+    for boundary in SPLIT_PREFERENCES:
+        at = window.rfind(boundary)
+        if at > 0:
+            return text[:at], text[at:].lstrip("\n")
+    return text[:budget], text[budget:]
 
 
 def claude_md_parts():
+    with open(CLAUDE_MD_PATH, encoding="utf-8") as claude_md:
+        text = claude_md.read().strip()
     budget = MAX_INJECTED_CHARS - PREAMBLE_RESERVE_CHARS
     parts = []
-    packed = ""
-    for block in claude_md_blocks(budget):
-        grown = f"{packed}\n\n{block}" if packed else block
-        if packed and len(grown) > budget:
-            parts.append(packed)
-            packed = block
-            continue
-        packed = grown
-    if packed:
-        parts.append(packed)
+    while len(text) > budget:
+        part, text = split_once(text, budget)
+        parts.append(part)
+    if text:
+        parts.append(text)
     return parts
 
 
