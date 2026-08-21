@@ -125,6 +125,11 @@ def part_message(index, parts):
     return f"{preamble}\n\n{parts[index]}"
 
 
+def full_copy_messages():
+    parts = claude_md_parts()
+    return [part_message(index, parts) for index in range(len(parts))]
+
+
 def baseline_path(session_id):
     return os.path.join(BASELINE_DIR, re.sub(r"[^A-Za-z0-9_-]", "-", session_id))
 
@@ -151,21 +156,22 @@ def read_state(baseline_file):
     return state
 
 
-def write_state(baseline_file, pointed_at, copied_at, next_part):
+def write_state(baseline_file, pointed_at, copied_at, pending):
     baseline_file.seek(0)
     baseline_file.truncate()
     json.dump(
-        {"pointed_at": pointed_at, "copied_at": copied_at, "next_part": next_part},
+        {"pointed_at": pointed_at, "copied_at": copied_at, "pending": pending},
         baseline_file,
     )
 
 
-def start_full_copy(baseline_file, tokens, parts):
-    write_state(baseline_file, tokens, tokens, 1 if len(parts) > 1 else None)
-    return part_message(0, parts)
+def start_full_copy(baseline_file, tokens):
+    messages = full_copy_messages()
+    write_state(baseline_file, tokens, tokens, messages[1:])
+    return messages[0] if messages else None
 
 
-def due_reminder(session_id, tokens, parts):
+def due_reminder(session_id, tokens):
     os.makedirs(BASELINE_DIR, exist_ok=True)
     path = baseline_path(session_id)
     if not os.path.exists(path):
@@ -174,26 +180,26 @@ def due_reminder(session_id, tokens, parts):
         fcntl.flock(baseline_file, fcntl.LOCK_EX)
         state = read_state(baseline_file)
         if state is None or tokens < state["pointed_at"]:
-            if state and state.get("next_part") is not None:
-                return start_full_copy(baseline_file, tokens, parts)
-            write_state(baseline_file, tokens, tokens, None)
+            if state and state.get("pending"):
+                return start_full_copy(baseline_file, tokens)
+            write_state(baseline_file, tokens, tokens, [])
             return None
-        next_part = state.get("next_part")
-        if next_part is not None and next_part < len(parts):
-            if next_part + 1 < len(parts):
+        pending = state.get("pending") or []
+        if pending:
+            if len(pending) > 1:
                 write_state(
                     baseline_file,
                     state["pointed_at"],
                     state["copied_at"],
-                    next_part + 1,
+                    pending[1:],
                 )
             else:
-                write_state(baseline_file, tokens, tokens, None)
-            return part_message(next_part, parts)
+                write_state(baseline_file, tokens, tokens, [])
+            return pending[0]
         if tokens - state["copied_at"] >= FULL_COPY_EVERY_TOKENS:
-            return start_full_copy(baseline_file, tokens, parts)
+            return start_full_copy(baseline_file, tokens)
         if tokens - state["pointed_at"] >= POINTER_EVERY_TOKENS:
-            write_state(baseline_file, tokens, state["copied_at"], None)
+            write_state(baseline_file, tokens, state["copied_at"], [])
             return POINTER_REMINDER
         return None
 
@@ -214,10 +220,7 @@ def reminder_for(event, payload):
         if event == "UserPromptSubmit" and transcript_fits_in_tail(transcript_path):
             return POINTER_REMINDER
         return None
-    parts = claude_md_parts()
-    if not parts:
-        return None
-    return due_reminder(session_id, tokens, parts)
+    return due_reminder(session_id, tokens)
 
 
 def inject(event, reminder):
