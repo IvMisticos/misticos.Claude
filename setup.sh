@@ -34,16 +34,15 @@ def reminder(matcher):
 }
 ' > /tmp/settings.json
 
-for d in /home/user/.claude /root/.claude; do
-  mkdir -p "$d"
-  if [ -f "$d/settings.json" ]; then
-    jq -s '.[0] * .[1]' "$d/settings.json" /tmp/settings.json > "$d/settings.json.merged"
-    mv "$d/settings.json.merged" "$d/settings.json"
-  else
-    cp /tmp/settings.json "$d/settings.json"
-  fi
-  cp "$repo/CLAUDE.md" "$d/"
-  install -m 755 "$repo/hooks/reminder.py" "$d/"
-done
+d=/root/.claude
+mkdir -p "$d"
 
-chown -R user:user /home/user/.claude 2>/dev/null || true
+if [ -f "$d/settings.json" ]; then
+  jq -s '.[0] * .[1]' "$d/settings.json" /tmp/settings.json > "$d/settings.json.merged"
+  mv "$d/settings.json.merged" "$d/settings.json"
+else
+  cp /tmp/settings.json "$d/settings.json"
+fi
+
+cp "$repo/CLAUDE.md" "$d/"
+install -m 755 "$repo/hooks/reminder.py" "$d/"
