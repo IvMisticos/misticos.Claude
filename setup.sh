@@ -41,9 +41,20 @@ mkdir -p "$d"
 
 if [ -f "$d/settings.json" ]; then
   jq -s --arg command "$hook_command" '
-  (.[0] * .[1])
-  | .hooks.PostToolUse = ((.hooks.PostToolUse // []) | map(select([.hooks[].command] | index($command) | not)))
-  | if (.hooks.PostToolUse | length) == 0 then del(.hooks.PostToolUse) else . end
+  def without_reminder:
+    with_entries(.value |= [
+      .[]
+      | .hooks = [ (.hooks // [])[] | select(.command != $command) ]
+      | select((.hooks | length) > 0)
+    ])
+    | with_entries(select((.value | length) > 0));
+  .[0] as $installed
+  | .[1] as $wanted
+  | ($installed * ($wanted | del(.hooks)))
+  | .hooks = (($installed.hooks // {}) | without_reminder)
+  | .hooks = reduce ($wanted.hooks | to_entries[]) as $event (
+      .hooks; .[$event.key] = ((.[$event.key] // []) + $event.value)
+    )
   ' "$d/settings.json" /tmp/settings.json > "$d/settings.json.merged"
   mv "$d/settings.json.merged" "$d/settings.json"
 else
