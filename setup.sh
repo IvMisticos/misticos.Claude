@@ -2,10 +2,8 @@
 
 set -euo pipefail
 
-# Dependencies and common tools
 apt-get update && apt-get install -y git-lfs ffmpeg curl jq gh
 
-# Repository
 if [ -f "${BASH_SOURCE[0]:-}" ]; then
   repo=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 else
@@ -14,16 +12,27 @@ else
   git clone --depth 1 https://github.com/IvMisticos/misticos.Claude "$repo"
 fi
 
-# Claude config
-jq -n '
+jq -n --arg command '~/.claude/reminder.py' '
+def reminder(matcher):
+  [ {
+    matcher: matcher,
+    hooks: [ {
+      type: "command",
+      command: $command
+    } ]
+  } ];
 .attribution = {
   commit: "",
   pr: "",
   sessionUrl: false
 }
+| .hooks = {
+  SessionStart: reminder("compact"),
+  UserPromptSubmit: reminder(""),
+  PostToolUse: reminder("")
+}
 ' > /tmp/settings.json
 
-# CLAUDE.md
 for d in /home/user/.claude /root/.claude; do
   mkdir -p "$d"
   if [ -f "$d/settings.json" ]; then
@@ -33,6 +42,7 @@ for d in /home/user/.claude /root/.claude; do
     cp /tmp/settings.json "$d/settings.json"
   fi
   cp "$repo/CLAUDE.md" "$d/"
+  install -m 755 "$repo/hooks/reminder.py" "$d/"
 done
 
 chown -R user:user /home/user/.claude 2>/dev/null || true
