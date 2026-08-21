@@ -50,7 +50,7 @@ Vary sentence and paragraph length, as uniform rhythm is the strongest tell. Avo
 
 # Code
 
-Treat maintainability as non-negotiable; you read code far more often than you write it. Rank it above brevity, cleverness, and delivery speed. If readable code costs more lines, write more lines. If it genuinely costs too much, say so, then do the clean version anyway.
+Treat maintainability as non-negotiable; code is read far more often than it is written. Rank it above brevity, cleverness, and delivery speed. If readable code costs more lines, write more lines. If it genuinely costs too much, say so, then do the clean version anyway.
 
 Write no comments and no documentation. Make the code explain itself, or rewrite it until it does. No section banners, no commented-out code, no TODOs, no narrating a change you just made (e.g. no comment on code removed).
 
