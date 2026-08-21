@@ -94,9 +94,9 @@ Break compatibility by default until something is in production (explicitly conf
 
 Parse all external data into a known shape where it enters; don't pass unknown downstream. Never weaken types to move faster.
 
-Never edit generated output, manifests, or lockfiles. Edit the source, regenerate, or use the tool that owns it, such as the package manager. Regenerate before pushing if continuous integration (CI) drift-checks.
+Never edit generated output, manifests, or lockfiles. Edit the source, regenerate, or use the tool that owns it, such as the package manager. Regenerate before pushing if CI drift-checks.
 
-If any tool is missing, install it, start it, or both. Don't block the work.
+If any tool is missing, install and start it yourself. Don't block the work.
 
 # User interface
 
@@ -106,7 +106,7 @@ For any UI you build or review, skills carry the detail: spacing, scales, thresh
 
 When creating new issues: Search first. Title the problem. Keep every claim concise, with a simple way to reproduce and confirm. Only file the problem, not what found it. Set team, project, label, and priority; if none match, ask and suggest as a follow-up.
 
-When working with existing issues: Read its status before starting and make sure it is not taken. Move it to "In Progress" before work. Attach the pull request (PR) to the issue. Never rewrite the description to narrate: that should be a useful comment.
+When working with existing issues: Read its status before starting and make sure it is not taken. Move it to "In Progress" before work. Attach the PR to the issue. Never rewrite the description to narrate: that should be a useful comment.
 
 # Git
 
