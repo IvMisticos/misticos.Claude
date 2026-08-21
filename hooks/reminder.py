@@ -29,7 +29,7 @@ FULL_COPY_PREAMBLE = (
 )
 
 
-def turn_context_tokens(line):
+def sum_context_tokens(line):
     try:
         turn = json.loads(line)
     except (UnicodeDecodeError, json.JSONDecodeError):
@@ -43,7 +43,7 @@ def turn_context_tokens(line):
     return sum(usage.get(field, 0) for field in CONTEXT_FIELDS) or None
 
 
-def context_tokens(transcript_path):
+def latest_context_tokens(transcript_path):
     try:
         with open(transcript_path, "rb") as transcript:
             transcript.seek(0, os.SEEK_END)
@@ -55,7 +55,7 @@ def context_tokens(transcript_path):
     if start:
         lines.pop(0)
     for line in reversed(lines):
-        tokens = turn_context_tokens(line)
+        tokens = sum_context_tokens(line)
         if tokens:
             return tokens
     return None
@@ -97,7 +97,7 @@ def write_baseline(baseline_file, tokens):
     baseline_file.write(str(tokens))
 
 
-def claim_repeat(session_id, tokens):
+def advance_baseline(session_id, tokens):
     os.makedirs(BASELINE_DIR, exist_ok=True)
     path = baseline_path(session_id)
     if not os.path.exists(path):
@@ -135,12 +135,12 @@ def main():
     if not (session_id and transcript_path):
         return
 
-    tokens = context_tokens(transcript_path)
+    tokens = latest_context_tokens(transcript_path)
     if tokens is None:
         if event == "UserPromptSubmit" and transcript_fits_in_tail(transcript_path):
             emit(event, POINTER_REMINDER)
         return
-    if not claim_repeat(session_id, tokens):
+    if not advance_baseline(session_id, tokens):
         return
 
     with open(CLAUDE_MD_PATH, encoding="utf-8") as claude_md:
