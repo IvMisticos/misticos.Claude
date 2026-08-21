@@ -14,7 +14,12 @@ fi
 
 jq -n --arg command '~/.claude/reminder.py' '
 def reminder(matcher):
-  [ { matcher: matcher, hooks: [ { type: "command", command: $command } ] } ];
+  [ {
+    matcher: matcher,
+    hooks: [
+      { type: "command", command: $command }
+    ]
+  } ];
 .attribution = {
   commit: "",
   pr: "",
