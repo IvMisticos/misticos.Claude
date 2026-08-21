@@ -26,6 +26,7 @@ def reminder(matcher):
   pr: "",
   sessionUrl: false
 }
+| .autoMemoryEnabled = false
 | .hooks = {
   SessionStart: reminder("compact"),
   UserPromptSubmit: reminder(""),
