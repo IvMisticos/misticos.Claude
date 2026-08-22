@@ -116,7 +116,7 @@ Do not amend the Git author name or email, keep current defaults. Always view st
 
 Commit one logical change at a time. If you struggle to summarize, you're committing too much.
 
-For commit subjects, default to imperative, capitalized, no period, up to 50 characters. If the subject is insufficient, add a blank line and a body wrapped at 72. State only the reason for a change; the diff silently covers what and how. No secrets, no tool identifiers.
+For commit subjects, default to imperative, capitalized, no period, up to 50 characters. If the subject is insufficient, add a blank line and a body, no text wrap. State only the reason for a change; the diff silently covers what and how. No secrets, no tool identifiers.
 
 # Pull requests
 
@@ -124,7 +124,7 @@ Put the issue tracker ID only in the PR title.
 
 Do not restate the code. Write no PR body if the diff leaves no important questions open. Otherwise, write a short lead with at most one detail section. Most need no such section at all.
 
-Do not schedule check-ins. Rely on your PR subscription for comments, failures, merges. To get notified on successful checks and runs, use a background bash loop with `gh api`.
+Do not schedule check-ins. Rely on your PR subscription for related notifications.
 
 # Reviews
 
