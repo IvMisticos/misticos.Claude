@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
-import enum
+import collections
+import contextlib
 import fcntl
 import json
 import os
@@ -12,6 +13,8 @@ FULL_COPY_EVERY_TOKENS = 50_000
 POINTER_EVERY_TOKENS = 10_000
 TRANSCRIPT_TAIL_BYTES = 1 << 20
 FORGET_BASELINE_AFTER_SECONDS = 7 * 24 * 60 * 60
+MAX_INJECTED_CHARS = 10_000
+PREAMBLE_RESERVE_CHARS = 400
 CLAUDE_MD_PATH = os.path.expanduser("~/.claude/CLAUDE.md")
 BASELINE_DIR = os.path.expanduser("~/.claude/hooks/data/misticos.Claude/reminder")
 CONTEXT_USAGE_FIELDS = (
@@ -29,12 +32,11 @@ FULL_COPY_PREAMBLE = (
     "follows here in full. It overrides your defaults. Follow it at all "
     "times. Where your recent work has drifted from it, correct that now."
 )
+SPLIT_NOTICE = " The file is split across {total} messages, starting here."
+LATER_PART_PREAMBLE = "CLAUDE.md continues here, part {number} of {total}."
+SPLIT_PREFERENCES = ("\n\n# ", "\n\n", "\n")
 
-
-class Due(enum.Enum):
-    NOTHING = enum.auto()
-    POINTER = enum.auto()
-    FULL_COPY = enum.auto()
+Baselines = collections.namedtuple("Baselines", "pointed_at copied_at pending")
 
 
 def is_conversation_turn(entry):
@@ -46,7 +48,7 @@ def is_conversation_turn(entry):
     )
 
 
-def sum_context_tokens(line):
+def context_tokens(line):
     try:
         entry = json.loads(line)
     except (UnicodeDecodeError, json.JSONDecodeError):
@@ -57,19 +59,22 @@ def sum_context_tokens(line):
     return sum(usage.get(field, 0) for field in CONTEXT_USAGE_FIELDS) or None
 
 
-def context_tokens_from_tail(transcript_path):
+def transcript_tail(transcript_path):
+    with open(transcript_path, "rb") as transcript:
+        transcript.seek(0, os.SEEK_END)
+        start = max(0, transcript.tell() - TRANSCRIPT_TAIL_BYTES)
+        transcript.seek(start)
+        lines = transcript.read().split(b"\n")
+    return lines if start == 0 else lines[1:]
+
+
+def latest_context_tokens(transcript_path):
     try:
-        with open(transcript_path, "rb") as transcript:
-            transcript.seek(0, os.SEEK_END)
-            start = max(0, transcript.tell() - TRANSCRIPT_TAIL_BYTES)
-            transcript.seek(start)
-            lines = transcript.read().split(b"\n")
+        lines = transcript_tail(transcript_path)
     except OSError:
         return None
-    if start:
-        lines.pop(0)
     for line in reversed(lines):
-        tokens = sum_context_tokens(line)
+        tokens = context_tokens(line)
         if tokens:
             return tokens
     return None
@@ -80,6 +85,70 @@ def transcript_fits_in_tail(transcript_path):
         return os.path.getsize(transcript_path) <= TRANSCRIPT_TAIL_BYTES
     except OSError:
         return True
+
+
+def split_once(text, budget):
+    window = text[:budget]
+    boundaries = [window.rfind(preference) for preference in SPLIT_PREFERENCES]
+    filling = [at for at in boundaries if at >= budget // 2]
+    if not filling:
+        return text[:budget], text[budget:]
+    return text[: filling[0]], text[filling[0] :].lstrip("\n")
+
+
+def claude_md_parts():
+    with open(CLAUDE_MD_PATH, encoding="utf-8", errors="replace") as claude_md:
+        text = claude_md.read().strip()
+    budget = MAX_INJECTED_CHARS - PREAMBLE_RESERVE_CHARS
+    parts = []
+    while len(text) > budget:
+        part, text = split_once(text, budget)
+        parts.append(part)
+    if text:
+        parts.append(text)
+    return parts
+
+
+def part_message(index, parts):
+    if index:
+        preamble = LATER_PART_PREAMBLE.format(number=index + 1, total=len(parts))
+    elif len(parts) > 1:
+        preamble = FULL_COPY_PREAMBLE + SPLIT_NOTICE.format(total=len(parts))
+    else:
+        preamble = FULL_COPY_PREAMBLE
+    return f"{preamble}\n\n{parts[index]}"
+
+
+def full_copy_messages():
+    parts = claude_md_parts()
+    return [part_message(index, parts) for index in range(len(parts))]
+
+
+def started_copy(tokens, full_copy):
+    if not full_copy:
+        return None, Baselines(tokens, tokens, ())
+    return full_copy[0], Baselines(tokens, tokens, tuple(full_copy[1:]))
+
+
+def drained_copy(baselines, tokens):
+    sending, remaining = baselines.pending[0], baselines.pending[1:]
+    if remaining:
+        return sending, baselines._replace(pending=remaining)
+    return sending, Baselines(tokens, tokens, ())
+
+
+def next_reminder(baselines, tokens, full_copy):
+    if baselines is None or tokens < baselines.pointed_at:
+        if baselines and baselines.pending:
+            return started_copy(tokens, full_copy)
+        return None, Baselines(tokens, tokens, ())
+    if baselines.pending:
+        return drained_copy(baselines, tokens)
+    if tokens - baselines.copied_at >= FULL_COPY_EVERY_TOKENS:
+        return started_copy(tokens, full_copy)
+    if tokens - baselines.pointed_at >= POINTER_EVERY_TOKENS:
+        return POINTER_REMINDER, baselines._replace(pointed_at=tokens)
+    return None, baselines
 
 
 def baseline_path(session_id):
@@ -97,48 +166,43 @@ def forget_baselines_of_dead_sessions():
             continue
 
 
-def read_baselines(baseline_file):
-    baseline_file.seek(0)
-    try:
-        baselines = json.loads(baseline_file.read())
-    except json.JSONDecodeError:
-        return None, None
-    pointed_at = baselines.get("pointed_at")
-    copied_at = baselines.get("copied_at")
-    if pointed_at is None or copied_at is None:
-        return None, None
-    return pointed_at, copied_at
-
-
-def write_baselines(baseline_file, pointed_at, copied_at):
-    baseline_file.seek(0)
-    baseline_file.truncate()
-    json.dump({"pointed_at": pointed_at, "copied_at": copied_at}, baseline_file)
-
-
-def advance_baselines(session_id, tokens):
+@contextlib.contextmanager
+def locked_baseline(session_id):
     os.makedirs(BASELINE_DIR, exist_ok=True)
     path = baseline_path(session_id)
     if not os.path.exists(path):
         forget_baselines_of_dead_sessions()
     with open(path, "a+", encoding="utf-8") as baseline_file:
         fcntl.flock(baseline_file, fcntl.LOCK_EX)
-        pointed_at, copied_at = read_baselines(baseline_file)
-        if pointed_at is None or tokens < pointed_at:
-            write_baselines(baseline_file, tokens, tokens)
-            return Due.NOTHING
-        if tokens - copied_at >= FULL_COPY_EVERY_TOKENS:
-            write_baselines(baseline_file, tokens, tokens)
-            return Due.FULL_COPY
-        if tokens - pointed_at >= POINTER_EVERY_TOKENS:
-            write_baselines(baseline_file, tokens, copied_at)
-            return Due.POINTER
-        return Due.NOTHING
+        yield baseline_file
 
 
-def full_copy():
-    with open(CLAUDE_MD_PATH, encoding="utf-8") as claude_md:
-        return f"{FULL_COPY_PREAMBLE}\n\n{claude_md.read().strip()}"
+def read_baselines(baseline_file):
+    baseline_file.seek(0)
+    try:
+        stored = json.loads(baseline_file.read())
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return None
+    if not isinstance(stored, dict):
+        return None
+    if stored.get("pointed_at") is None or stored.get("copied_at") is None:
+        return None
+    pending = tuple(stored.get("pending") or ())
+    return Baselines(stored["pointed_at"], stored["copied_at"], pending)
+
+
+def write_baselines(baseline_file, baselines):
+    baseline_file.seek(0)
+    baseline_file.truncate()
+    json.dump(baselines._asdict(), baseline_file)
+
+
+def advance_baselines(session_id, tokens):
+    with locked_baseline(session_id) as baseline_file:
+        stored = read_baselines(baseline_file)
+        reminder, baselines = next_reminder(stored, tokens, full_copy_messages())
+        write_baselines(baseline_file, baselines)
+        return reminder
 
 
 def reminder_for(event, payload):
@@ -146,21 +210,14 @@ def reminder_for(event, payload):
         return None
     if event == "SessionStart":
         return POINTER_REMINDER
-
     session_id = payload.get("session_id")
     transcript_path = payload.get("transcript_path")
     if not (session_id and transcript_path):
         return None
-
-    tokens = context_tokens_from_tail(transcript_path)
-    if tokens is None:
-        if event == "UserPromptSubmit" and transcript_fits_in_tail(transcript_path):
-            return POINTER_REMINDER
-        return None
-    due = advance_baselines(session_id, tokens)
-    if due is Due.FULL_COPY:
-        return full_copy()
-    if due is Due.POINTER:
+    tokens = latest_context_tokens(transcript_path)
+    if tokens is not None:
+        return advance_baselines(session_id, tokens)
+    if event == "UserPromptSubmit" and transcript_fits_in_tail(transcript_path):
         return POINTER_REMINDER
     return None
 
