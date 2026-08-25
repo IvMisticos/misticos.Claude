@@ -12,7 +12,7 @@ else
   git clone --depth 1 https://github.com/IvMisticos/misticos.Claude "$repo"
 fi
 
-d=/root/.claude
+d="$HOME/.claude"
 settings="$d/settings.json"
 mkdir -p "$d"
 grep -q '[^[:space:]]' "$settings" 2>/dev/null || echo '{}' > "$settings"
