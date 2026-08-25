@@ -37,10 +37,11 @@ LATER_PART_PREAMBLE = (
     "defaults. Follow it at all times."
 )
 BLOCK_BREAKS = (r"(?=\n\n# )", r"(?=\n\n)", r"(?=\n)")
+NOTHING = ""
 POINTER = "pointer"
 COPY = "copy"
 
-Baselines = collections.namedtuple("Baselines", "pointed_at copied_at copied_on_fire")
+Baselines = collections.namedtuple("Baselines", "pointed_at copied_at fire action")
 
 
 def preamble_for(number, total):
@@ -176,17 +177,19 @@ def context_shrank(baselines, tokens):
 
 
 def next_action(baselines, fire, tokens):
-    if baselines is None:
-        return None, Baselines(tokens, tokens, "")
-    if fire and baselines.copied_on_fire == fire:
-        return COPY, baselines
-    if context_shrank(baselines, tokens):
-        return None, Baselines(tokens, tokens, "")
+    if baselines is None or context_shrank(baselines, tokens):
+        return NOTHING, Baselines(tokens, tokens, fire, NOTHING)
     if fire and tokens - baselines.copied_at >= FULL_COPY_EVERY_TOKENS:
-        return COPY, Baselines(tokens, tokens, fire)
+        return COPY, Baselines(tokens, tokens, fire, COPY)
     if tokens - baselines.pointed_at >= POINTER_EVERY_TOKENS:
-        return POINTER, baselines._replace(pointed_at=tokens)
-    return None, baselines
+        return POINTER, Baselines(tokens, baselines.copied_at, fire, POINTER)
+    return NOTHING, baselines._replace(fire=fire, action=NOTHING)
+
+
+def action_for_fire(baselines, fire, tokens):
+    if baselines is not None and fire and baselines.fire == fire:
+        return baselines.action, baselines
+    return next_action(baselines, fire, tokens)
 
 
 def baseline_path(session_id):
@@ -220,12 +223,13 @@ def as_baselines(stored):
         return None
     pointed_at = stored.get("pointed_at")
     copied_at = stored.get("copied_at")
-    copied_on_fire = stored.get("copied_on_fire") or ""
+    fire = stored.get("fire") or ""
+    action = stored.get("action") or NOTHING
     if not isinstance(pointed_at, int) or not isinstance(copied_at, int):
         return None
-    if not isinstance(copied_on_fire, str):
+    if not isinstance(fire, str) or action not in (NOTHING, POINTER, COPY):
         return None
-    return Baselines(pointed_at, copied_at, copied_on_fire)
+    return Baselines(pointed_at, copied_at, fire, action)
 
 
 def read_baselines(baseline_file):
@@ -245,14 +249,14 @@ def write_baselines(baseline_file, baselines):
 def claimed_action(session_id, fire, tokens):
     with locked_baseline(session_id) as baseline_file:
         stored = read_baselines(baseline_file)
-        action, baselines = next_action(stored, fire, tokens)
+        action, baselines = action_for_fire(stored, fire, tokens)
         write_baselines(baseline_file, baselines)
         return action
 
 
 def message_for(action, part, entries):
     if action == POINTER:
-        return POINTER_REMINDER
+        return POINTER_REMINDER if part == 1 else None
     if action != COPY:
         return None
     parts = full_copy()
