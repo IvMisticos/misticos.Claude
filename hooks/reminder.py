@@ -141,7 +141,7 @@ def hook_entries_needed():
     return max(1, len(full_copy()))
 
 
-def fire_id(payload):
+def fire_id(event, payload):
     calls = payload.get("tool_calls") or []
     tool_uses = sorted(
         str(call.get("tool_use_id"))
@@ -151,7 +151,7 @@ def fire_id(payload):
     prompt = str(payload.get("prompt_id") or "")
     if not (prompt or tool_uses):
         return ""
-    return "|".join([prompt] + tool_uses)
+    return "|".join([event, prompt] + tool_uses)
 
 
 def context_shrank(baselines, tokens):
@@ -161,7 +161,7 @@ def context_shrank(baselines, tokens):
 def next_action(baselines, fire, tokens):
     if baselines is None or context_shrank(baselines, tokens):
         return None, Baselines(tokens, tokens, "")
-    if fire and baselines.copied_on_fire == fire:
+    if fire and baselines.copied_on_fire == fire and baselines.copied_at == tokens:
         return COPY, baselines
     if fire and tokens - baselines.copied_at >= FULL_COPY_EVERY_TOKENS:
         return COPY, Baselines(tokens, tokens, fire)
@@ -258,7 +258,7 @@ def reminder_for(event, payload, part, entries):
         if part == 1 and event == "UserPromptSubmit":
             return POINTER_REMINDER if transcript_fits_in_tail(transcript_path) else None
         return None
-    action = claimed_action(session_id, fire_id(payload), tokens)
+    action = claimed_action(session_id, fire_id(event, payload), tokens)
     return message_for(action, part, entries)
 
 
