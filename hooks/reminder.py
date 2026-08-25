@@ -139,6 +139,14 @@ def full_copy():
     )
 
 
+def claude_md_is_empty():
+    try:
+        with open(CLAUDE_MD_PATH, encoding="utf-8", errors="replace") as claude_md:
+            return not claude_md.read().strip()
+    except OSError:
+        return True
+
+
 def hook_entries_needed():
     return max(1, len(full_copy()))
 
@@ -245,7 +253,7 @@ def message_for(action, part, entries):
 
 
 def reminder_for(event, payload, part, entries):
-    if payload.get("agent_id") or not os.path.exists(CLAUDE_MD_PATH):
+    if payload.get("agent_id") or claude_md_is_empty():
         return None
     if part > 1 and event == "SessionStart":
         return None
