@@ -255,8 +255,6 @@ def message_for(action, part, entries):
 def reminder_for(event, payload, part, entries):
     if payload.get("agent_id") or claude_md_is_empty():
         return None
-    if part > 1 and event == "SessionStart":
-        return None
     if event == "SessionStart":
         return POINTER_REMINDER
     session_id = payload.get("session_id")
