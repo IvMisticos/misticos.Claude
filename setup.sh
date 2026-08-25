@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-apt-get update && apt-get install -y git-lfs curl jq gh
+apt-get update && apt-get install -y git-lfs curl jq gh python3
 
 if [ -f "${BASH_SOURCE[0]:-}" ]; then
   repo=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -12,37 +12,39 @@ else
   git clone --depth 1 https://github.com/IvMisticos/misticos.Claude "$repo"
 fi
 
-jq -n --arg command '~/.claude/reminder.py' '
-def reminder(matcher):
+d=/root/.claude
+settings="$d/settings.json"
+mkdir -p "$d"
+grep -q '[^[:space:]]' "$settings" 2>/dev/null || echo '{}' > "$settings"
+
+cp "$repo/CLAUDE.md" "$d/"
+parts=$(python3 "$repo/hooks/reminder.py" --entries)
+
+jq --arg command '~/.claude/reminder.py' --argjson parts "$parts" '
+def reminder(part):
+  {
+    type: "command",
+    command: "\($command) \(part) \($parts)"
+  };
+def every_part(matcher):
   [ {
     matcher: matcher,
-    hooks: [ {
-      type: "command",
-      command: $command
-    } ]
+    hooks: [ range(1; $parts + 1) | reminder(.) ]
   } ];
+def without_reminder:
+  map_values([ .[] | .hooks = [ (.hooks // [])[] | select((.command // "") | startswith($command) | not) ] | select(.hooks != []) ])
+  | with_entries(select(.value != []));
 .attribution = {
   commit: "",
   pr: "",
   sessionUrl: false
 }
 | .autoMemoryEnabled = false
-| .hooks = {
-  SessionStart: reminder("compact"),
-  UserPromptSubmit: reminder(""),
-  PostToolUse: reminder("")
-}
-' > /tmp/settings.json
+| .hooks = ((.hooks // {}) | without_reminder)
+| .hooks.SessionStart += [ { matcher: "compact", hooks: [ reminder(1) ] } ]
+| .hooks.UserPromptSubmit += every_part("")
+| .hooks.PostToolBatch += every_part("")
+' "$settings" > "$settings.installed"
 
-d=/root/.claude
-mkdir -p "$d"
-
-if [ -f "$d/settings.json" ]; then
-  jq -s '.[0] * .[1]' "$d/settings.json" /tmp/settings.json > "$d/settings.json.merged"
-  mv "$d/settings.json.merged" "$d/settings.json"
-else
-  cp /tmp/settings.json "$d/settings.json"
-fi
-
-cp "$repo/CLAUDE.md" "$d/"
 install -m 755 "$repo/hooks/reminder.py" "$d/"
+mv "$settings.installed" "$settings"
