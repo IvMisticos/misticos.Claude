@@ -37,11 +37,19 @@ LATER_PART_PREAMBLE = (
     "defaults. Follow it at all times."
 )
 BLOCK_BREAKS = (r"(?=\n\n# )", r"(?=\n\n)", r"(?=\n)")
-NOTHING = ""
+OUTGROWN_NOTICE = (
+    "CLAUDE.md now needs {parts} hook entries and {entries} are installed, so "
+    "the whole file can no longer be sent. Re-run setup.sh."
+)
+IDLE = ""
 POINTER = "pointer"
 COPY = "copy"
 
 Baselines = collections.namedtuple("Baselines", "pointed_at copied_at fire action")
+Reminder = collections.namedtuple("Reminder", "context notice")
+
+SILENCE = Reminder(None, None)
+POINTER_ONLY = Reminder(POINTER_REMINDER, None)
 
 
 def preamble_for(number, total):
@@ -178,12 +186,12 @@ def context_shrank(baselines, tokens):
 
 def next_action(baselines, fire, tokens):
     if baselines is None or context_shrank(baselines, tokens):
-        return NOTHING, Baselines(tokens, tokens, fire, NOTHING)
+        return IDLE, Baselines(tokens, tokens, fire, IDLE)
     if fire and tokens - baselines.copied_at >= FULL_COPY_EVERY_TOKENS:
         return COPY, Baselines(tokens, tokens, fire, COPY)
     if tokens - baselines.pointed_at >= POINTER_EVERY_TOKENS:
         return POINTER, Baselines(tokens, baselines.copied_at, fire, POINTER)
-    return NOTHING, baselines._replace(fire=fire, action=NOTHING)
+    return IDLE, baselines._replace(fire=fire, action=IDLE)
 
 
 def action_for_fire(baselines, fire, tokens):
@@ -224,10 +232,10 @@ def as_baselines(stored):
     pointed_at = stored.get("pointed_at")
     copied_at = stored.get("copied_at")
     fire = stored.get("fire") or ""
-    action = stored.get("action") or NOTHING
+    action = stored.get("action") or IDLE
     if not isinstance(pointed_at, int) or not isinstance(copied_at, int):
         return None
-    if not isinstance(fire, str) or action not in (NOTHING, POINTER, COPY):
+    if not isinstance(fire, str) or action not in (IDLE, POINTER, COPY):
         return None
     return Baselines(pointed_at, copied_at, fire, action)
 
@@ -254,42 +262,53 @@ def claimed_action(session_id, fire, tokens):
         return action
 
 
+def outgrown(parts, entries):
+    return Reminder(POINTER_REMINDER, OUTGROWN_NOTICE.format(parts=parts, entries=entries))
+
+
 def message_for(action, part, entries):
     if action == POINTER:
-        return POINTER_REMINDER if part == 1 else None
+        return POINTER_ONLY if part == 1 else SILENCE
     if action != COPY:
-        return None
+        return SILENCE
     parts = full_copy()
     if len(parts) > entries:
-        return POINTER_REMINDER if part == 1 else None
-    return parts[part - 1] if 1 <= part <= len(parts) else None
+        return outgrown(len(parts), entries) if part == 1 else SILENCE
+    if not 1 <= part <= len(parts):
+        return SILENCE
+    return Reminder(parts[part - 1], None)
 
 
 def reminder_for(event, payload, part, entries):
     if payload.get("agent_id") or claude_md_is_empty():
-        return None
+        return SILENCE
     if event == "SessionStart":
-        return POINTER_REMINDER
+        return POINTER_ONLY
     session_id = payload.get("session_id")
     transcript_path = payload.get("transcript_path")
     if not (session_id and transcript_path):
-        return None
+        return SILENCE
     tokens = latest_context_tokens(transcript_path)
     if tokens is None:
-        if part == 1 and event == "UserPromptSubmit":
-            return POINTER_REMINDER if transcript_fits_in_tail(transcript_path) else None
-        return None
+        if part == 1 and event == "UserPromptSubmit" and transcript_fits_in_tail(transcript_path):
+            return POINTER_ONLY
+        return SILENCE
     fire = fire_id(event, payload)
     if not fire and part > 1:
-        return None
+        return SILENCE
     return message_for(claimed_action(session_id, fire, tokens), part, entries)
 
 
 def inject(event, reminder):
-    json.dump(
-        {"hookSpecificOutput": {"hookEventName": event, "additionalContext": reminder}},
-        sys.stdout,
-    )
+    output = {
+        "hookSpecificOutput": {
+            "hookEventName": event,
+            "additionalContext": reminder.context,
+        }
+    }
+    if reminder.notice:
+        output["systemMessage"] = reminder.notice
+    json.dump(output, sys.stdout)
 
 
 def main():
@@ -300,7 +319,7 @@ def main():
     if not event:
         return
     reminder = reminder_for(event, payload, part, entries)
-    if reminder:
+    if reminder.context:
         inject(event, reminder)
 
 
