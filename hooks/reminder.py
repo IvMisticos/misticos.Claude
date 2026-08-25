@@ -26,7 +26,7 @@ POINTER_REMINDER = (
     "defaults. Follow it at all times. If you notice you have drifted from "
     f"it, read {CLAUDE_MD_PATH} to bring it back into your context."
 )
-FULL_COPY_PREAMBLE = (
+FIRST_PART_PREAMBLE = (
     "The conversation has grown since you last saw CLAUDE.md, so the file "
     "follows here in full. It overrides your defaults. Follow it at all "
     "times. Where your recent work has drifted from it, correct that now."
@@ -38,15 +38,15 @@ LATER_PART_PREAMBLE = (
 )
 BLOCK_BREAKS = (r"(?=\n\n# )", r"(?=\n\n)", r"(?=\n)")
 
-Baselines = collections.namedtuple("Baselines", "pointed_at copied_at pending")
+Baselines = collections.namedtuple("Baselines", "pointed_at copied_at unsent")
 
 
 def preamble_for(number, total):
     if number > 1:
         return LATER_PART_PREAMBLE.format(number=number, total=total)
     if total > 1:
-        return FULL_COPY_PREAMBLE + SPLIT_NOTICE.format(total=total)
-    return FULL_COPY_PREAMBLE
+        return FIRST_PART_PREAMBLE + SPLIT_NOTICE.format(total=total)
+    return FIRST_PART_PREAMBLE
 
 
 LONGEST_PREAMBLE_CHARS = max(len(preamble_for(number, 99)) for number in (1, 99))
@@ -123,38 +123,45 @@ def parts_of(text, budget):
     return cut_every(text, budget)
 
 
-def full_copy_messages():
+def full_copy():
     with open(CLAUDE_MD_PATH, encoding="utf-8", errors="replace") as claude_md:
         text = claude_md.read().strip()
     parts = parts_of(text, PART_BUDGET_CHARS)
-    return [
+    return tuple(
         f"{preamble_for(number, len(parts))}\n\n{part}"
         for number, part in enumerate(parts, start=1)
-    ]
+    )
 
 
-def started_copy(tokens, full_copy):
-    if not full_copy:
+def start_copy(tokens):
+    messages = full_copy()
+    if not messages:
         return None, Baselines(tokens, tokens, ())
-    return full_copy[0], Baselines(tokens, tokens, tuple(full_copy[1:]))
+    return messages[0], Baselines(tokens, tokens, messages[1:])
 
 
-def drained_copy(baselines, tokens):
-    sending, remaining = baselines.pending[0], baselines.pending[1:]
-    if remaining:
-        return sending, baselines._replace(pending=remaining)
+def send_next_part(baselines, tokens):
+    sending, unsent = baselines.unsent[0], baselines.unsent[1:]
+    if unsent:
+        return sending, baselines._replace(unsent=unsent)
     return sending, Baselines(tokens, tokens, ())
 
 
-def next_reminder(baselines, tokens, full_copy):
-    if baselines is None or tokens < baselines.pointed_at:
-        if baselines and baselines.pending:
-            return started_copy(tokens, full_copy)
+def context_shrank(baselines, tokens):
+    return tokens < baselines.pointed_at
+
+
+def next_reminder(baselines, tokens):
+    if baselines is None:
         return None, Baselines(tokens, tokens, ())
-    if baselines.pending:
-        return drained_copy(baselines, tokens)
+    if context_shrank(baselines, tokens):
+        if baselines.unsent:
+            return start_copy(tokens)
+        return None, Baselines(tokens, tokens, ())
+    if baselines.unsent:
+        return send_next_part(baselines, tokens)
     if tokens - baselines.copied_at >= FULL_COPY_EVERY_TOKENS:
-        return started_copy(tokens, full_copy)
+        return start_copy(tokens)
     if tokens - baselines.pointed_at >= POINTER_EVERY_TOKENS:
         return POINTER_REMINDER, baselines._replace(pointed_at=tokens)
     return None, baselines
@@ -196,8 +203,8 @@ def read_baselines(baseline_file):
         return None
     if stored.get("pointed_at") is None or stored.get("copied_at") is None:
         return None
-    pending = tuple(stored.get("pending") or ())
-    return Baselines(stored["pointed_at"], stored["copied_at"], pending)
+    unsent = tuple(stored.get("unsent") or ())
+    return Baselines(stored["pointed_at"], stored["copied_at"], unsent)
 
 
 def write_baselines(baseline_file, baselines):
@@ -209,7 +216,7 @@ def write_baselines(baseline_file, baselines):
 def advance_baselines(session_id, tokens):
     with locked_baseline(session_id) as baseline_file:
         stored = read_baselines(baseline_file)
-        reminder, baselines = next_reminder(stored, tokens, full_copy_messages())
+        reminder, baselines = next_reminder(stored, tokens)
         write_baselines(baseline_file, baselines)
         return reminder
 
