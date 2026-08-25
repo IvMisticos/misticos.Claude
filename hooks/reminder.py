@@ -142,10 +142,11 @@ def parts_of(text, budget):
 
 
 def full_copy():
-    if not os.path.exists(CLAUDE_MD_PATH):
+    try:
+        with open(CLAUDE_MD_PATH, encoding="utf-8", errors="replace") as claude_md:
+            text = claude_md.read().strip()
+    except OSError:
         return ()
-    with open(CLAUDE_MD_PATH, encoding="utf-8", errors="replace") as claude_md:
-        text = claude_md.read().strip()
     if not text:
         return ()
     parts = parts_of(text, PART_BUDGET_CHARS)
@@ -153,14 +154,6 @@ def full_copy():
         f"{preamble_for(number, len(parts))}\n\n{part}"
         for number, part in enumerate(parts, start=1)
     )
-
-
-def claude_md_is_empty():
-    try:
-        with open(CLAUDE_MD_PATH, encoding="utf-8", errors="replace") as claude_md:
-            return not claude_md.read().strip()
-    except OSError:
-        return True
 
 
 def hook_entries_needed():
@@ -184,20 +177,20 @@ def context_shrank(baselines, tokens):
     return tokens < baselines.pointed_at
 
 
-def next_action(baselines, fire, tokens):
+def next_action(baselines, fire, tokens, can_copy):
     if baselines is None or context_shrank(baselines, tokens):
         return IDLE, Baselines(tokens, tokens, fire, IDLE)
-    if fire and tokens - baselines.copied_at >= FULL_COPY_EVERY_TOKENS:
+    if fire and can_copy and tokens - baselines.copied_at >= FULL_COPY_EVERY_TOKENS:
         return COPY, Baselines(tokens, tokens, fire, COPY)
     if tokens - baselines.pointed_at >= POINTER_EVERY_TOKENS:
         return POINTER, Baselines(tokens, baselines.copied_at, fire, POINTER)
     return IDLE, baselines._replace(fire=fire, action=IDLE)
 
 
-def action_for_fire(baselines, fire, tokens):
+def action_for_fire(baselines, fire, tokens, can_copy):
     if baselines is not None and fire and baselines.fire == fire:
         return baselines.action, baselines
-    return next_action(baselines, fire, tokens)
+    return next_action(baselines, fire, tokens, can_copy)
 
 
 def baseline_path(session_id):
@@ -254,49 +247,51 @@ def write_baselines(baseline_file, baselines):
     json.dump(baselines._asdict(), baseline_file)
 
 
-def claimed_action(session_id, fire, tokens):
+def claimed_action(session_id, fire, tokens, can_copy):
     with locked_baseline(session_id) as baseline_file:
         stored = read_baselines(baseline_file)
-        action, baselines = action_for_fire(stored, fire, tokens)
+        action, baselines = action_for_fire(stored, fire, tokens, can_copy)
         write_baselines(baseline_file, baselines)
         return action
 
 
-def outgrown(parts, entries):
-    return Reminder(POINTER_REMINDER, OUTGROWN_NOTICE.format(parts=parts, entries=entries))
-
-
-def message_for(action, part, entries):
-    if action == POINTER:
-        return POINTER_ONLY if part == 1 else SILENCE
-    if action != COPY:
+def pointer_for(part, parts, entries):
+    if part != 1:
         return SILENCE
-    parts = full_copy()
-    if len(parts) > entries:
-        return outgrown(len(parts), entries) if part == 1 else SILENCE
-    if not 1 <= part <= len(parts):
+    if len(parts) <= entries:
+        return POINTER_ONLY
+    notice = OUTGROWN_NOTICE.format(parts=len(parts), entries=entries)
+    return Reminder(POINTER_REMINDER, notice)
+
+
+def message_for(action, part, parts, entries):
+    if action == POINTER:
+        return pointer_for(part, parts, entries)
+    if action != COPY or not 1 <= part <= len(parts):
         return SILENCE
     return Reminder(parts[part - 1], None)
 
 
 def reminder_for(event, payload, part, entries):
-    if payload.get("agent_id") or claude_md_is_empty():
+    parts = full_copy()
+    if payload.get("agent_id") or not parts:
         return SILENCE
     if event == "SessionStart":
-        return POINTER_ONLY
+        return pointer_for(part, parts, entries)
     session_id = payload.get("session_id")
     transcript_path = payload.get("transcript_path")
     if not (session_id and transcript_path):
         return SILENCE
     tokens = latest_context_tokens(transcript_path)
     if tokens is None:
-        if part == 1 and event == "UserPromptSubmit" and transcript_fits_in_tail(transcript_path):
-            return POINTER_ONLY
+        if event == "UserPromptSubmit" and transcript_fits_in_tail(transcript_path):
+            return pointer_for(part, parts, entries)
         return SILENCE
     fire = fire_id(event, payload)
     if not fire and part > 1:
         return SILENCE
-    return message_for(claimed_action(session_id, fire, tokens), part, entries)
+    action = claimed_action(session_id, fire, tokens, len(parts) <= entries)
+    return message_for(action, part, parts, entries)
 
 
 def inject(event, reminder):
