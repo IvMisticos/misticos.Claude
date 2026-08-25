@@ -38,8 +38,8 @@ LATER_PART_PREAMBLE = (
 )
 BLOCK_BREAKS = (r"(?=\n\n# )", r"(?=\n\n)", r"(?=\n)")
 OUTGROWN_NOTICE = (
-    "CLAUDE.md now needs {parts} hook entries and {entries} are installed, so "
-    "the whole file can no longer be sent. Re-run setup.sh."
+    "CLAUDE.md now needs {parts} hook entries, installed: {entries}. The whole "
+    "file cannot be sent until setup.sh runs again."
 )
 IDLE = ""
 POINTER = "pointer"
