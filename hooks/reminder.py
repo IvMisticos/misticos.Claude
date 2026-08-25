@@ -279,8 +279,10 @@ def reminder_for(event, payload, part, entries):
         if part == 1 and event == "UserPromptSubmit":
             return POINTER_REMINDER if transcript_fits_in_tail(transcript_path) else None
         return None
-    action = claimed_action(session_id, fire_id(event, payload), tokens)
-    return message_for(action, part, entries)
+    fire = fire_id(event, payload)
+    if not fire and part > 1:
+        return None
+    return message_for(claimed_action(session_id, fire, tokens), part, entries)
 
 
 def inject(event, reminder):
