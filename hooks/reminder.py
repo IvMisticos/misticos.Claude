@@ -55,13 +55,21 @@ LONGEST_PREAMBLE_CHARS = max(len(preamble_for(number, 99)) for number in (1, 99)
 PART_BUDGET_CHARS = MAX_INJECTED_CHARS - LONGEST_PREAMBLE_CHARS - len("\n\n")
 
 
+def as_dict(value):
+    return value if isinstance(value, dict) else {}
+
+
 def is_conversation_turn(entry):
-    message = entry.get("message") or {}
     return (
         entry.get("type") == "assistant"
         and not entry.get("isSidechain")
-        and message.get("model") != "<synthetic>"
+        and as_dict(entry.get("message")).get("model") != "<synthetic>"
     )
+
+
+def counted_tokens(usage):
+    counts = (as_dict(usage).get(field) for field in CONTEXT_USAGE_FIELDS)
+    return sum(count for count in counts if isinstance(count, int))
 
 
 def context_tokens(line):
@@ -71,8 +79,7 @@ def context_tokens(line):
         return None
     if not isinstance(entry, dict) or not is_conversation_turn(entry):
         return None
-    usage = (entry.get("message") or {}).get("usage") or {}
-    return sum(usage.get(field, 0) for field in CONTEXT_USAGE_FIELDS) or None
+    return counted_tokens(as_dict(entry.get("message")).get("usage")) or None
 
 
 def transcript_tail(transcript_path):
