@@ -134,8 +134,8 @@ Drive this loop to green unprompted. Only get back when both CI and the review a
 
 1. Never review unfinished work. Push the relevant changes.
 2. Wait for CI. Subscribe to the PR; no manual polling needed. Push failure fixes.
-3. With CI green, run the code-review skill over the PR.
-4. Address every finding, then push.
+3. With CI green, run the code-review skill in a background subagent and name the PR in its prompt.
+4. Findings reach you as notifications; never poll. Address every finding, then push.
 5. Repeat from step 2 until CI passes and the review returns nothing.
 
 Fix critical findings before saying done. Name recommendations for review, you don't decide these alone.
