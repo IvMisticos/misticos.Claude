@@ -14,7 +14,6 @@ POINTER_EVERY_TOKENS = 10_000
 TRANSCRIPT_TAIL_BYTES = 1 << 20
 FORGET_BASELINE_AFTER_SECONDS = 7 * 24 * 60 * 60
 MAX_INJECTED_CHARS = 10_000
-PREAMBLE_RESERVE_CHARS = 400
 CLAUDE_MD_PATH = os.path.expanduser("~/.claude/CLAUDE.md")
 BASELINE_DIR = os.path.expanduser("~/.claude/hooks/data/misticos.Claude/reminder")
 CONTEXT_USAGE_FIELDS = (
@@ -32,11 +31,23 @@ FULL_COPY_PREAMBLE = (
     "follows here in full. It overrides your defaults. Follow it at all "
     "times. Where your recent work has drifted from it, correct that now."
 )
-SPLIT_NOTICE = " The file is split across {total} messages, starting here."
+SPLIT_NOTICE = " The file comes in {total} parts, starting here."
 LATER_PART_PREAMBLE = "CLAUDE.md continues here, part {number} of {total}."
-SPLIT_PREFERENCES = ("\n\n# ", "\n\n", "\n")
+BLOCK_BREAKS = (r"(?=\n\n# )", r"(?=\n\n)", r"(?=\n)")
 
 Baselines = collections.namedtuple("Baselines", "pointed_at copied_at pending")
+
+
+def preamble_for(number, total):
+    if number > 1:
+        return LATER_PART_PREAMBLE.format(number=number, total=total)
+    if total > 1:
+        return FULL_COPY_PREAMBLE + SPLIT_NOTICE.format(total=total)
+    return FULL_COPY_PREAMBLE
+
+
+LONGEST_PREAMBLE_CHARS = max(len(preamble_for(number, 99)) for number in (1, 99))
+PART_BUDGET_CHARS = MAX_INJECTED_CHARS - LONGEST_PREAMBLE_CHARS - len("\n\n")
 
 
 def is_conversation_turn(entry):
@@ -87,41 +98,36 @@ def transcript_fits_in_tail(transcript_path):
         return True
 
 
-def split_once(text, budget):
-    window = text[:budget]
-    boundaries = [window.rfind(preference) for preference in SPLIT_PREFERENCES]
-    filling = [at for at in boundaries if at >= budget // 2]
-    if not filling:
-        return text[:budget], text[budget:]
-    return text[: filling[0]], text[filling[0] :].lstrip("\n")
-
-
-def claude_md_parts():
-    with open(CLAUDE_MD_PATH, encoding="utf-8", errors="replace") as claude_md:
-        text = claude_md.read().strip()
-    budget = MAX_INJECTED_CHARS - PREAMBLE_RESERVE_CHARS
+def packed(blocks, budget):
     parts = []
-    while len(text) > budget:
-        part, text = split_once(text, budget)
-        parts.append(part)
-    if text:
-        parts.append(text)
+    for block in blocks:
+        if parts and len(parts[-1]) + len(block) <= budget:
+            parts[-1] += block
+        else:
+            parts.append(block.lstrip("\n"))
     return parts
 
 
-def part_message(index, parts):
-    if index:
-        preamble = LATER_PART_PREAMBLE.format(number=index + 1, total=len(parts))
-    elif len(parts) > 1:
-        preamble = FULL_COPY_PREAMBLE + SPLIT_NOTICE.format(total=len(parts))
-    else:
-        preamble = FULL_COPY_PREAMBLE
-    return f"{preamble}\n\n{parts[index]}"
+def cut_every(text, budget):
+    return [text[at : at + budget] for at in range(0, len(text), budget)]
+
+
+def parts_of(text, budget):
+    for block_break in BLOCK_BREAKS:
+        parts = packed(re.split(block_break, text), budget)
+        if all(len(part) <= budget for part in parts):
+            return parts
+    return cut_every(text, budget)
 
 
 def full_copy_messages():
-    parts = claude_md_parts()
-    return [part_message(index, parts) for index in range(len(parts))]
+    with open(CLAUDE_MD_PATH, encoding="utf-8", errors="replace") as claude_md:
+        text = claude_md.read().strip()
+    parts = parts_of(text, PART_BUDGET_CHARS)
+    return [
+        f"{preamble_for(number, len(parts))}\n\n{part}"
+        for number, part in enumerate(parts, start=1)
+    ]
 
 
 def started_copy(tokens, full_copy):
