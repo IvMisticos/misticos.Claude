@@ -141,6 +141,14 @@ def parts_of(text, budget):
     return cut_every(text, budget)
 
 
+def messages_from(text, budget):
+    parts = parts_of(text, budget)
+    return tuple(
+        f"{preamble_for(number, len(parts))}\n\n{part}"
+        for number, part in enumerate(parts, start=1)
+    )
+
+
 def full_copy():
     try:
         with open(CLAUDE_MD_PATH, encoding="utf-8", errors="replace") as claude_md:
@@ -149,11 +157,13 @@ def full_copy():
         return ()
     if not text:
         return ()
-    parts = parts_of(text, PART_BUDGET_CHARS)
-    return tuple(
-        f"{preamble_for(number, len(parts))}\n\n{part}"
-        for number, part in enumerate(parts, start=1)
-    )
+    budget = PART_BUDGET_CHARS
+    while True:
+        messages = messages_from(text, budget)
+        overflow = max(len(message) for message in messages) - MAX_INJECTED_CHARS
+        if overflow <= 0:
+            return messages
+        budget -= overflow
 
 
 def hook_entries_needed():
