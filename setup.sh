@@ -32,7 +32,7 @@ def every_part(matcher):
     hooks: [ range(1; $parts + 1) | reminder(.) ]
   } ];
 def without_reminder:
-  map_values([ .[] | .hooks = [ (.hooks // [])[] | select(.command | startswith($command) | not) ] | select(.hooks != []) ])
+  map_values([ .[] | .hooks = [ (.hooks // [])[] | select((.command // "") | startswith($command) | not) ] | select(.hooks != []) ])
   | with_entries(select(.value != []));
 .attribution = {
   commit: "",
