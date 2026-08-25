@@ -19,7 +19,6 @@ grep -q '[^[:space:]]' "$settings" 2>/dev/null || echo '{}' > "$settings"
 
 cp "$repo/CLAUDE.md" "$d/"
 parts=$("$repo/hooks/reminder.py" --entries)
-install -m 755 "$repo/hooks/reminder.py" "$d/"
 
 jq --arg command '~/.claude/reminder.py' --argjson parts "$parts" '
 def reminder(part):
@@ -46,4 +45,6 @@ def without_reminder:
 | .hooks.UserPromptSubmit += every_part("")
 | .hooks.PostToolBatch += every_part("")
 ' "$settings" > "$settings.installed"
+
+install -m 755 "$repo/hooks/reminder.py" "$d/"
 mv "$settings.installed" "$settings"
