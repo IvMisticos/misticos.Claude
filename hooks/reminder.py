@@ -31,14 +31,16 @@ FIRST_PART_PREAMBLE = (
     "follows here in full. It overrides your defaults. Follow it at all "
     "times. Where your recent work has drifted from it, correct that now."
 )
-SPLIT_NOTICE = " The file comes in {total} parts, starting here."
+SPLIT_NOTICE = " The file comes in {total} parts, sent together, in any order."
 LATER_PART_PREAMBLE = (
     "CLAUDE.md continues here, part {number} of {total}. It overrides your "
     "defaults. Follow it at all times."
 )
 BLOCK_BREAKS = (r"(?=\n\n# )", r"(?=\n\n)", r"(?=\n)")
+POINTER = "pointer"
+COPY = "copy"
 
-Baselines = collections.namedtuple("Baselines", "pointed_at copied_at unsent")
+Baselines = collections.namedtuple("Baselines", "pointed_at copied_at copied_on_fire")
 
 
 def preamble_for(number, total):
@@ -135,37 +137,36 @@ def full_copy():
     )
 
 
-def start_copy(tokens):
-    messages = full_copy()
-    if not messages:
-        return None, Baselines(tokens, tokens, ())
-    return messages[0], Baselines(tokens, tokens, messages[1:])
+def hook_entries_needed():
+    return max(1, len(full_copy()))
 
 
-def send_next_part(baselines, tokens):
-    sending, unsent = baselines.unsent[0], baselines.unsent[1:]
-    if unsent:
-        return sending, baselines._replace(unsent=unsent)
-    return sending, Baselines(tokens, tokens, ())
+def fire_id(payload):
+    calls = payload.get("tool_calls") or []
+    tool_uses = sorted(
+        str(call.get("tool_use_id"))
+        for call in calls
+        if isinstance(call, dict) and call.get("tool_use_id")
+    )
+    prompt = str(payload.get("prompt_id") or "")
+    if not (prompt or tool_uses):
+        return ""
+    return "|".join([prompt] + tool_uses)
 
 
 def context_shrank(baselines, tokens):
     return tokens < baselines.pointed_at
 
 
-def next_reminder(baselines, tokens):
-    if baselines is None:
-        return None, Baselines(tokens, tokens, ())
-    if context_shrank(baselines, tokens):
-        if baselines.unsent:
-            return start_copy(tokens)
-        return None, Baselines(tokens, tokens, ())
-    if baselines.unsent:
-        return send_next_part(baselines, tokens)
-    if tokens - baselines.copied_at >= FULL_COPY_EVERY_TOKENS:
-        return start_copy(tokens)
+def next_action(baselines, fire, tokens):
+    if baselines is None or context_shrank(baselines, tokens):
+        return None, Baselines(tokens, tokens, "")
+    if fire and baselines.copied_on_fire == fire:
+        return COPY, baselines
+    if fire and tokens - baselines.copied_at >= FULL_COPY_EVERY_TOKENS:
+        return COPY, Baselines(tokens, tokens, fire)
     if tokens - baselines.pointed_at >= POINTER_EVERY_TOKENS:
-        return POINTER_REMINDER, baselines._replace(pointed_at=tokens)
+        return POINTER, baselines._replace(pointed_at=tokens)
     return None, baselines
 
 
@@ -200,14 +201,12 @@ def as_baselines(stored):
         return None
     pointed_at = stored.get("pointed_at")
     copied_at = stored.get("copied_at")
-    unsent = stored.get("unsent") or []
+    copied_on_fire = stored.get("copied_on_fire") or ""
     if not isinstance(pointed_at, int) or not isinstance(copied_at, int):
         return None
-    if not isinstance(unsent, list):
+    if not isinstance(copied_on_fire, str):
         return None
-    if not all(isinstance(part, str) for part in unsent):
-        return None
-    return Baselines(pointed_at, copied_at, tuple(unsent))
+    return Baselines(pointed_at, copied_at, copied_on_fire)
 
 
 def read_baselines(baseline_file):
@@ -224,16 +223,27 @@ def write_baselines(baseline_file, baselines):
     json.dump(baselines._asdict(), baseline_file)
 
 
-def advance_baselines(session_id, tokens):
+def claimed_action(session_id, fire, tokens):
     with locked_baseline(session_id) as baseline_file:
         stored = read_baselines(baseline_file)
-        reminder, baselines = next_reminder(stored, tokens)
+        action, baselines = next_action(stored, fire, tokens)
         write_baselines(baseline_file, baselines)
-        return reminder
+        return action
 
 
-def reminder_for(event, payload):
+def message_for(action, part):
+    if action == POINTER:
+        return POINTER_REMINDER
+    if action != COPY:
+        return None
+    parts = full_copy()
+    return parts[part - 1] if part <= len(parts) else None
+
+
+def reminder_for(event, payload, part):
     if payload.get("agent_id") or not os.path.exists(CLAUDE_MD_PATH):
+        return None
+    if part > 1 and event == "SessionStart":
         return None
     if event == "SessionStart":
         return POINTER_REMINDER
@@ -242,11 +252,11 @@ def reminder_for(event, payload):
     if not (session_id and transcript_path):
         return None
     tokens = latest_context_tokens(transcript_path)
-    if tokens is not None:
-        return advance_baselines(session_id, tokens)
-    if event == "UserPromptSubmit" and transcript_fits_in_tail(transcript_path):
-        return POINTER_REMINDER
-    return None
+    if tokens is None:
+        if part == 1 and event == "UserPromptSubmit":
+            return POINTER_REMINDER if transcript_fits_in_tail(transcript_path) else None
+        return None
+    return message_for(claimed_action(session_id, fire_id(payload), tokens), part)
 
 
 def inject(event, reminder):
@@ -257,11 +267,15 @@ def inject(event, reminder):
 
 
 def main():
+    argument = sys.argv[1] if len(sys.argv) > 1 else "1"
+    if argument == "--entries":
+        print(hook_entries_needed())
+        return
     payload = json.loads(sys.stdin.read() or "{}")
     event = payload.get("hook_event_name")
     if not event:
         return
-    reminder = reminder_for(event, payload)
+    reminder = reminder_for(event, payload, int(argument))
     if reminder:
         inject(event, reminder)
 

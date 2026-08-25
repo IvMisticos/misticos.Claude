@@ -17,17 +17,22 @@ settings="$d/settings.json"
 mkdir -p "$d"
 grep -q '[^[:space:]]' "$settings" 2>/dev/null || echo '{}' > "$settings"
 
-jq --arg command '~/.claude/reminder.py' '
-def reminder(matcher):
+cp "$repo/CLAUDE.md" "$d/"
+install -m 755 "$repo/hooks/reminder.py" "$d/"
+
+jq --arg command '~/.claude/reminder.py' --argjson parts "$("$d/reminder.py" --entries)" '
+def reminder(part):
   {
-    matcher: matcher,
-    hooks: [ {
-      type: "command",
-      command: $command
-    } ]
+    type: "command",
+    command: "\($command) \(part)"
   };
+def every_part(matcher):
+  [ {
+    matcher: matcher,
+    hooks: [ range(1; $parts + 1) | reminder(.) ]
+  } ];
 def without_reminder:
-  map_values([ .[] | .hooks = [ (.hooks // [])[] | select(.command != $command) ] | select(.hooks != []) ])
+  map_values([ .[] | .hooks = [ (.hooks // [])[] | select(.command | startswith($command) | not) ] | select(.hooks != []) ])
   | with_entries(select(.value != []));
 .attribution = {
   commit: "",
@@ -36,11 +41,8 @@ def without_reminder:
 }
 | .autoMemoryEnabled = false
 | .hooks = ((.hooks // {}) | without_reminder)
-| .hooks.SessionStart += [ reminder("compact") ]
-| .hooks.UserPromptSubmit += [ reminder("") ]
-| .hooks.PostToolBatch += [ reminder("") ]
+| .hooks.SessionStart += [ { matcher: "compact", hooks: [ reminder(1) ] } ]
+| .hooks.UserPromptSubmit += every_part("")
+| .hooks.PostToolBatch += every_part("")
 ' "$settings" > "$settings.installed"
 mv "$settings.installed" "$settings"
-
-cp "$repo/CLAUDE.md" "$d/"
-install -m 755 "$repo/hooks/reminder.py" "$d/"
