@@ -126,6 +126,8 @@ def parts_of(text, budget):
 def full_copy():
     with open(CLAUDE_MD_PATH, encoding="utf-8", errors="replace") as claude_md:
         text = claude_md.read().strip()
+    if not text:
+        return ()
     parts = parts_of(text, PART_BUDGET_CHARS)
     return tuple(
         f"{preamble_for(number, len(parts))}\n\n{part}"
