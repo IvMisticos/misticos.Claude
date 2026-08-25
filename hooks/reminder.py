@@ -171,7 +171,7 @@ def context_shrank(baselines, tokens):
 def next_action(baselines, fire, tokens):
     if baselines is None or context_shrank(baselines, tokens):
         return None, Baselines(tokens, tokens, "")
-    if fire and baselines.copied_on_fire == fire and baselines.copied_at == tokens:
+    if fire and baselines.copied_on_fire == fire:
         return COPY, baselines
     if fire and tokens - baselines.copied_at >= FULL_COPY_EVERY_TOKENS:
         return COPY, Baselines(tokens, tokens, fire)
