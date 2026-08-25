@@ -69,7 +69,7 @@ def context_tokens(line):
         entry = json.loads(line)
     except (UnicodeDecodeError, json.JSONDecodeError):
         return None
-    if not is_conversation_turn(entry):
+    if not isinstance(entry, dict) or not is_conversation_turn(entry):
         return None
     usage = (entry.get("message") or {}).get("usage") or {}
     return sum(usage.get(field, 0) for field in CONTEXT_USAGE_FIELDS) or None
