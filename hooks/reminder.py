@@ -37,19 +37,11 @@ LATER_PART_PREAMBLE = (
     "defaults. Follow it at all times."
 )
 BLOCK_BREAKS = (r"(?=\n\n# )", r"(?=\n\n)", r"(?=\n)")
-OUTGROWN_NOTICE = (
-    "CLAUDE.md now needs {parts} hook entries, installed: {entries}. The whole "
-    "file cannot be sent until setup.sh runs again."
-)
 IDLE = ""
 POINTER = "pointer"
 COPY = "copy"
 
 Baselines = collections.namedtuple("Baselines", "pointed_at copied_at fire action")
-Reminder = collections.namedtuple("Reminder", "context notice")
-
-SILENCE = Reminder(None, None)
-POINTER_ONLY = Reminder(POINTER_REMINDER, None)
 
 
 def preamble_for(number, total):
@@ -265,56 +257,44 @@ def claimed_action(session_id, fire, tokens, can_copy):
         return action
 
 
-def pointer_for(part, parts, entries):
-    if part != 1:
-        return SILENCE
-    if len(parts) <= entries:
-        return POINTER_ONLY
-    notice = OUTGROWN_NOTICE.format(parts=len(parts), entries=entries)
-    return Reminder(POINTER_REMINDER, notice)
-
-
-def message_for(action, part, parts, entries):
+def message_for(action, part, parts):
     if action == POINTER:
-        return pointer_for(part, parts, entries)
+        return POINTER_REMINDER if part == 1 else None
     if action != COPY or not 1 <= part <= len(parts):
-        return SILENCE
-    return Reminder(parts[part - 1], None)
+        return None
+    return parts[part - 1]
 
 
 def reminder_for(event, payload, part, entries):
     parts = full_copy()
     if payload.get("agent_id") or not parts:
-        return SILENCE
+        return None
+    if part != 1 and event == "SessionStart":
+        return None
     if event == "SessionStart":
-        return pointer_for(part, parts, entries)
+        return POINTER_REMINDER
     session_id = payload.get("session_id")
     transcript_path = payload.get("transcript_path")
     if not (session_id and transcript_path):
-        return SILENCE
+        return None
     tokens = latest_context_tokens(transcript_path)
     if tokens is None:
-        if event == "UserPromptSubmit" and transcript_fits_in_tail(transcript_path):
-            return pointer_for(part, parts, entries)
-        return SILENCE
+        if part == 1 and event == "UserPromptSubmit" and transcript_fits_in_tail(transcript_path):
+            return POINTER_REMINDER
+        return None
     fire = fire_id(event, payload)
     if not fire and part > 1:
-        return SILENCE
+        return None
     sendable = len(parts) <= entries and (fire or len(parts) == 1)
     action = claimed_action(session_id, fire, tokens, bool(sendable))
-    return message_for(action, part, parts, entries)
+    return message_for(action, part, parts)
 
 
 def inject(event, reminder):
-    output = {
-        "hookSpecificOutput": {
-            "hookEventName": event,
-            "additionalContext": reminder.context,
-        }
-    }
-    if reminder.notice:
-        output["systemMessage"] = reminder.notice
-    json.dump(output, sys.stdout)
+    json.dump(
+        {"hookSpecificOutput": {"hookEventName": event, "additionalContext": reminder}},
+        sys.stdout,
+    )
 
 
 def main():
@@ -325,7 +305,7 @@ def main():
     if not event:
         return
     reminder = reminder_for(event, payload, part, entries)
-    if reminder.context:
+    if reminder:
         inject(event, reminder)
 
 
