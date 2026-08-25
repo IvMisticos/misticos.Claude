@@ -24,7 +24,7 @@ jq --arg command '~/.claude/reminder.py' --argjson parts "$("$d/reminder.py" --e
 def reminder(part):
   {
     type: "command",
-    command: "\($command) \(part)"
+    command: "\($command) \(part) \($parts)"
   };
 def every_part(matcher):
   [ {

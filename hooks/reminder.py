@@ -231,16 +231,18 @@ def claimed_action(session_id, fire, tokens):
         return action
 
 
-def message_for(action, part):
+def message_for(action, part, entries):
     if action == POINTER:
         return POINTER_REMINDER
     if action != COPY:
         return None
     parts = full_copy()
-    return parts[part - 1] if part <= len(parts) else None
+    if len(parts) > entries:
+        return POINTER_REMINDER if part == 1 else None
+    return parts[part - 1] if 1 <= part <= len(parts) else None
 
 
-def reminder_for(event, payload, part):
+def reminder_for(event, payload, part, entries):
     if payload.get("agent_id") or not os.path.exists(CLAUDE_MD_PATH):
         return None
     if part > 1 and event == "SessionStart":
@@ -256,7 +258,8 @@ def reminder_for(event, payload, part):
         if part == 1 and event == "UserPromptSubmit":
             return POINTER_REMINDER if transcript_fits_in_tail(transcript_path) else None
         return None
-    return message_for(claimed_action(session_id, fire_id(payload), tokens), part)
+    action = claimed_action(session_id, fire_id(payload), tokens)
+    return message_for(action, part, entries)
 
 
 def inject(event, reminder):
@@ -267,15 +270,13 @@ def inject(event, reminder):
 
 
 def main():
-    argument = sys.argv[1] if len(sys.argv) > 1 else "1"
-    if argument == "--entries":
-        print(hook_entries_needed())
-        return
+    part = int(sys.argv[1]) if len(sys.argv) > 1 else 1
+    entries = int(sys.argv[2]) if len(sys.argv) > 2 else part
     payload = json.loads(sys.stdin.read() or "{}")
     event = payload.get("hook_event_name")
     if not event:
         return
-    reminder = reminder_for(event, payload, int(argument))
+    reminder = reminder_for(event, payload, part, entries)
     if reminder:
         inject(event, reminder)
 
