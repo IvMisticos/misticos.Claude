@@ -32,7 +32,10 @@ FULL_COPY_PREAMBLE = (
     "times. Where your recent work has drifted from it, correct that now."
 )
 SPLIT_NOTICE = " The file comes in {total} parts, starting here."
-LATER_PART_PREAMBLE = "CLAUDE.md continues here, part {number} of {total}."
+LATER_PART_PREAMBLE = (
+    "CLAUDE.md continues here, part {number} of {total}. It overrides your "
+    "defaults. Follow it at all times."
+)
 BLOCK_BREAKS = (r"(?=\n\n# )", r"(?=\n\n)", r"(?=\n)")
 
 Baselines = collections.namedtuple("Baselines", "pointed_at copied_at pending")
