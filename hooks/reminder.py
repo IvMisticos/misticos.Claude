@@ -126,6 +126,8 @@ def parts_of(text, budget):
 
 
 def full_copy():
+    if not os.path.exists(CLAUDE_MD_PATH):
+        return ()
     with open(CLAUDE_MD_PATH, encoding="utf-8", errors="replace") as claude_md:
         text = claude_md.read().strip()
     if not text:
@@ -282,7 +284,10 @@ def main():
 
 
 if __name__ == "__main__":
-    try:
-        main()
-    except Exception:
-        sys.exit(0)
+    if sys.argv[1:2] == ["--entries"]:
+        print(hook_entries_needed())
+    else:
+        try:
+            main()
+        except Exception:
+            sys.exit(0)
