@@ -18,7 +18,7 @@ mkdir -p "$d"
 grep -q '[^[:space:]]' "$settings" 2>/dev/null || echo '{}' > "$settings"
 
 cp "$repo/CLAUDE.md" "$d/"
-parts=$("$repo/hooks/reminder.py" --entries)
+parts=$(python3 "$repo/hooks/reminder.py" --entries)
 
 jq --arg command '~/.claude/reminder.py' --argjson parts "$parts" '
 def reminder(part):
