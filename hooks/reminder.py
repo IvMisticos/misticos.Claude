@@ -180,7 +180,7 @@ def context_shrank(baselines, tokens):
 def next_action(baselines, fire, tokens, can_copy):
     if baselines is None or context_shrank(baselines, tokens):
         return IDLE, Baselines(tokens, tokens, fire, IDLE)
-    if fire and can_copy and tokens - baselines.copied_at >= FULL_COPY_EVERY_TOKENS:
+    if can_copy and tokens - baselines.copied_at >= FULL_COPY_EVERY_TOKENS:
         return COPY, Baselines(tokens, tokens, fire, COPY)
     if tokens - baselines.pointed_at >= POINTER_EVERY_TOKENS:
         return POINTER, Baselines(tokens, baselines.copied_at, fire, POINTER)
@@ -290,7 +290,8 @@ def reminder_for(event, payload, part, entries):
     fire = fire_id(event, payload)
     if not fire and part > 1:
         return SILENCE
-    action = claimed_action(session_id, fire, tokens, len(parts) <= entries)
+    sendable = len(parts) <= entries and (fire or len(parts) == 1)
+    action = claimed_action(session_id, fire, tokens, bool(sendable))
     return message_for(action, part, parts, entries)
 
 
