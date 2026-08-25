@@ -13,8 +13,9 @@ else
 fi
 
 d=/root/.claude
+settings="$d/settings.json"
 mkdir -p "$d"
-[ -s "$d/settings.json" ] || echo '{}' > "$d/settings.json"
+grep -q '[^[:space:]]' "$settings" 2>/dev/null || echo '{}' > "$settings"
 
 jq --arg command '~/.claude/reminder.py' '
 def reminder(matcher):
@@ -38,8 +39,8 @@ def without_reminder:
 | .hooks.SessionStart += [ reminder("compact") ]
 | .hooks.UserPromptSubmit += [ reminder("") ]
 | .hooks.PostToolBatch += [ reminder("") ]
-' "$d/settings.json" > "$d/settings.json.installed"
-mv "$d/settings.json.installed" "$d/settings.json"
+' "$settings" > "$settings.installed"
+mv "$settings.installed" "$settings"
 
 cp "$repo/CLAUDE.md" "$d/"
 install -m 755 "$repo/hooks/reminder.py" "$d/"
