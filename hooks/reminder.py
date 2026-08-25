@@ -193,18 +193,27 @@ def locked_baseline(session_id):
         yield baseline_file
 
 
+def as_baselines(stored):
+    if not isinstance(stored, dict):
+        return None
+    pointed_at = stored.get("pointed_at")
+    copied_at = stored.get("copied_at")
+    unsent = stored.get("unsent") or []
+    if not isinstance(pointed_at, int) or not isinstance(copied_at, int):
+        return None
+    if not isinstance(unsent, list):
+        return None
+    if not all(isinstance(part, str) for part in unsent):
+        return None
+    return Baselines(pointed_at, copied_at, tuple(unsent))
+
+
 def read_baselines(baseline_file):
     baseline_file.seek(0)
     try:
-        stored = json.loads(baseline_file.read())
+        return as_baselines(json.loads(baseline_file.read()))
     except (UnicodeDecodeError, json.JSONDecodeError):
         return None
-    if not isinstance(stored, dict):
-        return None
-    if stored.get("pointed_at") is None or stored.get("copied_at") is None:
-        return None
-    unsent = tuple(stored.get("unsent") or ())
-    return Baselines(stored["pointed_at"], stored["copied_at"], unsent)
 
 
 def write_baselines(baseline_file, baselines):
