@@ -56,7 +56,7 @@ LONGEST_PREAMBLE_CHARS = max(len(preamble_for(number, 99)) for number in (1, 99)
 PART_BUDGET_CHARS = MAX_INJECTED_CHARS - LONGEST_PREAMBLE_CHARS - len("\n\n")
 
 
-def as_dict(value):
+def dict_or_empty(value):
     return value if isinstance(value, dict) else {}
 
 
@@ -64,26 +64,27 @@ def is_conversation_turn(entry):
     return (
         entry.get("type") == "assistant"
         and not entry.get("isSidechain")
-        and as_dict(entry.get("message")).get("model") != "<synthetic>"
+        and dict_or_empty(entry.get("message")).get("model") != "<synthetic>"
     )
 
 
-def counted_tokens(usage):
-    counts = (as_dict(usage).get(field) for field in CONTEXT_USAGE_FIELDS)
+def usage_context_tokens(usage):
+    counts = (dict_or_empty(usage).get(field) for field in CONTEXT_USAGE_FIELDS)
     return sum(count for count in counts if isinstance(count, int))
 
 
-def context_tokens(line):
+def line_context_tokens(line):
     try:
         entry = json.loads(line)
     except (UnicodeDecodeError, json.JSONDecodeError):
         return None
     if not isinstance(entry, dict) or not is_conversation_turn(entry):
         return None
-    return counted_tokens(as_dict(entry.get("message")).get("usage")) or None
+    usage = dict_or_empty(entry.get("message")).get("usage")
+    return usage_context_tokens(usage) or None
 
 
-def transcript_tail(transcript_path):
+def transcript_tail_lines(transcript_path):
     with open(transcript_path, "rb") as transcript:
         transcript.seek(0, os.SEEK_END)
         start = max(0, transcript.tell() - TRANSCRIPT_TAIL_BYTES)
@@ -94,11 +95,11 @@ def transcript_tail(transcript_path):
 
 def latest_context_tokens(transcript_path):
     try:
-        lines = transcript_tail(transcript_path)
+        lines = transcript_tail_lines(transcript_path)
     except OSError:
         return None
     for line in reversed(lines):
-        tokens = context_tokens(line)
+        tokens = line_context_tokens(line)
         if tokens:
             return tokens
     return None
@@ -111,7 +112,7 @@ def transcript_fits_in_tail(transcript_path):
         return True
 
 
-def packed(blocks, budget):
+def packed_parts(blocks, budget):
     parts = []
     for block in blocks:
         if parts and len(parts[-1]) + len(block) <= budget:
@@ -121,27 +122,27 @@ def packed(blocks, budget):
     return parts
 
 
-def cut_every(text, budget):
+def fixed_size_chunks(text, budget):
     return [text[at : at + budget] for at in range(0, len(text), budget)]
 
 
-def parts_of(text, budget):
+def parts_within_budget(text, budget):
     for block_break in BLOCK_BREAKS:
-        parts = packed(re.split(block_break, text), budget)
+        parts = packed_parts(re.split(block_break, text), budget)
         if all(len(part) <= budget for part in parts):
             return parts
-    return cut_every(text, budget)
+    return fixed_size_chunks(text, budget)
 
 
-def messages_from(text, budget):
-    parts = parts_of(text, budget)
+def part_messages(text, budget):
+    parts = parts_within_budget(text, budget)
     return tuple(
         f"{preamble_for(number, len(parts))}\n\n{part}"
         for number, part in enumerate(parts, start=1)
     )
 
 
-def full_copy():
+def full_copy_messages():
     try:
         with open(CLAUDE_MD_PATH, encoding="utf-8", errors="replace") as claude_md:
             text = claude_md.read().strip()
@@ -151,7 +152,7 @@ def full_copy():
         return ()
     budget = PART_BUDGET_CHARS
     while True:
-        messages = messages_from(text, budget)
+        messages = part_messages(text, budget)
         overflow = max(len(message) for message in messages) - MAX_INJECTED_CHARS
         if overflow <= 0:
             return messages
@@ -159,7 +160,7 @@ def full_copy():
 
 
 def hook_entries_needed():
-    return max(1, len(full_copy()))
+    return max(1, len(full_copy_messages()))
 
 
 def fire_id(event, payload):
@@ -221,7 +222,7 @@ def locked_baseline(session_id):
         yield baseline_file
 
 
-def as_baselines(stored):
+def parsed_baselines(stored):
     if not isinstance(stored, dict):
         return None
     pointed_at = stored.get("pointed_at")
@@ -238,7 +239,7 @@ def as_baselines(stored):
 def read_baselines(baseline_file):
     baseline_file.seek(0)
     try:
-        return as_baselines(json.loads(baseline_file.read()))
+        return parsed_baselines(json.loads(baseline_file.read()))
     except (UnicodeDecodeError, json.JSONDecodeError):
         return None
 
@@ -249,7 +250,7 @@ def write_baselines(baseline_file, baselines):
     json.dump(baselines._asdict(), baseline_file)
 
 
-def claimed_action(session_id, fire, tokens, can_copy):
+def claim_action(session_id, fire, tokens, can_copy):
     with locked_baseline(session_id) as baseline_file:
         stored = read_baselines(baseline_file)
         action, baselines = action_for_fire(stored, fire, tokens, can_copy)
@@ -257,17 +258,17 @@ def claimed_action(session_id, fire, tokens, can_copy):
         return action
 
 
-def message_for(action, part, parts):
+def message_for_part(action, part, messages):
     if action == POINTER:
         return POINTER_REMINDER if part == 1 else None
-    if action != COPY or not 1 <= part <= len(parts):
+    if action != COPY or not 1 <= part <= len(messages):
         return None
-    return parts[part - 1]
+    return messages[part - 1]
 
 
 def reminder_for(event, payload, part, entries):
-    parts = full_copy()
-    if payload.get("agent_id") or not parts:
+    messages = full_copy_messages()
+    if payload.get("agent_id") or not messages:
         return None
     if part != 1 and event == "SessionStart":
         return None
@@ -279,18 +280,18 @@ def reminder_for(event, payload, part, entries):
         return None
     tokens = latest_context_tokens(transcript_path)
     if tokens is None:
-        if part == 1 and event == "UserPromptSubmit" and transcript_fits_in_tail(transcript_path):
-            return POINTER_REMINDER
-        return None
+        if part != 1 or event != "UserPromptSubmit":
+            return None
+        return POINTER_REMINDER if transcript_fits_in_tail(transcript_path) else None
     fire = fire_id(event, payload)
     if not fire and part > 1:
         return None
-    sendable = len(parts) <= entries and (fire or len(parts) == 1)
-    action = claimed_action(session_id, fire, tokens, bool(sendable))
-    return message_for(action, part, parts)
+    can_send_whole_copy = len(messages) <= entries and (fire or len(messages) == 1)
+    action = claim_action(session_id, fire, tokens, bool(can_send_whole_copy))
+    return message_for_part(action, part, messages)
 
 
-def inject(event, reminder):
+def write_hook_output(event, reminder):
     json.dump(
         {"hookSpecificOutput": {"hookEventName": event, "additionalContext": reminder}},
         sys.stdout,
@@ -306,7 +307,7 @@ def main():
         return
     reminder = reminder_for(event, payload, part, entries)
     if reminder:
-        inject(event, reminder)
+        write_hook_output(event, reminder)
 
 
 if __name__ == "__main__":
