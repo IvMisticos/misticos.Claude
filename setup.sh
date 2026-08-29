@@ -2,7 +2,13 @@
 
 set -euo pipefail
 
-apt-get update && apt-get install -y git-lfs curl jq gh python3
+apt-get update && apt-get install -y git-lfs curl jq gh python3 unzip
+
+curl -fsSL https://bun.sh/install | bash
+curl -LsSf https://astral.sh/uv/install.sh | INSTALLER_NO_MODIFY_PATH=1 sh
+curl -fsSL https://dot.net/v1/dotnet-install.sh | bash -s -- --channel LTS
+mkdir -p /root/.local/bin
+ln -sf /root/.dotnet/dotnet /root/.local/bin/dotnet
 
 if [ -f "${BASH_SOURCE[0]:-}" ]; then
   repo=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
