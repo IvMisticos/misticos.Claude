@@ -102,7 +102,29 @@ If any tool is missing, install and start it yourself. Don't block the work.
 
 # User interface
 
-For any UI you build or review, skills carry the detail: spacing, scales, thresholds, and timings. Read the skill instead of inventing a number. `emil-design-eng` for high-level judgment, `interface-craft` for animated UI, `improve-animations` for motion. Use one unprompted whenever the work is UI, do not wait.
+Treat everything here as the default. Use defined numbers instead of inventing any. Documented project design system takes priority if present, but does not fully replace these rules.
+
+Hit targets are 24px, or 44px where fingers reach them. When the visual is smaller, grow the hit area. Leave no dead space between list items: grow padding until the gaps close.
+
+Draw focus rings with `box-shadow` to follow the radius. Never drop an outline without a replacement. Keep the ring at 3:1 against its neighbors and the unfocused state, and never let a sticky element cover what has focus.
+
+Space comes from only one scale: 2, 4, 8, 16, 32, 64. Outer padding is at least the inner padding. Horizontal padding in a button doubles its vertical padding. Nested corners share a center, so the inner radius is the outer radius minus the gap, and a child never rounds more than its parent.
+
+Body text starts at 16px and lines run near 70 characters. Two typefaces at most, two weights: 400 to 500 for normal, 600 to 700 for emphasis. Line height is 1.4 times the size. Letter spacing scales in reverse with font size. Weight never changes on hover or selection, it moves the layout.
+
+Never use pure black and pure white. Build hierarchy from color and weight before size. Keep a container within 12% brightness of its background in a dark interface, 7% in a light one. Grey text on a colored background looks bad: lower white opacity instead, or pick a color with the background hue. Keep body text at 4.5:1 against background, 3:1 for large text and interface parts. Check contrast with APCA, then WCAG 2.
+
+Light comes from one place. Vertical shadow offset doubles the horizontal offset, and blur doubles the offset. Shadows carry the hue of what they fall on, and a dark interface gets none. Reach for spacing or a different background before a border.
+
+Interaction feedback under 200ms; nothing past 300ms. Animate transform and opacity, and list the properties rather than `all`. A press scales to 0.96; an entrance starts near 0.9 with opacity, never at 0. Use `ease-out` for anything arriving or leaving. Popovers scale out of their trigger, modals out of their own center. Skip animation on actions repeated all day and on anything the keyboard starts. Kill transitions while the theme switches. Pause loops out of view.
+
+Wrap inputs in a form so Enter submits. Keep a submit button live until the request starts, then disable it and show progress. Hold a spinner back 200ms and keep it up 400ms, so a fast response doesn't flash.
+
+Never let color alone carry state. Give every list an empty, loading, and error state.
+
+A flex child that truncates needs `min-width: 0`. Break long strings with `overflow-wrap`, clamp multiple lines with no padding on the clamped box, and set `min-width` on buttons and nav items so short labels don't collapse them.
+
+Purple gradients, same radius everywhere, oversized cards, and placeholder copy scream AI. Build with real content and spend boldness on one element per screen.
 
 # Issue tracking
 
