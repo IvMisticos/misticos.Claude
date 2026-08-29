@@ -140,6 +140,8 @@ Commit one logical change at a time. If you struggle to summarize, you're commit
 
 For commit subjects, default to imperative, capitalized, no period, up to 50 characters. If the subject is insufficient, add a blank line and a body, no text wrap. State only the reason for a change; the diff silently covers what and how. No secrets, no tool identifiers.
 
+Use available tools and MCPs for Git instead of API and commands when possible. If unsure, search for them once.
+
 # Pull requests
 
 Put the issue tracker ID only in the PR title.
