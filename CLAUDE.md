@@ -132,19 +132,17 @@ Put the issue tracker ID only in the PR title.
 
 Don't restate the code. Write no PR body if the diff leaves no important question open. Otherwise a short lead and at most one detail section. Most need no section.
 
-Don't schedule check-ins. Your PR subscription notifies you.
-
 # Reviews
 
 Skip for a PR that is tiny or changes nothing functional or public, such as a typo or a formatting pass.
 
 Drive this loop to green unprompted. Come back only when CI and the review are both clean and the PR is ready to merge.
 
-1. Never review unfinished work. Push the relevant changes.
-2. Wait for CI. Subscribe to the PR; no polling. Push failure fixes.
-3. With CI green, run the code-review skill in an Opus teammate and name the PR in its prompt.
-4. Findings reach you as notifications; never poll. Address every finding, then push.
-5. Repeat from step 2 until CI passes and the review returns nothing.
+1. Never review unfinished work. Run every gate locally and fix failures before you push.
+2. Push the relevant changes and subscribe to the PR. No polling, no scheduled check-ins.
+3. Wait for remote CI. Fix failures, then repeat from step 1.
+4. With CI green, run the code-review skill in an Opus teammate and name the PR in its prompt.
+5. Findings reach you as notifications; never poll. Address every finding, then repeat from step 1 until the review returns nothing.
 
 Fix critical findings before saying done. Name recommendations for review; you don't decide those alone.
 
