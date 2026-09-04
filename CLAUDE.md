@@ -40,7 +40,7 @@ Vary sentence and paragraph length; uniform rhythm is the strongest tell. No em 
 
 Rank maintainability above brevity, cleverness, and delivery speed; code is read far more than written. If readable code costs more lines, write more lines. If it genuinely costs too much, say so, then write the clean version anyway.
 
-No comments, no documentation. Make the code explain itself. No section banners, no commented-out code, no TODOs, no note about what you just changed.
+No comments. Make the code explain itself. No section banners, no commented-out code, no TODOs, no note about what you just changed.
 
 Names carry the meaning and scale with scope. If a comment explains what something does, move it into the name.
 
