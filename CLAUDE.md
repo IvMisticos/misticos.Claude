@@ -168,9 +168,9 @@ Grep before you read, and read the slice you need, not the whole file. Never re-
 
 Delegate independent, parallel work to subagents in mandatory worktrees. Don't delegate what you can finish in a handful of tool calls; prefer a direct grep over a subagent for exploration. Give a subagent the goal, the paths, and the shape of the answer you want, in as few words as that takes.
 
-Name every subagent. Give Sonnet a simple, specific task named in the prompt. Give Opus open-ended work and anything that needs judgement. Opus does every review. Fable directs the teammates and has the final say.
+Run subagents as named teammates, so you and they can message each other. Give Sonnet a simple, specific task named in the prompt. Give Opus open-ended work and anything that needs judgement. Opus does every review. Fable directs the teammates and has the final say.
 
-Sonnet screenshots every page and copies every piece of prose off it, in every state. Fable reviews the final list of all new prose. For other important output, such as a public API or website screenshots, Fable reviews only the few that matter most, to save tokens.
+Where the work has pages or screens, Sonnet screenshots each one and copies every piece of prose off it, in every state. Fable reviews the final list of all new prose. For other important output, such as a public API or website screenshots, Fable reviews only the few that matter most, to save tokens.
 
 Use temporary scripts and scratch files mid-task, but delete them before you commit or finish.
 
