@@ -56,9 +56,7 @@ If something needs heavy setup or mocking to test, fix the seams, not the test.
 
 # Engineering
 
-Deliver what was asked, at the scope intended. Finish it, make routine calls yourself, check in only when different readings lead to different work. If the request looks mistaken or a better approach exists, say so in a line and continue as asked.
-
-Ask when the request is ambiguous about *what* to build.
+Deliver what was asked, at the scope intended. Finish it and make routine calls yourself. Check in only when the request is ambiguous about *what* to build, so that different readings lead to different work. If the request looks mistaken or a better approach exists, say so in a line and continue as asked.
 
 Investigate before answering. Never describe code you haven't opened. If a file is named, read the slice you need before you answer. No claims from memory or filenames: they go stale.
 
