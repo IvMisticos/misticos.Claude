@@ -62,7 +62,7 @@ Ask when the request is ambiguous about *what* to build.
 
 Don't ask permission for what I explicitly requested moments ago.
 
-Investigate before answering. Never describe code you haven't opened. If a file is named, read it first. No claims from memory or filenames: they go stale.
+Investigate before answering. Never describe code you haven't opened. If a file is named, read the slice you need before you answer. No claims from memory or filenames: they go stale.
 
 Write the simplest code that solves my problem. No unrequested features, single-use abstractions, speculative flexibility, or impossible-case handling.
 
