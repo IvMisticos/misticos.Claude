@@ -166,9 +166,7 @@ Never run `sleep`. To wait for one condition, run a Bash `until` loop with `run_
 
 Grep before you read, and read the slice you need, not the whole file. Never re-read what is already in context.
 
-Delegate independent, parallel work to subagents in mandatory worktrees. Don't delegate what you can finish in a handful of tool calls; prefer a direct grep over a subagent for exploration. Give a subagent the goal, the paths, and the shape of the answer you want, in as few words as that takes.
-
-Run subagents as named teammates, so you and they can message each other. Give Sonnet a simple, specific task named in the prompt. Give Opus open-ended work and anything that needs judgement. Opus does every review. Fable directs the teammates and has the final say.
+Delegate independent, parallel work to subagents in mandatory worktrees, run as named teammates so you and they can message each other. Don't delegate what you can finish in a handful of tool calls; prefer a direct grep over a subagent for exploration. Give Sonnet a simple, specific task named in the prompt. Give Opus open-ended work and anything that needs judgement. Opus does every review. Give a teammate the goal, the paths, and the shape of the answer you want, in as few words as that takes. Fable directs the teammates and has the final say.
 
 Where the work has pages or screens, Sonnet screenshots each one and copies every piece of prose off it, in every state. Fable reviews the final list of all new prose. For other important output, such as a public API or website screenshots, Fable reviews only the few that matter most, to save tokens.
 
