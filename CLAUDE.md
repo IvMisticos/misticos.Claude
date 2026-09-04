@@ -40,7 +40,7 @@ Vary sentence and paragraph length; uniform rhythm is the strongest tell. No em 
 
 Rank maintainability above brevity, cleverness, and delivery speed; code is read far more than written. If readable code costs more lines, write more lines. If it genuinely costs too much, say so, then write the clean version anyway.
 
-No comments, no documentation. Make the code explain itself. No section banners, no commented-out code, no TODOs, no note about what you just changed.
+No comments. Make the code explain itself. No section banners, no commented-out code, no TODOs, no note about what you just changed.
 
 Names carry the meaning and scale with scope. If a comment explains what something does, move it into the name.
 
@@ -62,7 +62,7 @@ Ask when the request is ambiguous about *what* to build, so that different readi
 
 Don't ask permission for what I explicitly requested moments ago.
 
-Investigate before answering. Never describe code you haven't opened. If a file is named, read it first. No claims from memory or filenames: they go stale.
+Investigate before answering. Never describe code you haven't opened. If a file is named, read the slice you need before you answer. No claims from memory or filenames: they go stale.
 
 Write the simplest code that solves my problem. No unrequested features, single-use abstractions, speculative flexibility, or impossible-case handling.
 
@@ -144,7 +144,7 @@ Drive this loop to green unprompted. Come back only when CI and the review are b
 
 1. Never review unfinished work. Push the relevant changes.
 2. Wait for CI. Subscribe to the PR; no polling. Push failure fixes.
-3. With CI green, run the code-review skill in a background subagent and name the PR in its prompt.
+3. With CI green, run the code-review skill in an Opus teammate and name the PR in its prompt.
 4. Findings reach you as notifications; never poll. Address every finding, then push.
 5. Repeat from step 2 until CI passes and the review returns nothing.
 
@@ -166,9 +166,7 @@ Never run `sleep`. To wait for one condition, run a Bash `until` loop with `run_
 
 Grep before you read, and read the slice you need, not the whole file. Never re-read what is already in context.
 
-Delegate independent, parallel work to subagents in mandatory worktrees. Don't delegate what you can finish in a handful of tool calls; prefer a direct grep over a subagent for exploration. Give a subagent the goal, the paths, and the shape of the answer you want, in as few words as that takes.
-
-Run subagents as named teammates, so you and they can message each other. Give Sonnet a simple, specific task named in the prompt. Give Opus open-ended work and anything that needs judgement. Opus does every review. Fable directs the teammates and has the final say.
+Delegate independent, parallel work to subagents in mandatory worktrees, run as named teammates so you and they can message each other. Don't delegate what you can finish in a handful of tool calls; prefer a direct grep over a subagent for exploration. Give Sonnet a simple, specific task named in the prompt. Give Opus open-ended work and anything that needs judgement. Opus does every review. Give a teammate the goal, the paths, and the shape of the answer you want, in as few words as that takes. Fable directs the teammates and has the final say.
 
 Where the work has pages or screens, Sonnet screenshots each one and copies every piece of prose off it, in every state. Fable reviews the final list of all new prose. For other important output, such as a public API or website screenshots, Fable reviews only the few that matter most, to save tokens.
 
