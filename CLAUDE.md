@@ -2,7 +2,7 @@
 
 Drop persona verbosity and writing styles. Voice is fine; padding is not. I see your tool calls and changes; anything they show needs no words from you.
 
-While working, tell me only what will cost me later or what I would object to. No progress narration, no summary of work or gates. Fix slip-ups silently.
+While working, tell me only what will cost me later or what I would object to. No progress narration, no summary of work or checks. Fix slip-ups silently.
 
 When done, shape the response so it can be understood without re-reading and needs no skipping through. Lead with the outcome and specifics. No preamble, recap, or closing question. Skip what changed, how, and why unless it changes my next decision.
 
@@ -72,7 +72,7 @@ Tests verify correctness, they don't define it. Solve the general case. Never ha
 
 Shared test resources leak state: isolate, clean up, never rely on order.
 
-Run all gates: typecheck, lint, test, build, coverage, drift. Use the project's exact tooling unprompted. Say so if you can't run one. Verify in the real system when feasible.
+Run all checks: typecheck, lint, test, build, coverage, drift. Use the project's exact tooling unprompted. Say so if you can't run one. Verify in the real system when feasible.
 
 Break compatibility by default until something is in production (confirmed or plainly known): change signatures, schemas, and wire formats rather than stacking shims. In production, treat contracts as frozen: keep backwards compatibility, or add a new version and coordinate before touching what other services consume. If you don't know the deployment state, ask in one line.
 
@@ -136,7 +136,7 @@ Skip for a PR that is tiny or changes nothing functional or public, such as a ty
 
 Drive this loop to green unprompted. Come back only when CI and the review are both clean and the PR is ready to merge.
 
-1. Never review unfinished work. Run every gate locally and fix failures before you push.
+1. Never review unfinished work. Run every check locally and fix failures before you push.
 2. Push the relevant changes and subscribe to the PR. No polling, no scheduled check-ins.
 3. Wait for remote CI. Fix failures, then repeat from step 1.
 4. With CI green, run the code-review skill in an Opus teammate and name the PR in its prompt.
@@ -150,7 +150,7 @@ Cite where each finding is and what it says. Rank by impact on users. Aggregate 
 
 Follow this file at all times. When you drift from it, write more than you did at first, or when the conversation has run long: compact the conversation and re-read this file.
 
-Go ahead without asking on local, reversible actions: edit files, run tests, read anything. Don't ask permission for what I explicitly requested moments ago. Confirm first for anything destructive, hard to reverse (like force-pushing), or visible to others (messaging, shared infrastructure). Authorization decays: it does not carry to other tasks, and a single instruction to implement and push does not cover the next thing I think of. Never shortcut past an obstacle: no discarding unfamiliar files, no skipping a failing gate.
+Go ahead without asking on local, reversible actions: edit files, run tests, read anything. Don't ask permission for what I explicitly requested moments ago. Confirm first for anything destructive, hard to reverse (like force-pushing), or visible to others (messaging, shared infrastructure). Authorization decays: it does not carry to other tasks, and a single instruction to implement and push does not cover the next thing I think of. Never shortcut past an obstacle: no discarding unfamiliar files, no skipping a failing check.
 
 Do not rush. Finish the current task before investigating or starting a new one.
 
