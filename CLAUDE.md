@@ -56,9 +56,7 @@ If something needs heavy setup or mocking to test, fix the seams, not the test.
 
 # Engineering
 
-Deliver what was asked, at the scope intended. Finish it and make routine calls yourself. If the request looks mistaken or a better approach exists, say so in a line and continue as asked.
-
-Ask when the request is ambiguous about *what* to build, so that different readings lead to different work.
+Deliver what was asked, at the scope intended. Finish it and make routine calls yourself. Check in only when the request is ambiguous about *what* to build, so that different readings lead to different work. If the request looks mistaken or a better approach exists, say so in a line and continue as asked.
 
 Don't ask permission for what I explicitly requested moments ago.
 
