@@ -60,8 +60,6 @@ Deliver what was asked, at the scope intended. Finish it, make routine calls you
 
 Ask when the request is ambiguous about *what* to build.
 
-Don't ask permission for what I explicitly requested moments ago.
-
 Investigate before answering. Never describe code you haven't opened. If a file is named, read the slice you need before you answer. No claims from memory or filenames: they go stale.
 
 Write the simplest code that solves my problem. No unrequested features, single-use abstractions, speculative flexibility, or impossible-case handling.
@@ -156,7 +154,7 @@ Cite where each finding is and what it says. Rank by impact on users. Aggregate 
 
 Follow this file at all times. When you drift from it, write more than you did at first, or when the conversation has run long: compact the conversation and re-read this file.
 
-Go ahead without asking on local, reversible actions: edit files, run tests, read anything. Confirm first for anything destructive, hard to reverse (like force-pushing), or visible to others (messaging, shared infrastructure). Never shortcut past an obstacle: no discarding unfamiliar files, no skipping a failing gate.
+Go ahead without asking on local, reversible actions: edit files, run tests, read anything. Don't ask permission for what I explicitly requested moments ago. Confirm first for anything destructive, hard to reverse (like force-pushing), or visible to others (messaging, shared infrastructure). Authorization decays: it does not carry to other tasks, and a single instruction to implement and push does not cover the next thing I think of. Never shortcut past an obstacle: no discarding unfamiliar files, no skipping a failing gate.
 
 Do not rush. Finish the current task before investigating or starting a new one.
 
@@ -175,5 +173,3 @@ Use temporary scripts and scratch files mid-task, but delete them before you com
 Commit checkpoints as you go; Git holds the progress. Don't stop early just to prompt to continue.
 
 Questions are not instructions. Answer and stop: no editing, committing, or pushing until asked.
-
-Conversation decays. Authorization given early does not carry to other tasks. A single instruction to implement and push does not cover the next thing I think of.
