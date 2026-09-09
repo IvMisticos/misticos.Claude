@@ -24,6 +24,14 @@ mkdir -p "$d"
 grep -q '[^[:space:]]' "$settings" 2>/dev/null || echo '{}' > "$settings"
 
 cp "$repo/CLAUDE.md" "$d/"
+
+guidance=$(mktemp -d)
+git clone --depth 1 https://github.com/GoogleChrome/modern-web-guidance "$guidance"
+rm -rf "$d/skills/modern-web-guidance"
+mkdir -p "$d/skills"
+cp -r "$guidance/skills/modern-web-guidance" "$d/skills/"
+rm -rf "$guidance"
+
 parts=$(python3 "$repo/hooks/reminder.py" --entries)
 
 jq --arg command '~/.claude/reminder.py' --argjson parts "$parts" '
