@@ -24,6 +24,10 @@ mkdir -p "$d"
 grep -q '[^[:space:]]' "$settings" 2>/dev/null || echo '{}' > "$settings"
 
 cp "$repo/CLAUDE.md" "$d/"
+
+claude plugin marketplace add GoogleChrome/modern-web-guidance
+claude plugin install modern-web-guidance@googlechrome --scope user
+
 parts=$(python3 "$repo/hooks/reminder.py" --entries)
 
 jq --arg command '~/.claude/reminder.py' --argjson parts "$parts" '
