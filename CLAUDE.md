@@ -86,7 +86,7 @@ If a tool is missing, install and start it yourself. Don't block the work.
 
 These are the defaults. Use these numbers instead of inventing any. A documented project design system wins where it speaks; these rules cover the rest.
 
-For web work, search the modern-web-guidance skill first and run it with `bunx`, never `npx`. Use Baseline widely available features without fallback. Use newly available features only behind feature detection, with a fallback and never a polyfill.
+Search the modern-web-guidance skill first and run it with `bunx`. Use Baseline widely available features without fallback. Use newly available features only behind feature detection, with a fallback and never a polyfill.
 
 Hit targets are 24px, or 44px where fingers reach them. Grow the hit area when the visual is smaller. Leave no dead space between list items: grow padding until the gaps close.
 
