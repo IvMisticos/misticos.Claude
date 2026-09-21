@@ -2,6 +2,7 @@
 name: Short
 description: Leads with the result and drops the built-in coding instructions
 keep-coding-instructions: false
+force-for-plugin: true
 ---
 
 You help with software engineering tasks in a terminal.

@@ -1,5 +1,9 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.11"
+# ///
 
+import argparse
 import collections
 import contextlib
 import fcntl
@@ -14,7 +18,7 @@ POINTER_EVERY_TOKENS = 10_000
 TRANSCRIPT_TAIL_BYTES = 1 << 20
 FORGET_BASELINE_AFTER_SECONDS = 7 * 24 * 60 * 60
 MAX_INJECTED_CHARS = 10_000
-CLAUDE_MD_PATH = os.path.expanduser("~/.claude/CLAUDE.md")
+CHARS_PER_TOKEN_ESTIMATE = 4
 BASELINE_DIR = os.path.expanduser("~/.claude/hooks/data/misticos.Claude/reminder")
 CONTEXT_USAGE_FIELDS = (
     "input_tokens",
@@ -22,20 +26,24 @@ CONTEXT_USAGE_FIELDS = (
     "cache_creation_input_tokens",
 )
 POINTER_REMINDER = (
-    "CLAUDE.md holds the standing rules for this session and overrides your "
+    "{name} holds the standing rules for this session and overrides your "
     "defaults. Follow it at all times. Silence is the default: write to me "
     "only what changes what I do next, and keep subagent prompts as short as "
-    f"the work allows. If you notice you have drifted, read {CLAUDE_MD_PATH} "
-    "to bring the rules back into your context."
+    "the work allows. If you notice you have drifted, read {path} to bring "
+    "the rules back into your context."
 )
-FIRST_PART_PREAMBLE = (
-    "The conversation has grown since you last saw CLAUDE.md, so the file "
+GROWN_PREAMBLE = (
+    "The conversation has grown since you last saw {name}, so the file "
     "follows here in full. It overrides your defaults. Follow it at all "
     "times. Where your recent work has drifted from it, correct that now."
 )
+SESSION_START_PREAMBLE = (
+    "{name} holds the standing rules for this session and follows here in "
+    "full. It overrides your defaults. Follow it at all times."
+)
 SPLIT_NOTICE = " The file comes in {total} parts, sent together, in any order."
 LATER_PART_PREAMBLE = (
-    "CLAUDE.md continues here, part {number} of {total}. It overrides your "
+    "{name} continues here, part {number} of {total}. It overrides your "
     "defaults. Follow it at all times."
 )
 BLOCK_BREAKS = (r"(?=\n\n# )", r"(?=\n\n)", r"(?=\n)")
@@ -44,18 +52,31 @@ POINTER = "pointer"
 COPY = "copy"
 
 Baselines = collections.namedtuple("Baselines", "pointed_at copied_at fire action")
+Rules = collections.namedtuple("Rules", "path name")
 
 
-def preamble_for(number, total):
+def rules_at(path):
+    expanded = os.path.expanduser(path)
+    return Rules(expanded, os.path.basename(expanded))
+
+
+def pointer_reminder(rules):
+    return POINTER_REMINDER.format(name=rules.name, path=rules.path)
+
+
+def preamble_for(number, total, name, first_preamble):
     if number > 1:
-        return LATER_PART_PREAMBLE.format(number=number, total=total)
+        return LATER_PART_PREAMBLE.format(name=name, number=number, total=total)
     if total > 1:
-        return FIRST_PART_PREAMBLE + SPLIT_NOTICE.format(total=total)
-    return FIRST_PART_PREAMBLE
+        return first_preamble.format(name=name) + SPLIT_NOTICE.format(total=total)
+    return first_preamble.format(name=name)
 
 
-LONGEST_PREAMBLE_CHARS = max(len(preamble_for(number, 99)) for number in (1, 99))
-PART_BUDGET_CHARS = MAX_INJECTED_CHARS - LONGEST_PREAMBLE_CHARS - len("\n\n")
+def part_budget_chars(name, first_preamble):
+    longest_preamble = max(
+        len(preamble_for(number, 99, name, first_preamble)) for number in (1, 99)
+    )
+    return MAX_INJECTED_CHARS - longest_preamble - len("\n\n")
 
 
 def dict_or_empty(value):
@@ -107,6 +128,13 @@ def latest_context_tokens(transcript_path):
     return None
 
 
+def context_tokens_from_size(transcript_path):
+    try:
+        return os.path.getsize(transcript_path) // CHARS_PER_TOKEN_ESTIMATE or None
+    except OSError:
+        return None
+
+
 def transcript_fits_in_tail(transcript_path):
     try:
         return os.path.getsize(transcript_path) <= TRANSCRIPT_TAIL_BYTES
@@ -136,33 +164,30 @@ def parts_within_budget(text, budget):
     return fixed_size_chunks(text, budget)
 
 
-def part_messages(text, budget):
+def part_messages(text, budget, name, first_preamble):
     parts = parts_within_budget(text, budget)
     return tuple(
-        f"{preamble_for(number, len(parts))}\n\n{part}"
+        f"{preamble_for(number, len(parts), name, first_preamble)}\n\n{part}"
         for number, part in enumerate(parts, start=1)
     )
 
 
-def full_copy_messages():
+def full_copy_messages(rules, first_preamble):
     try:
-        with open(CLAUDE_MD_PATH, encoding="utf-8", errors="replace") as claude_md:
-            text = claude_md.read().strip()
-    except OSError:
+        with open(rules.path, encoding="utf-8", errors="replace") as rules_file:
+            text = rules_file.read().strip()
+    except OSError as error:
+        print(f"reminder: cannot read rules: {error}", file=sys.stderr)
         return ()
     if not text:
         return ()
-    budget = PART_BUDGET_CHARS
+    budget = part_budget_chars(rules.name, first_preamble)
     while True:
-        messages = part_messages(text, budget)
+        messages = part_messages(text, budget, rules.name, first_preamble)
         overflow = max(len(message) for message in messages) - MAX_INJECTED_CHARS
         if overflow <= 0:
             return messages
         budget -= overflow
-
-
-def hook_entries_needed():
-    return max(1, len(full_copy_messages()))
 
 
 def fire_id(event, payload):
@@ -172,7 +197,11 @@ def fire_id(event, payload):
         for call in calls
         if isinstance(call, dict) and call.get("tool_use_id")
     )
-    prompt = str(payload.get("prompt_id") or "")
+    if payload.get("tool_use_id"):
+        tool_uses.append(str(payload["tool_use_id"]))
+    prompt = str(
+        payload.get("prompt_id") or payload.get("turn_id") or payload.get("generation_id") or ""
+    )
     if not (prompt or tool_uses):
         return ""
     return "|".join([event, prompt] + tool_uses)
@@ -260,63 +289,97 @@ def claim_action(session_id, fire, tokens, can_copy):
         return action
 
 
-def message_for_part(action, part, messages):
+def message_for_part(action, part, messages, rules):
     if action == POINTER:
-        return POINTER_REMINDER if part == 1 else None
+        return pointer_reminder(rules) if part == 1 else None
     if action != COPY or not 1 <= part <= len(messages):
         return None
     return messages[part - 1]
 
 
-def reminder_for(event, payload, part, entries):
-    messages = full_copy_messages()
-    if payload.get("agent_id") or not messages:
+def context_tokens(transcript_path, estimate_from_size):
+    if estimate_from_size:
+        return context_tokens_from_size(transcript_path)
+    return latest_context_tokens(transcript_path)
+
+
+def forget_baseline(session_id):
+    with contextlib.suppress(OSError):
+        os.unlink(baseline_path(session_id))
+
+
+def session_start_reminder(rules, payload, options):
+    if options.part == 1 and payload.get("session_id"):
+        forget_baseline(payload["session_id"])
+    messages = full_copy_messages(rules, SESSION_START_PREAMBLE)
+    if len(messages) > options.entries:
+        return pointer_reminder(rules) if options.part == 1 else None
+    return message_for_part(COPY, options.part, messages, rules)
+
+
+def reminder_for(event, payload, options):
+    rules = rules_at(options.rules)
+    if payload.get("agent_id") or payload.get("subagent_id"):
         return None
-    if part != 1 and event == "SessionStart":
+    if event.lower() == "sessionstart":
+        return session_start_reminder(rules, payload, options)
+    messages = full_copy_messages(rules, GROWN_PREAMBLE)
+    if not messages:
         return None
-    if event == "SessionStart":
-        return POINTER_REMINDER
-    session_id = payload.get("session_id")
+    session_id = payload.get("session_id") or payload.get("conversation_id")
     transcript_path = payload.get("transcript_path")
     if not (session_id and transcript_path):
         return None
-    tokens = latest_context_tokens(transcript_path)
+    tokens = context_tokens(transcript_path, options.context_from_size)
     if tokens is None:
-        if part != 1 or event != "UserPromptSubmit":
+        if options.part != 1 or event.lower() != "userpromptsubmit":
             return None
-        return POINTER_REMINDER if transcript_fits_in_tail(transcript_path) else None
+        return pointer_reminder(rules) if transcript_fits_in_tail(transcript_path) else None
     fire = fire_id(event, payload)
-    if not fire and part > 1:
+    if not fire and options.part > 1:
         return None
-    can_send_whole_copy = len(messages) <= entries and (fire or len(messages) == 1)
+    can_send_whole_copy = len(messages) <= options.entries and (fire or len(messages) == 1)
     action = claim_action(session_id, fire, tokens, bool(can_send_whole_copy))
-    return message_for_part(action, part, messages)
+    return message_for_part(action, options.part, messages, rules)
 
 
-def write_hook_output(event, reminder):
-    json.dump(
-        {"hookSpecificOutput": {"hookEventName": event, "additionalContext": reminder}},
-        sys.stdout,
-    )
+def hook_output(event, reminder, shape):
+    if shape == "cursor":
+        return {"additional_context": reminder}
+    return {"hookSpecificOutput": {"hookEventName": event, "additionalContext": reminder}}
+
+
+class QuietArgumentParser(argparse.ArgumentParser):
+    def error(self, message):
+        raise ValueError(message)
+
+
+def parsed_options(argv):
+    parser = QuietArgumentParser(add_help=False)
+    parser.add_argument("part", type=int, nargs="?", default=1)
+    parser.add_argument("entries", type=int, nargs="?")
+    parser.add_argument("--rules", required=True)
+    parser.add_argument("--context-from-size", action="store_true")
+    parser.add_argument("--output-shape", choices=("claude", "cursor"), default="claude")
+    options = parser.parse_args(argv)
+    if options.entries is None:
+        options.entries = options.part
+    return options
 
 
 def main():
-    part = int(sys.argv[1]) if len(sys.argv) > 1 else 1
-    entries = int(sys.argv[2]) if len(sys.argv) > 2 else part
+    options = parsed_options(sys.argv[1:])
     payload = json.loads(sys.stdin.read() or "{}")
     event = payload.get("hook_event_name")
     if not event:
         return
-    reminder = reminder_for(event, payload, part, entries)
+    reminder = reminder_for(event, payload, options)
     if reminder:
-        write_hook_output(event, reminder)
+        json.dump(hook_output(event, reminder, options.output_shape), sys.stdout)
 
 
 if __name__ == "__main__":
-    if sys.argv[1:2] == ["--entries"]:
-        print(hook_entries_needed())
-    else:
-        try:
-            main()
-        except Exception:
-            sys.exit(0)
+    try:
+        main()
+    except Exception:
+        sys.exit(0)

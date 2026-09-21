@@ -1,0 +1,26 @@
+{
+  "hooks": {
+    "BeforeAgent": [
+      {
+        "hooks": [
+          {
+            "name": "misticos-reminder",
+            "type": "command",
+            "command": "uv run \"${extensionPath}${/}hooks${/}reminder.py\" 1 1 --rules \"${extensionPath}${/}CLAUDE.md\" --context-from-size"
+          }
+        ]
+      }
+    ],
+    "AfterTool": [
+      {
+        "hooks": [
+          {
+            "name": "misticos-reminder",
+            "type": "command",
+            "command": "uv run \"${extensionPath}${/}hooks${/}reminder.py\" 1 1 --rules \"${extensionPath}${/}CLAUDE.md\" --context-from-size"
+          }
+        ]
+      }
+    ]
+  }
+}

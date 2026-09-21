@@ -1,0 +1,9 @@
+{
+  "name": "misticos",
+  "version": "1.0.0",
+  "description": "Standing rules and drift reminders",
+  "author": {
+    "name": "misticos"
+  },
+  "hooks": "./hooks/cursor.json"
+}
