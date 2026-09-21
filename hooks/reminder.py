@@ -328,7 +328,7 @@ def forget_baseline(session_id):
 
 
 def session_start_reminder(rules, payload, options):
-    if options.part == 1 and payload.get("session_id"):
+    if options.part == 1 and payload.get("session_id") and not payload.get("agent_id"):
         forget_baseline(payload["session_id"])
     messages = full_copy_messages(rules, SESSION_START_PREAMBLE)
     if len(messages) > options.entries:
@@ -338,10 +338,10 @@ def session_start_reminder(rules, payload, options):
 
 def reminder_for(event, payload, options):
     rules = rules_at(options.rules)
+    if event.lower() in ("sessionstart", "subagentstart"):
+        return session_start_reminder(rules, payload, options)
     if payload.get("agent_id") or payload.get("subagent_id"):
         return None
-    if event.lower() == "sessionstart":
-        return session_start_reminder(rules, payload, options)
     messages = full_copy_messages(rules, GROWN_PREAMBLE)
     if not messages:
         return None
