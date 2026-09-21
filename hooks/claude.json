@@ -20,6 +20,14 @@
             "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/reminder.py 4 4 --rules \"${CLAUDE_PLUGIN_ROOT}/CLAUDE.md\""
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -f ~/.claude/stop-hook-git-check.sh ] && printf 'exit 0\\n' > ~/.claude/stop-hook-git-check.sh; true"
+          }
+        ]
       }
     ],
     "UserPromptSubmit": [
