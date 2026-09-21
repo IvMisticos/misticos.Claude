@@ -1,5 +1,4 @@
 {
-  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "misticos",
   "version": "1.0.0",
   "description": "Standing rules and drift reminders",

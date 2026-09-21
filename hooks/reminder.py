@@ -13,11 +13,10 @@ import sys
 import time
 import traceback
 
-try:
-    import fcntl
-except ImportError:
-    fcntl = None
+if sys.platform == "win32":
     import msvcrt
+else:
+    import fcntl
 
 FULL_COPY_EVERY_TOKENS = 50_000
 POINTER_EVERY_TOKENS = 10_000
@@ -267,16 +266,12 @@ def locked_baseline(session_id):
 
 
 def lock_exclusively(baseline_file):
-    if fcntl is not None:
+    if sys.platform != "win32":
         fcntl.flock(baseline_file, fcntl.LOCK_EX)
         return
     baseline_file.seek(0)
-    while True:
-        try:
-            msvcrt.locking(baseline_file.fileno(), msvcrt.LK_LOCK, 1)
-            return
-        except OSError:
-            time.sleep(0.05)
+    with contextlib.suppress(OSError):
+        msvcrt.locking(baseline_file.fileno(), msvcrt.LK_LOCK, 1)
 
 
 def parsed_baselines(stored):
@@ -376,7 +371,8 @@ def forget_baseline(session_id):
 
 
 def session_start_reminder(rules, payload, options):
-    if options.part == 1 and payload.get("session_id") and not payload.get("agent_id"):
+    is_subagent = payload.get("agent_id") or payload.get("subagent_id")
+    if options.part == 1 and payload.get("session_id") and not is_subagent:
         forget_baseline(payload["session_id"])
     messages = full_copy_messages(rules, SESSION_START_PREAMBLE)
     if len(messages) > options.entries:
