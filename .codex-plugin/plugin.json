@@ -3,12 +3,10 @@
   "name": "misticos",
   "version": "1.0.0",
   "description": "Standing rules and drift reminders",
-  "author": { "name": "misticos" },
+  "author": {
+    "name": "misticos"
+  },
   "repository": "https://github.com/IvMisticos/misticos.Claude",
   "license": "MIT",
-  "extensions": {
-    "com.openai": {
-      "hooks": "./hooks/codex.json"
-    }
-  }
+  "hooks": "./hooks/codex.json"
 }
