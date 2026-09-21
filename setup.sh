@@ -24,25 +24,14 @@ mkdir -p "$d"
 grep -q '[^[:space:]]' "$settings" 2>/dev/null || echo '{}' > "$settings"
 
 cp "$repo/CLAUDE.md" "$d/"
-mkdir -p "$d/output-styles"
-cp "$repo/output-styles/short.md" "$d/output-styles/"
+rm -f "$d/reminder.py" "$d/output-styles/short.md"
 
 claude plugin marketplace add GoogleChrome/modern-web-guidance
 claude plugin install modern-web-guidance@googlechrome --scope user
+claude plugin marketplace add "$repo"
+claude plugin install misticos@misticos --scope user
 
-parts=$(python3 "$repo/hooks/reminder.py" --entries)
-
-jq --arg command '~/.claude/reminder.py' --argjson parts "$parts" '
-def reminder(part):
-  {
-    type: "command",
-    command: "\($command) \(part) \($parts)"
-  };
-def every_part(matcher):
-  [ {
-    matcher: matcher,
-    hooks: [ range(1; $parts + 1) | reminder(.) ]
-  } ];
+jq --arg command '~/.claude/reminder.py' '
 def without_reminder:
   map_values([ .[] | .hooks = [ (.hooks // [])[] | select((.command // "") | startswith($command) | not) ] | select(.hooks != []) ])
   | with_entries(select(.value != []));
@@ -52,12 +41,8 @@ def without_reminder:
   sessionUrl: false
 }
 | .autoMemoryEnabled = false
-| .outputStyle = "Short"
+| del(.outputStyle)
 | .hooks = ((.hooks // {}) | without_reminder)
-| .hooks.SessionStart += [ { matcher: "compact", hooks: [ reminder(1) ] } ]
-| .hooks.UserPromptSubmit += every_part("")
-| .hooks.PostToolBatch += every_part("")
 ' "$settings" > "$settings.installed"
 
-install -m 755 "$repo/hooks/reminder.py" "$d/"
 mv "$settings.installed" "$settings"

@@ -161,10 +161,6 @@ def full_copy_messages():
         budget -= overflow
 
 
-def hook_entries_needed():
-    return max(1, len(full_copy_messages()))
-
-
 def fire_id(event, payload):
     calls = payload.get("tool_calls") or []
     tool_uses = sorted(
@@ -313,10 +309,7 @@ def main():
 
 
 if __name__ == "__main__":
-    if sys.argv[1:2] == ["--entries"]:
-        print(hook_entries_needed())
-    else:
-        try:
-            main()
-        except Exception:
-            sys.exit(0)
+    try:
+        main()
+    except Exception:
+        sys.exit(0)
