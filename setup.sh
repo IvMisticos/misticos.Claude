@@ -26,20 +26,6 @@ grep -q '[^[:space:]]' "$settings" 2>/dev/null || echo '{}' > "$settings"
 cp "$repo/CLAUDE.md" "$d/"
 rm -f "$d/reminder.py" "$d/output-styles/short.md"
 
-claude plugin marketplace add GoogleChrome/modern-web-guidance
-claude plugin install modern-web-guidance@googlechrome --scope user
-claude plugin marketplace add "$repo"
-claude plugin install misticos@misticos --scope user
-
-if command -v codex >/dev/null; then
-  mkdir -p /root/.codex
-  cp "$repo/CLAUDE.md" /root/.codex/AGENTS.md
-  codex plugin marketplace add "$repo"
-  codex plugin add misticos@misticos
-  grep -q '^personality' /root/.codex/config.toml 2>/dev/null || printf 'personality = "none"\n' >> /root/.codex/config.toml
-  grep -q '^\[memories\]' /root/.codex/config.toml || printf '\n[memories]\nuse_memories = false\ngenerate_memories = false\n' >> /root/.codex/config.toml
-fi
-
 jq --arg command '~/.claude/reminder.py' '
 def without_reminder:
   map_values([ .[] | .hooks = [ (.hooks // [])[] | select((.command // "") | startswith($command) | not) ] | select(.hooks != []) ])
@@ -53,5 +39,20 @@ def without_reminder:
 | del(.outputStyle)
 | .hooks = ((.hooks // {}) | without_reminder)
 ' "$settings" > "$settings.installed"
-
 mv "$settings.installed" "$settings"
+
+claude plugin marketplace add GoogleChrome/modern-web-guidance
+claude plugin install modern-web-guidance@googlechrome --scope user
+claude plugin marketplace add "$repo"
+claude plugin install misticos@misticos --scope user
+
+if command -v codex >/dev/null; then
+  codex_config=/root/.codex/config.toml
+  mkdir -p /root/.codex
+  cp "$repo/CLAUDE.md" /root/.codex/AGENTS.md
+  touch "$codex_config"
+  grep -q '^personality' "$codex_config" || sed -i '1i personality = "none"' "$codex_config"
+  grep -q '^\[memories\]' "$codex_config" || printf '\n[memories]\nuse_memories = false\ngenerate_memories = false\n' >> "$codex_config"
+  codex plugin marketplace add "$repo"
+  codex plugin add misticos@misticos
+fi
