@@ -6,12 +6,18 @@
 import argparse
 import collections
 import contextlib
-import fcntl
 import json
 import os
 import re
 import sys
 import time
+import traceback
+
+try:
+    import fcntl
+except ImportError:
+    fcntl = None
+    import msvcrt
 
 FULL_COPY_EVERY_TOKENS = 50_000
 POINTER_EVERY_TOKENS = 10_000
@@ -249,8 +255,21 @@ def locked_baseline(session_id):
     if not os.path.exists(path):
         forget_baselines_of_dead_sessions()
     with open(path, "a+", encoding="utf-8") as baseline_file:
-        fcntl.flock(baseline_file, fcntl.LOCK_EX)
+        lock_exclusively(baseline_file)
         yield baseline_file
+
+
+def lock_exclusively(baseline_file):
+    if fcntl is not None:
+        fcntl.flock(baseline_file, fcntl.LOCK_EX)
+        return
+    baseline_file.seek(0)
+    while True:
+        try:
+            msvcrt.locking(baseline_file.fileno(), msvcrt.LK_LOCK, 1)
+            return
+        except OSError:
+            time.sleep(0.05)
 
 
 def parsed_baselines(stored):
@@ -382,4 +401,5 @@ if __name__ == "__main__":
     try:
         main()
     except Exception:
+        traceback.print_exc()
         sys.exit(0)
