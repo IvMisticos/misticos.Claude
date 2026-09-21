@@ -7,7 +7,7 @@
           {
             "name": "misticos-reminder",
             "type": "command",
-            "command": "python3 \"${extensionPath}${/}hooks${/}reminder.py\" 1 1 --rules \"${extensionPath}${/}CLAUDE.md\" --context-from-size"
+            "command": "uv run \"${extensionPath}${/}hooks${/}reminder.py\" 1 1 --rules \"${extensionPath}${/}CLAUDE.md\" --context-from-size"
           }
         ]
       }
@@ -19,7 +19,7 @@
           {
             "name": "misticos-reminder",
             "type": "command",
-            "command": "python3 \"${extensionPath}${/}hooks${/}reminder.py\" 1 1 --rules \"${extensionPath}${/}CLAUDE.md\" --context-from-size"
+            "command": "uv run \"${extensionPath}${/}hooks${/}reminder.py\" 1 1 --rules \"${extensionPath}${/}CLAUDE.md\" --context-from-size"
           }
         ]
       }
@@ -31,7 +31,7 @@
           {
             "name": "misticos-reminder",
             "type": "command",
-            "command": "python3 \"${extensionPath}${/}hooks${/}reminder.py\" 1 1 --rules \"${extensionPath}${/}CLAUDE.md\" --context-from-size"
+            "command": "uv run \"${extensionPath}${/}hooks${/}reminder.py\" 1 1 --rules \"${extensionPath}${/}CLAUDE.md\" --context-from-size"
           }
         ]
       }
