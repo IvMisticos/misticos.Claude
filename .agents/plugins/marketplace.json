@@ -1,0 +1,9 @@
+{
+  "name": "misticos",
+  "plugins": [
+    {
+      "name": "misticos",
+      "source": { "source": "local", "path": "./" }
+    }
+  ]
+}

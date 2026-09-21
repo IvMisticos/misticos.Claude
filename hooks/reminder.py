@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import argparse
 import collections
 import contextlib
 import fcntl
@@ -14,7 +15,8 @@ POINTER_EVERY_TOKENS = 10_000
 TRANSCRIPT_TAIL_BYTES = 1 << 20
 FORGET_BASELINE_AFTER_SECONDS = 7 * 24 * 60 * 60
 MAX_INJECTED_CHARS = 10_000
-CLAUDE_MD_PATH = os.path.expanduser("~/.claude/CLAUDE.md")
+DEFAULT_RULES_PATH = "~/.claude/CLAUDE.md"
+CHARS_PER_TOKEN_ESTIMATE = 4
 BASELINE_DIR = os.path.expanduser("~/.claude/hooks/data/misticos.Claude/reminder")
 CONTEXT_USAGE_FIELDS = (
     "input_tokens",
@@ -22,20 +24,20 @@ CONTEXT_USAGE_FIELDS = (
     "cache_creation_input_tokens",
 )
 POINTER_REMINDER = (
-    "CLAUDE.md holds the standing rules for this session and overrides your "
+    "{name} holds the standing rules for this session and overrides your "
     "defaults. Follow it at all times. Silence is the default: write to me "
     "only what changes what I do next, and keep subagent prompts as short as "
-    f"the work allows. If you notice you have drifted, read {CLAUDE_MD_PATH} "
-    "to bring the rules back into your context."
+    "the work allows. If you notice you have drifted, read {path} to bring "
+    "the rules back into your context."
 )
 FIRST_PART_PREAMBLE = (
-    "The conversation has grown since you last saw CLAUDE.md, so the file "
+    "The conversation has grown since you last saw {name}, so the file "
     "follows here in full. It overrides your defaults. Follow it at all "
     "times. Where your recent work has drifted from it, correct that now."
 )
 SPLIT_NOTICE = " The file comes in {total} parts, sent together, in any order."
 LATER_PART_PREAMBLE = (
-    "CLAUDE.md continues here, part {number} of {total}. It overrides your "
+    "{name} continues here, part {number} of {total}. It overrides your "
     "defaults. Follow it at all times."
 )
 BLOCK_BREAKS = (r"(?=\n\n# )", r"(?=\n\n)", r"(?=\n)")
@@ -44,18 +46,29 @@ POINTER = "pointer"
 COPY = "copy"
 
 Baselines = collections.namedtuple("Baselines", "pointed_at copied_at fire action")
+Rules = collections.namedtuple("Rules", "path name")
 
 
-def preamble_for(number, total):
+def rules_at(path):
+    expanded = os.path.expanduser(path)
+    return Rules(expanded, os.path.basename(expanded))
+
+
+def pointer_reminder(rules):
+    return POINTER_REMINDER.format(name=rules.name, path=rules.path)
+
+
+def preamble_for(number, total, name):
     if number > 1:
-        return LATER_PART_PREAMBLE.format(number=number, total=total)
+        return LATER_PART_PREAMBLE.format(name=name, number=number, total=total)
     if total > 1:
-        return FIRST_PART_PREAMBLE + SPLIT_NOTICE.format(total=total)
-    return FIRST_PART_PREAMBLE
+        return FIRST_PART_PREAMBLE.format(name=name) + SPLIT_NOTICE.format(total=total)
+    return FIRST_PART_PREAMBLE.format(name=name)
 
 
-LONGEST_PREAMBLE_CHARS = max(len(preamble_for(number, 99)) for number in (1, 99))
-PART_BUDGET_CHARS = MAX_INJECTED_CHARS - LONGEST_PREAMBLE_CHARS - len("\n\n")
+def part_budget_chars(name):
+    longest_preamble = max(len(preamble_for(number, 99, name)) for number in (1, 99))
+    return MAX_INJECTED_CHARS - longest_preamble - len("\n\n")
 
 
 def dict_or_empty(value):
@@ -107,6 +120,13 @@ def latest_context_tokens(transcript_path):
     return None
 
 
+def context_tokens_from_size(transcript_path):
+    try:
+        return os.path.getsize(transcript_path) // CHARS_PER_TOKEN_ESTIMATE or None
+    except OSError:
+        return None
+
+
 def transcript_fits_in_tail(transcript_path):
     try:
         return os.path.getsize(transcript_path) <= TRANSCRIPT_TAIL_BYTES
@@ -136,25 +156,25 @@ def parts_within_budget(text, budget):
     return fixed_size_chunks(text, budget)
 
 
-def part_messages(text, budget):
+def part_messages(text, budget, name):
     parts = parts_within_budget(text, budget)
     return tuple(
-        f"{preamble_for(number, len(parts))}\n\n{part}"
+        f"{preamble_for(number, len(parts), name)}\n\n{part}"
         for number, part in enumerate(parts, start=1)
     )
 
 
-def full_copy_messages():
+def full_copy_messages(rules):
     try:
-        with open(CLAUDE_MD_PATH, encoding="utf-8", errors="replace") as claude_md:
-            text = claude_md.read().strip()
+        with open(rules.path, encoding="utf-8", errors="replace") as rules_file:
+            text = rules_file.read().strip()
     except OSError:
         return ()
     if not text:
         return ()
-    budget = PART_BUDGET_CHARS
+    budget = part_budget_chars(rules.name)
     while True:
-        messages = part_messages(text, budget)
+        messages = part_messages(text, budget, rules.name)
         overflow = max(len(message) for message in messages) - MAX_INJECTED_CHARS
         if overflow <= 0:
             return messages
@@ -168,7 +188,9 @@ def fire_id(event, payload):
         for call in calls
         if isinstance(call, dict) and call.get("tool_use_id")
     )
-    prompt = str(payload.get("prompt_id") or "")
+    if payload.get("tool_use_id"):
+        tool_uses.append(str(payload["tool_use_id"]))
+    prompt = str(payload.get("prompt_id") or payload.get("turn_id") or "")
     if not (prompt or tool_uses):
         return ""
     return "|".join([event, prompt] + tool_uses)
@@ -256,37 +278,44 @@ def claim_action(session_id, fire, tokens, can_copy):
         return action
 
 
-def message_for_part(action, part, messages):
+def message_for_part(action, part, messages, rules):
     if action == POINTER:
-        return POINTER_REMINDER if part == 1 else None
+        return pointer_reminder(rules) if part == 1 else None
     if action != COPY or not 1 <= part <= len(messages):
         return None
     return messages[part - 1]
 
 
-def reminder_for(event, payload, part, entries):
-    messages = full_copy_messages()
+def context_tokens(transcript_path, estimate_from_size):
+    if estimate_from_size:
+        return context_tokens_from_size(transcript_path)
+    return latest_context_tokens(transcript_path)
+
+
+def reminder_for(event, payload, options):
+    rules = rules_at(options.rules)
+    messages = full_copy_messages(rules)
     if payload.get("agent_id") or not messages:
         return None
-    if part != 1 and event == "SessionStart":
+    if options.part != 1 and event == "SessionStart":
         return None
     if event == "SessionStart":
-        return POINTER_REMINDER
+        return pointer_reminder(rules)
     session_id = payload.get("session_id")
     transcript_path = payload.get("transcript_path")
     if not (session_id and transcript_path):
         return None
-    tokens = latest_context_tokens(transcript_path)
+    tokens = context_tokens(transcript_path, options.context_from_size)
     if tokens is None:
-        if part != 1 or event != "UserPromptSubmit":
+        if options.part != 1 or event != "UserPromptSubmit":
             return None
-        return POINTER_REMINDER if transcript_fits_in_tail(transcript_path) else None
+        return pointer_reminder(rules) if transcript_fits_in_tail(transcript_path) else None
     fire = fire_id(event, payload)
-    if not fire and part > 1:
+    if not fire and options.part > 1:
         return None
-    can_send_whole_copy = len(messages) <= entries and (fire or len(messages) == 1)
+    can_send_whole_copy = len(messages) <= options.entries and (fire or len(messages) == 1)
     action = claim_action(session_id, fire, tokens, bool(can_send_whole_copy))
-    return message_for_part(action, part, messages)
+    return message_for_part(action, options.part, messages, rules)
 
 
 def write_hook_output(event, reminder):
@@ -296,14 +325,25 @@ def write_hook_output(event, reminder):
     )
 
 
+def parsed_options(argv):
+    parser = argparse.ArgumentParser()
+    parser.add_argument("part", type=int, nargs="?", default=1)
+    parser.add_argument("entries", type=int, nargs="?")
+    parser.add_argument("--rules", default=DEFAULT_RULES_PATH)
+    parser.add_argument("--context-from-size", action="store_true")
+    options = parser.parse_args(argv)
+    if options.entries is None:
+        options.entries = options.part
+    return options
+
+
 def main():
-    part = int(sys.argv[1]) if len(sys.argv) > 1 else 1
-    entries = int(sys.argv[2]) if len(sys.argv) > 2 else part
+    options = parsed_options(sys.argv[1:])
     payload = json.loads(sys.stdin.read() or "{}")
     event = payload.get("hook_event_name")
     if not event:
         return
-    reminder = reminder_for(event, payload, part, entries)
+    reminder = reminder_for(event, payload, options)
     if reminder:
         write_hook_output(event, reminder)
 
