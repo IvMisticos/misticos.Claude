@@ -57,7 +57,9 @@ IDLE = ""
 POINTER = "pointer"
 COPY = "copy"
 
-Baselines = collections.namedtuple("Baselines", "pointed_at copied_at fire action")
+Baselines = collections.namedtuple(
+    "Baselines", "pointed_at copied_at fire action seen", defaults=(0,)
+)
 Rules = collections.namedtuple("Rules", "path name")
 
 
@@ -139,6 +141,11 @@ def context_tokens_from_size(transcript_path):
         return os.path.getsize(transcript_path) // CHARS_PER_TOKEN_ESTIMATE or None
     except OSError:
         return None
+
+
+def payload_tokens(payload):
+    tool_text = json.dumps(payload.get("tool_input")) + str(payload.get("tool_output") or "")
+    return len(tool_text) // CHARS_PER_TOKEN_ESTIMATE
 
 
 def transcript_fits_in_tail(transcript_path):
@@ -279,11 +286,12 @@ def parsed_baselines(stored):
     copied_at = stored.get("copied_at")
     fire = stored.get("fire") or ""
     action = stored.get("action") or IDLE
-    if not isinstance(pointed_at, int) or not isinstance(copied_at, int):
+    seen = stored.get("seen") or 0
+    if not all(isinstance(count, int) for count in (pointed_at, copied_at, seen)):
         return None
     if not isinstance(fire, str) or action not in (IDLE, POINTER, COPY):
         return None
-    return Baselines(pointed_at, copied_at, fire, action)
+    return Baselines(pointed_at, copied_at, fire, action, seen)
 
 
 def read_baselines(baseline_file):
@@ -304,7 +312,18 @@ def claim_action(session_id, fire, tokens, can_copy):
     with locked_baseline(session_id) as baseline_file:
         stored = read_baselines(baseline_file)
         action, baselines = action_for_fire(stored, fire, tokens, can_copy)
-        write_baselines(baseline_file, baselines)
+        write_baselines(baseline_file, baselines._replace(seen=tokens))
+        return action
+
+
+def claim_action_by_payload(session_id, fire, added_tokens, can_copy):
+    with locked_baseline(session_id) as baseline_file:
+        stored = read_baselines(baseline_file)
+        already_this_fire = stored is not None and fire and stored.fire == fire
+        seen = stored.seen if stored else 0
+        tokens = seen if already_this_fire else seen + added_tokens
+        action, baselines = action_for_fire(stored, fire, tokens, can_copy)
+        write_baselines(baseline_file, baselines._replace(seen=tokens))
         return action
 
 
@@ -316,10 +335,39 @@ def message_for_part(action, part, messages, rules):
     return messages[part - 1]
 
 
-def context_tokens(transcript_path, estimate_from_size):
-    if estimate_from_size:
+def context_tokens(transcript_path, source):
+    if source == "size":
         return context_tokens_from_size(transcript_path)
     return latest_context_tokens(transcript_path)
+
+
+def growth_reminder(rules, payload, options):
+    messages = full_copy_messages(rules, GROWN_PREAMBLE)
+    session_id = payload.get("session_id") or payload.get("conversation_id")
+    if not (messages and session_id):
+        return None
+    fire = fire_id(event_name(payload), payload)
+    if not fire and options.part > 1:
+        return None
+    can_send_whole_copy = len(messages) <= options.entries and (fire or len(messages) == 1)
+    if options.context_from == "payload":
+        added = payload_tokens(payload)
+        action = claim_action_by_payload(session_id, fire, added, bool(can_send_whole_copy))
+        return message_for_part(action, options.part, messages, rules)
+    transcript_path = payload.get("transcript_path")
+    if not transcript_path:
+        return None
+    tokens = context_tokens(transcript_path, options.context_from)
+    if tokens is None:
+        if options.part != 1 or event_name(payload).lower() != "userpromptsubmit":
+            return None
+        return pointer_reminder(rules) if transcript_fits_in_tail(transcript_path) else None
+    action = claim_action(session_id, fire, tokens, bool(can_send_whole_copy))
+    return message_for_part(action, options.part, messages, rules)
+
+
+def event_name(payload):
+    return str(payload.get("hook_event_name"))
 
 
 def forget_baseline(session_id):
@@ -342,24 +390,7 @@ def reminder_for(event, payload, options):
         return session_start_reminder(rules, payload, options)
     if payload.get("agent_id") or payload.get("subagent_id"):
         return None
-    messages = full_copy_messages(rules, GROWN_PREAMBLE)
-    if not messages:
-        return None
-    session_id = payload.get("session_id") or payload.get("conversation_id")
-    transcript_path = payload.get("transcript_path")
-    if not (session_id and transcript_path):
-        return None
-    tokens = context_tokens(transcript_path, options.context_from_size)
-    if tokens is None:
-        if options.part != 1 or event.lower() != "userpromptsubmit":
-            return None
-        return pointer_reminder(rules) if transcript_fits_in_tail(transcript_path) else None
-    fire = fire_id(event, payload)
-    if not fire and options.part > 1:
-        return None
-    can_send_whole_copy = len(messages) <= options.entries and (fire or len(messages) == 1)
-    action = claim_action(session_id, fire, tokens, bool(can_send_whole_copy))
-    return message_for_part(action, options.part, messages, rules)
+    return growth_reminder(rules, payload, options)
 
 
 def hook_output(event, reminder, shape):
@@ -378,7 +409,7 @@ def parsed_options(argv):
     parser.add_argument("part", type=int, nargs="?", default=1)
     parser.add_argument("entries", type=int, nargs="?")
     parser.add_argument("--rules", required=True)
-    parser.add_argument("--context-from-size", action="store_true")
+    parser.add_argument("--context-from", choices=("transcript", "size", "payload"), default="transcript")
     parser.add_argument("--output-shape", choices=("claude", "cursor"), default="claude")
     options = parser.parse_args(argv)
     if options.entries is None:
