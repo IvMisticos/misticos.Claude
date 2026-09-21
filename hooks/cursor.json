@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "hooks": {
+    "sessionStart": [
+      {
+        "command": "python3 \"${CURSOR_PLUGIN_ROOT}/hooks/reminder.py\" 1 1 --rules \"${CURSOR_PLUGIN_ROOT}/CLAUDE.md\" --context-from-size --output-shape cursor"
+      }
+    ],
+    "postToolUse": [
+      {
+        "command": "python3 \"${CURSOR_PLUGIN_ROOT}/hooks/reminder.py\" 1 1 --rules \"${CURSOR_PLUGIN_ROOT}/CLAUDE.md\" --context-from-size --output-shape cursor"
+      }
+    ]
+  }
+}\n

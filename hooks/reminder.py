@@ -297,17 +297,17 @@ def reminder_for(event, payload, options):
     messages = full_copy_messages(rules)
     if payload.get("agent_id") or not messages:
         return None
-    if options.part != 1 and event == "SessionStart":
+    if options.part != 1 and event.lower() == "sessionstart":
         return None
-    if event == "SessionStart":
+    if event.lower() == "sessionstart":
         return pointer_reminder(rules)
-    session_id = payload.get("session_id")
+    session_id = payload.get("session_id") or payload.get("conversation_id")
     transcript_path = payload.get("transcript_path")
     if not (session_id and transcript_path):
         return None
     tokens = context_tokens(transcript_path, options.context_from_size)
     if tokens is None:
-        if options.part != 1 or event != "UserPromptSubmit":
+        if options.part != 1 or event.lower() != "userpromptsubmit":
             return None
         return pointer_reminder(rules) if transcript_fits_in_tail(transcript_path) else None
     fire = fire_id(event, payload)
@@ -318,11 +318,10 @@ def reminder_for(event, payload, options):
     return message_for_part(action, options.part, messages, rules)
 
 
-def write_hook_output(event, reminder):
-    json.dump(
-        {"hookSpecificOutput": {"hookEventName": event, "additionalContext": reminder}},
-        sys.stdout,
-    )
+def hook_output(event, reminder, shape):
+    if shape == "cursor":
+        return {"additional_context": reminder}
+    return {"hookSpecificOutput": {"hookEventName": event, "additionalContext": reminder}}
 
 
 def parsed_options(argv):
@@ -331,6 +330,7 @@ def parsed_options(argv):
     parser.add_argument("entries", type=int, nargs="?")
     parser.add_argument("--rules", default=DEFAULT_RULES_PATH)
     parser.add_argument("--context-from-size", action="store_true")
+    parser.add_argument("--output-shape", choices=("claude", "cursor"), default="claude")
     options = parser.parse_args(argv)
     if options.entries is None:
         options.entries = options.part
@@ -345,7 +345,7 @@ def main():
         return
     reminder = reminder_for(event, payload, options)
     if reminder:
-        write_hook_output(event, reminder)
+        json.dump(hook_output(event, reminder, options.output_shape), sys.stdout)
 
 
 if __name__ == "__main__":

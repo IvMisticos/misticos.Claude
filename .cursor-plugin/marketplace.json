@@ -1,0 +1,13 @@
+{
+  "name": "misticos",
+  "owner": {
+    "name": "misticos"
+  },
+  "plugins": [
+    {
+      "name": "misticos",
+      "source": ".",
+      "description": "Standing rules and drift reminders"
+    }
+  ]
+}\n
