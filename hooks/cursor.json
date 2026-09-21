@@ -3,13 +3,22 @@
   "hooks": {
     "sessionStart": [
       {
-        "command": "uv run \"${CURSOR_PLUGIN_ROOT}/hooks/reminder.py\" 1 1 --rules \"${CURSOR_PLUGIN_ROOT}/CLAUDE.md\" --context-from-size --output-shape cursor"
+        "command": "uv run \"${CURSOR_PLUGIN_ROOT}/hooks/reminder.py\" 1 4 --rules \"${CURSOR_PLUGIN_ROOT}/CLAUDE.md\" --context-from-size --output-shape cursor"
       }
     ],
     "postToolUse": [
       {
-        "command": "uv run \"${CURSOR_PLUGIN_ROOT}/hooks/reminder.py\" 1 1 --rules \"${CURSOR_PLUGIN_ROOT}/CLAUDE.md\" --context-from-size --output-shape cursor"
+        "command": "uv run \"${CURSOR_PLUGIN_ROOT}/hooks/reminder.py\" 1 4 --rules \"${CURSOR_PLUGIN_ROOT}/CLAUDE.md\" --context-from-size --output-shape cursor"
+      },
+      {
+        "command": "uv run \"${CURSOR_PLUGIN_ROOT}/hooks/reminder.py\" 2 4 --rules \"${CURSOR_PLUGIN_ROOT}/CLAUDE.md\" --context-from-size --output-shape cursor"
+      },
+      {
+        "command": "uv run \"${CURSOR_PLUGIN_ROOT}/hooks/reminder.py\" 3 4 --rules \"${CURSOR_PLUGIN_ROOT}/CLAUDE.md\" --context-from-size --output-shape cursor"
+      },
+      {
+        "command": "uv run \"${CURSOR_PLUGIN_ROOT}/hooks/reminder.py\" 4 4 --rules \"${CURSOR_PLUGIN_ROOT}/CLAUDE.md\" --context-from-size --output-shape cursor"
       }
     ]
   }
-}\n
+}

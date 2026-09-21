@@ -51,7 +51,10 @@ if command -v codex >/dev/null; then
   mkdir -p /root/.codex
   cp "$repo/CLAUDE.md" /root/.codex/AGENTS.md
   touch "$codex_config"
-  grep -q '^personality' "$codex_config" || sed -i '1i personality = "none"' "$codex_config"
+  if ! grep -q '^personality' "$codex_config"; then
+    { printf 'personality = "none"\n'; cat "$codex_config"; } > "$codex_config.installed"
+    mv "$codex_config.installed" "$codex_config"
+  fi
   grep -q '^\[memories\]' "$codex_config" || printf '\n[memories]\nuse_memories = false\ngenerate_memories = false\n' >> "$codex_config"
   codex plugin marketplace add "$repo"
   codex plugin add misticos@misticos

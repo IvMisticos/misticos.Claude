@@ -193,7 +193,9 @@ def fire_id(event, payload):
     )
     if payload.get("tool_use_id"):
         tool_uses.append(str(payload["tool_use_id"]))
-    prompt = str(payload.get("prompt_id") or payload.get("turn_id") or "")
+    prompt = str(
+        payload.get("prompt_id") or payload.get("turn_id") or payload.get("generation_id") or ""
+    )
     if not (prompt or tool_uses):
         return ""
     return "|".join([event, prompt] + tool_uses)
@@ -298,7 +300,7 @@ def context_tokens(transcript_path, estimate_from_size):
 def reminder_for(event, payload, options):
     rules = rules_at(options.rules)
     messages = full_copy_messages(rules)
-    if payload.get("agent_id") or not messages:
+    if payload.get("agent_id") or payload.get("subagent_id") or not messages:
         return None
     if options.part != 1 and event.lower() == "sessionstart":
         return None
@@ -327,8 +329,13 @@ def hook_output(event, reminder, shape):
     return {"hookSpecificOutput": {"hookEventName": event, "additionalContext": reminder}}
 
 
+class QuietArgumentParser(argparse.ArgumentParser):
+    def error(self, message):
+        raise ValueError(message)
+
+
 def parsed_options(argv):
-    parser = argparse.ArgumentParser()
+    parser = QuietArgumentParser(add_help=False)
     parser.add_argument("part", type=int, nargs="?", default=1)
     parser.add_argument("entries", type=int, nargs="?")
     parser.add_argument("--rules", default=DEFAULT_RULES_PATH)
@@ -354,5 +361,5 @@ def main():
 if __name__ == "__main__":
     try:
         main()
-    except BaseException:
+    except Exception:
         sys.exit(0)
