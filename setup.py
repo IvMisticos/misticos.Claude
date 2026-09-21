@@ -14,27 +14,17 @@ from pathlib import Path
 
 import tomli_w
 
-HOME = Path("/root")
+HOME = Path.home()
 CLAUDE_DIR = HOME / ".claude"
 CODEX_DIR = HOME / ".codex"
-REPO = Path(__file__).resolve().parent
+INSTALLED_PLUGINS = CLAUDE_DIR / "plugins" / "installed_plugins.json"
+WEB_GUIDANCE_PLUGIN = "modern-web-guidance@googlechrome"
 OLD_REMINDER_COMMAND = "~/.claude/reminder.py"
+CLOUD_SESSION_MARK = "CCR_AGENT_PROXY_ENABLED"
 
 
-def run(*command, input_text=None):
-    subprocess.run(command, check=True, input=input_text, text=True)
-
-
-def install_tools():
-    run("apt-get", "update")
-    run("apt-get", "install", "-y", "git-lfs", "curl", "jq", "gh", "unzip")
-    run("bash", "-c", "curl -fsSL https://bun.sh/install | bash -s canary")
-    run("bash", "-c", "curl -fsSL https://dot.net/v1/dotnet-install.sh | bash -s -- --channel LTS")
-    local_bin = HOME / ".local" / "bin"
-    local_bin.mkdir(parents=True, exist_ok=True)
-    dotnet_link = local_bin / "dotnet"
-    dotnet_link.unlink(missing_ok=True)
-    dotnet_link.symlink_to(HOME / ".dotnet" / "dotnet")
+def run(*command):
+    subprocess.run(command, check=True, stdout=sys.stderr)
 
 
 def read_json(path):
@@ -62,53 +52,61 @@ def without_old_reminder(hooks):
     return kept
 
 
-def remove_if_installed_copy(path):
-    if path.exists() and path.read_bytes() == (REPO / "CLAUDE.md").read_bytes():
-        path.unlink()
-
-
-def configure_claude():
+def configure_claude_settings():
     CLAUDE_DIR.mkdir(parents=True, exist_ok=True)
-    (CLAUDE_DIR / "reminder.py").unlink(missing_ok=True)
-    (CLAUDE_DIR / "output-styles" / "short.md").unlink(missing_ok=True)
-    remove_if_installed_copy(CLAUDE_DIR / "CLAUDE.md")
     settings_path = CLAUDE_DIR / "settings.json"
     settings = read_json(settings_path)
-    settings["attribution"] = {"commit": "", "pr": "", "sessionUrl": False}
-    settings["autoMemoryEnabled"] = False
-    settings.pop("outputStyle", None)
-    settings["hooks"] = without_old_reminder(settings.get("hooks") or {})
-    settings_path.write_text(json.dumps(settings, indent=2) + "\n")
+    wanted = dict(settings)
+    wanted["attribution"] = {"commit": "", "pr": "", "sessionUrl": False}
+    wanted["autoMemoryEnabled"] = False
+    wanted.pop("outputStyle", None)
+    wanted["hooks"] = without_old_reminder(settings.get("hooks") or {})
+    if wanted != settings:
+        settings_path.write_text(json.dumps(wanted, indent=2) + "\n")
+
+
+def install_web_guidance_plugin():
+    installed = read_json(INSTALLED_PLUGINS).get("plugins", {})
+    if WEB_GUIDANCE_PLUGIN in installed:
+        return
     run("claude", "plugin", "marketplace", "add", "GoogleChrome/modern-web-guidance")
-    run("claude", "plugin", "install", "modern-web-guidance@googlechrome", "--scope", "user")
-    run("claude", "plugin", "marketplace", "add", str(REPO))
-    run("claude", "plugin", "install", "misticos@misticos", "--scope", "user")
+    run("claude", "plugin", "install", WEB_GUIDANCE_PLUGIN, "--scope", "user")
 
 
 def configure_codex():
     if shutil.which("codex") is None:
         return
     CODEX_DIR.mkdir(parents=True, exist_ok=True)
-    remove_if_installed_copy(CODEX_DIR / "AGENTS.md")
     config_path = CODEX_DIR / "config.toml"
     config = tomllib.loads(config_path.read_text()) if config_path.exists() else {}
-    config.setdefault("personality", "none")
-    config.setdefault("memories", {"use_memories": False, "generate_memories": False})
-    config_path.write_text(tomli_w.dumps(config))
-    run("codex", "plugin", "marketplace", "add", str(REPO))
-    run("codex", "plugin", "add", "misticos@misticos")
-    print(
-        "Codex runs plugin hooks only after you approve them once: "
-        "open codex, run /hooks, and trust the misticos hooks."
-    )
+    wanted = dict(config)
+    wanted.setdefault("personality", "none")
+    wanted.setdefault("memories", {"use_memories": False, "generate_memories": False})
+    if wanted != config:
+        config_path.write_text(tomli_w.dumps(wanted))
+
+
+def install_cloud_tools():
+    if CLOUD_SESSION_MARK not in os.environ or os.geteuid() != 0:
+        return
+    if shutil.which("git-lfs") is None:
+        run("apt-get", "update")
+        run("apt-get", "install", "-y", "git-lfs", "curl", "jq", "gh", "unzip")
+    if shutil.which("bun") is None and not (HOME / ".bun" / "bin" / "bun").exists():
+        run("bash", "-c", "curl -fsSL https://bun.sh/install | bash -s canary")
+    local_bin = HOME / ".local" / "bin"
+    dotnet_link = local_bin / "dotnet"
+    if not dotnet_link.exists():
+        run("bash", "-c", "curl -fsSL https://dot.net/v1/dotnet-install.sh | bash -s -- --channel LTS")
+        local_bin.mkdir(parents=True, exist_ok=True)
+        dotnet_link.symlink_to(HOME / ".dotnet" / "dotnet")
 
 
 def main():
-    if os.geteuid() != 0:
-        sys.exit("run as root: this sets up /root")
-    install_tools()
-    configure_claude()
+    configure_claude_settings()
+    install_web_guidance_plugin()
     configure_codex()
+    install_cloud_tools()
 
 
 if __name__ == "__main__":

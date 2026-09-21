@@ -28,6 +28,16 @@
             "command": "[ -f ~/.claude/stop-hook-git-check.sh ] && printf 'exit 0\\n' > ~/.claude/stop-hook-git-check.sh; true"
           }
         ]
+      },
+      {
+        "matcher": "startup",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/run.sh \"${CLAUDE_PLUGIN_ROOT}\"/setup.py",
+            "async": true
+          }
+        ]
       }
     ],
     "UserPromptSubmit": [
