@@ -58,4 +58,5 @@ if command -v codex >/dev/null; then
   grep -q '^\[memories\]' "$codex_config" || printf '\n[memories]\nuse_memories = false\ngenerate_memories = false\n' >> "$codex_config"
   codex plugin marketplace add "$repo"
   codex plugin add misticos@misticos
+  echo "Codex runs plugin hooks only after you approve them once: open codex, run /hooks, and trust the misticos hooks."
 fi
