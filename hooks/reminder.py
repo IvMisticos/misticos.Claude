@@ -32,10 +32,14 @@ POINTER_REMINDER = (
     "the work allows. If you notice you have drifted, read {path} to bring "
     "the rules back into your context."
 )
-FIRST_PART_PREAMBLE = (
+GROWN_PREAMBLE = (
     "The conversation has grown since you last saw {name}, so the file "
     "follows here in full. It overrides your defaults. Follow it at all "
     "times. Where your recent work has drifted from it, correct that now."
+)
+SESSION_START_PREAMBLE = (
+    "{name} holds the standing rules for this session and follows here in "
+    "full. It overrides your defaults. Follow it at all times."
 )
 SPLIT_NOTICE = " The file comes in {total} parts, sent together, in any order."
 LATER_PART_PREAMBLE = (
@@ -60,16 +64,18 @@ def pointer_reminder(rules):
     return POINTER_REMINDER.format(name=rules.name, path=rules.path)
 
 
-def preamble_for(number, total, name):
+def preamble_for(number, total, name, first_preamble):
     if number > 1:
         return LATER_PART_PREAMBLE.format(name=name, number=number, total=total)
     if total > 1:
-        return FIRST_PART_PREAMBLE.format(name=name) + SPLIT_NOTICE.format(total=total)
-    return FIRST_PART_PREAMBLE.format(name=name)
+        return first_preamble.format(name=name) + SPLIT_NOTICE.format(total=total)
+    return first_preamble.format(name=name)
 
 
-def part_budget_chars(name):
-    longest_preamble = max(len(preamble_for(number, 99, name)) for number in (1, 99))
+def part_budget_chars(name, first_preamble):
+    longest_preamble = max(
+        len(preamble_for(number, 99, name, first_preamble)) for number in (1, 99)
+    )
     return MAX_INJECTED_CHARS - longest_preamble - len("\n\n")
 
 
@@ -158,25 +164,26 @@ def parts_within_budget(text, budget):
     return fixed_size_chunks(text, budget)
 
 
-def part_messages(text, budget, name):
+def part_messages(text, budget, name, first_preamble):
     parts = parts_within_budget(text, budget)
     return tuple(
-        f"{preamble_for(number, len(parts), name)}\n\n{part}"
+        f"{preamble_for(number, len(parts), name, first_preamble)}\n\n{part}"
         for number, part in enumerate(parts, start=1)
     )
 
 
-def full_copy_messages(rules):
+def full_copy_messages(rules, first_preamble):
     try:
         with open(rules.path, encoding="utf-8", errors="replace") as rules_file:
             text = rules_file.read().strip()
-    except OSError:
+    except OSError as error:
+        print(f"reminder: cannot read rules: {error}", file=sys.stderr)
         return ()
     if not text:
         return ()
-    budget = part_budget_chars(rules.name)
+    budget = part_budget_chars(rules.name, first_preamble)
     while True:
-        messages = part_messages(text, budget, rules.name)
+        messages = part_messages(text, budget, rules.name, first_preamble)
         overflow = max(len(message) for message in messages) - MAX_INJECTED_CHARS
         if overflow <= 0:
             return messages
@@ -296,13 +303,22 @@ def context_tokens(transcript_path, estimate_from_size):
     return latest_context_tokens(transcript_path)
 
 
+def session_start_reminder(rules, options):
+    messages = full_copy_messages(rules, SESSION_START_PREAMBLE)
+    if len(messages) > options.entries:
+        return pointer_reminder(rules) if options.part == 1 else None
+    return message_for_part(COPY, options.part, messages, rules)
+
+
 def reminder_for(event, payload, options):
     rules = rules_at(options.rules)
-    messages = full_copy_messages(rules)
-    if payload.get("agent_id") or payload.get("subagent_id") or not messages:
+    if payload.get("agent_id") or payload.get("subagent_id"):
         return None
     if event.lower() == "sessionstart":
-        return message_for_part(COPY, options.part, messages, rules)
+        return session_start_reminder(rules, options)
+    messages = full_copy_messages(rules, GROWN_PREAMBLE)
+    if not messages:
+        return None
     session_id = payload.get("session_id") or payload.get("conversation_id")
     transcript_path = payload.get("transcript_path")
     if not (session_id and transcript_path):
