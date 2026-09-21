@@ -303,7 +303,14 @@ def context_tokens(transcript_path, estimate_from_size):
     return latest_context_tokens(transcript_path)
 
 
-def session_start_reminder(rules, options):
+def forget_baseline(session_id):
+    with contextlib.suppress(OSError):
+        os.unlink(baseline_path(session_id))
+
+
+def session_start_reminder(rules, payload, options):
+    if options.part == 1 and payload.get("session_id"):
+        forget_baseline(payload["session_id"])
     messages = full_copy_messages(rules, SESSION_START_PREAMBLE)
     if len(messages) > options.entries:
         return pointer_reminder(rules) if options.part == 1 else None
@@ -315,7 +322,7 @@ def reminder_for(event, payload, options):
     if payload.get("agent_id") or payload.get("subagent_id"):
         return None
     if event.lower() == "sessionstart":
-        return session_start_reminder(rules, options)
+        return session_start_reminder(rules, payload, options)
     messages = full_copy_messages(rules, GROWN_PREAMBLE)
     if not messages:
         return None
