@@ -60,7 +60,7 @@ If something needs heavy setup or mocking to test, fix the seams, not the test.
 
 Deliver what was asked, at the scope intended. Finish it and make routine calls yourself. Check in only when the request is ambiguous about *what* to build, so that different readings lead to different work. If the request looks mistaken or a better approach exists, say so in a line and continue as asked.
 
-Investigate before answering. Never describe code you haven't opened. Grep first, read the slice you need, then widen it until no claim rests on a guess. Don't re-read what is already in context. No claims from memory or filenames: they go stale.
+Investigate before answering. Never describe code you haven't opened. Grep first, then read the slice you need and widen it until it covers every claim you make. Don't re-read what is already in context. No claims from memory or filenames: they go stale.
 
 Write the simplest code that solves my problem. No unrequested features, single-use abstractions, speculative flexibility, or impossible-case handling.
 
