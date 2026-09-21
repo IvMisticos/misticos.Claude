@@ -2,11 +2,22 @@
   "hooks": {
     "SessionStart": [
       {
-        "matcher": "startup|resume|compact",
         "hooks": [
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/reminder.py 1 4 --rules ~/.codex/AGENTS.md --context-from-size"
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/reminder.py 1 4 --rules \"${CLAUDE_PLUGIN_ROOT}\"/CLAUDE.md --context-from-size"
+          },
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/reminder.py 2 4 --rules \"${CLAUDE_PLUGIN_ROOT}\"/CLAUDE.md --context-from-size"
+          },
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/reminder.py 3 4 --rules \"${CLAUDE_PLUGIN_ROOT}\"/CLAUDE.md --context-from-size"
+          },
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/reminder.py 4 4 --rules \"${CLAUDE_PLUGIN_ROOT}\"/CLAUDE.md --context-from-size"
           }
         ]
       }
@@ -16,19 +27,19 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/reminder.py 1 4 --rules ~/.codex/AGENTS.md --context-from-size"
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/reminder.py 1 4 --rules \"${CLAUDE_PLUGIN_ROOT}\"/CLAUDE.md --context-from-size"
           },
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/reminder.py 2 4 --rules ~/.codex/AGENTS.md --context-from-size"
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/reminder.py 2 4 --rules \"${CLAUDE_PLUGIN_ROOT}\"/CLAUDE.md --context-from-size"
           },
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/reminder.py 3 4 --rules ~/.codex/AGENTS.md --context-from-size"
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/reminder.py 3 4 --rules \"${CLAUDE_PLUGIN_ROOT}\"/CLAUDE.md --context-from-size"
           },
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/reminder.py 4 4 --rules ~/.codex/AGENTS.md --context-from-size"
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/reminder.py 4 4 --rules \"${CLAUDE_PLUGIN_ROOT}\"/CLAUDE.md --context-from-size"
           }
         ]
       }
@@ -38,19 +49,19 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/reminder.py 1 4 --rules ~/.codex/AGENTS.md --context-from-size"
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/reminder.py 1 4 --rules \"${CLAUDE_PLUGIN_ROOT}\"/CLAUDE.md --context-from-size"
           },
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/reminder.py 2 4 --rules ~/.codex/AGENTS.md --context-from-size"
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/reminder.py 2 4 --rules \"${CLAUDE_PLUGIN_ROOT}\"/CLAUDE.md --context-from-size"
           },
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/reminder.py 3 4 --rules ~/.codex/AGENTS.md --context-from-size"
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/reminder.py 3 4 --rules \"${CLAUDE_PLUGIN_ROOT}\"/CLAUDE.md --context-from-size"
           },
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/reminder.py 4 4 --rules ~/.codex/AGENTS.md --context-from-size"
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/reminder.py 4 4 --rules \"${CLAUDE_PLUGIN_ROOT}\"/CLAUDE.md --context-from-size"
           }
         ]
       }

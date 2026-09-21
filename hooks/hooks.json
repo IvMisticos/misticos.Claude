@@ -1,16 +1,5 @@
 {
   "hooks": {
-    "SessionStart": [
-      {
-        "hooks": [
-          {
-            "name": "misticos-reminder",
-            "type": "command",
-            "command": "uv run \"${extensionPath}${/}hooks${/}reminder.py\" 1 1 --rules \"${extensionPath}${/}CLAUDE.md\" --context-from-size"
-          }
-        ]
-      }
-    ],
     "BeforeAgent": [
       {
         "hooks": [

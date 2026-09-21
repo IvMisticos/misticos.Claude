@@ -18,7 +18,6 @@ POINTER_EVERY_TOKENS = 10_000
 TRANSCRIPT_TAIL_BYTES = 1 << 20
 FORGET_BASELINE_AFTER_SECONDS = 7 * 24 * 60 * 60
 MAX_INJECTED_CHARS = 10_000
-DEFAULT_RULES_PATH = "~/.claude/CLAUDE.md"
 CHARS_PER_TOKEN_ESTIMATE = 4
 BASELINE_DIR = os.path.expanduser("~/.claude/hooks/data/misticos.Claude/reminder")
 CONTEXT_USAGE_FIELDS = (
@@ -302,10 +301,8 @@ def reminder_for(event, payload, options):
     messages = full_copy_messages(rules)
     if payload.get("agent_id") or payload.get("subagent_id") or not messages:
         return None
-    if options.part != 1 and event.lower() == "sessionstart":
-        return None
     if event.lower() == "sessionstart":
-        return pointer_reminder(rules)
+        return message_for_part(COPY, options.part, messages, rules)
     session_id = payload.get("session_id") or payload.get("conversation_id")
     transcript_path = payload.get("transcript_path")
     if not (session_id and transcript_path):
@@ -338,7 +335,7 @@ def parsed_options(argv):
     parser = QuietArgumentParser(add_help=False)
     parser.add_argument("part", type=int, nargs="?", default=1)
     parser.add_argument("entries", type=int, nargs="?")
-    parser.add_argument("--rules", default=DEFAULT_RULES_PATH)
+    parser.add_argument("--rules", required=True)
     parser.add_argument("--context-from-size", action="store_true")
     parser.add_argument("--output-shape", choices=("claude", "cursor"), default="claude")
     options = parser.parse_args(argv)

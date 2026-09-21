@@ -23,8 +23,7 @@ settings="$d/settings.json"
 mkdir -p "$d"
 grep -q '[^[:space:]]' "$settings" 2>/dev/null || echo '{}' > "$settings"
 
-cp "$repo/CLAUDE.md" "$d/"
-rm -f "$d/reminder.py" "$d/output-styles/short.md"
+rm -f "$d/CLAUDE.md" "$d/reminder.py" "$d/output-styles/short.md"
 
 jq --arg command '~/.claude/reminder.py' '
 def without_reminder:
@@ -49,7 +48,7 @@ claude plugin install misticos@misticos --scope user
 if command -v codex >/dev/null; then
   codex_config=/root/.codex/config.toml
   mkdir -p /root/.codex
-  cp "$repo/CLAUDE.md" /root/.codex/AGENTS.md
+  rm -f /root/.codex/AGENTS.md
   touch "$codex_config"
   if ! grep -q '^personality' "$codex_config"; then
     { printf 'personality = "none"\n'; cat "$codex_config"; } > "$codex_config.installed"
