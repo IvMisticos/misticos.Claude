@@ -23,10 +23,10 @@ CONTEXT_USAGE_FIELDS = (
 )
 POINTER_REMINDER = (
     "CLAUDE.md holds the standing rules for this session and overrides your "
-    "defaults. Follow it at all times, and keep your replies to me and your "
-    "subagent prompts as short as the work allows. If you notice you have "
-    f"drifted, read {CLAUDE_MD_PATH} to bring the rules back into your "
-    "context."
+    "defaults. Follow it at all times. Silence is the default: write to me "
+    "only what changes what I do next, and keep subagent prompts as short as "
+    f"the work allows. If you notice you have drifted, read {CLAUDE_MD_PATH} "
+    "to bring the rules back into your context."
 )
 FIRST_PART_PREAMBLE = (
     "The conversation has grown since you last saw CLAUDE.md, so the file "
