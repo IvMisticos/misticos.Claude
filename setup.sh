@@ -24,6 +24,8 @@ mkdir -p "$d"
 grep -q '[^[:space:]]' "$settings" 2>/dev/null || echo '{}' > "$settings"
 
 cp "$repo/CLAUDE.md" "$d/"
+mkdir -p "$d/output-styles"
+cp "$repo/output-styles/short.md" "$d/output-styles/"
 
 claude plugin marketplace add GoogleChrome/modern-web-guidance
 claude plugin install modern-web-guidance@googlechrome --scope user
@@ -50,6 +52,7 @@ def without_reminder:
   sessionUrl: false
 }
 | .autoMemoryEnabled = false
+| .outputStyle = "Short"
 | .hooks = ((.hooks // {}) | without_reminder)
 | .hooks.SessionStart += [ { matcher: "compact", hooks: [ reminder(1) ] } ]
 | .hooks.UserPromptSubmit += every_part("")
