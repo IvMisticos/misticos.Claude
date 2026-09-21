@@ -2,55 +2,36 @@
   "hooks": {
     "SessionStart": [
       {
-        "matcher": "compact",
+        "matcher": "*",
         "hooks": [
           {
+            "name": "misticos-reminder",
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/reminder.py 1 4"
+            "command": "python3 \"${extensionPath}${/}hooks${/}reminder.py\" 1 1 --rules \"${extensionPath}${/}CLAUDE.md\" --context-from-size"
           }
         ]
       }
     ],
-    "UserPromptSubmit": [
+    "BeforeAgent": [
       {
+        "matcher": "*",
         "hooks": [
           {
+            "name": "misticos-reminder",
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/reminder.py 1 4"
-          },
-          {
-            "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/reminder.py 2 4"
-          },
-          {
-            "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/reminder.py 3 4"
-          },
-          {
-            "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/reminder.py 4 4"
+            "command": "python3 \"${extensionPath}${/}hooks${/}reminder.py\" 1 1 --rules \"${extensionPath}${/}CLAUDE.md\" --context-from-size"
           }
         ]
       }
     ],
-    "PostToolBatch": [
+    "AfterTool": [
       {
+        "matcher": "*",
         "hooks": [
           {
+            "name": "misticos-reminder",
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/reminder.py 1 4"
-          },
-          {
-            "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/reminder.py 2 4"
-          },
-          {
-            "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/reminder.py 3 4"
-          },
-          {
-            "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/reminder.py 4 4"
+            "command": "python3 \"${extensionPath}${/}hooks${/}reminder.py\" 1 1 --rules \"${extensionPath}${/}CLAUDE.md\" --context-from-size"
           }
         ]
       }

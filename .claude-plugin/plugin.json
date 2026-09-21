@@ -6,5 +6,6 @@
     "name": "misticos"
   },
   "repository": "https://github.com/IvMisticos/misticos.Claude",
-  "license": "MIT"
+  "license": "MIT",
+  "hooks": "./hooks/claude.json"
 }
