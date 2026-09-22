@@ -5,19 +5,19 @@
         "hooks": [
           {
             "type": "command",
-            "command": "uv run \"${CLAUDE_PLUGIN_ROOT}\"/hooks/reminder.py 1 4 --rules \"${CLAUDE_PLUGIN_ROOT}/CLAUDE.md\""
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/run.sh \"${CLAUDE_PLUGIN_ROOT}\"/hooks/reminder.py 1 4 --rules \"${CLAUDE_PLUGIN_ROOT}/CLAUDE.md\""
           },
           {
             "type": "command",
-            "command": "uv run \"${CLAUDE_PLUGIN_ROOT}\"/hooks/reminder.py 2 4 --rules \"${CLAUDE_PLUGIN_ROOT}/CLAUDE.md\""
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/run.sh \"${CLAUDE_PLUGIN_ROOT}\"/hooks/reminder.py 2 4 --rules \"${CLAUDE_PLUGIN_ROOT}/CLAUDE.md\""
           },
           {
             "type": "command",
-            "command": "uv run \"${CLAUDE_PLUGIN_ROOT}\"/hooks/reminder.py 3 4 --rules \"${CLAUDE_PLUGIN_ROOT}/CLAUDE.md\""
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/run.sh \"${CLAUDE_PLUGIN_ROOT}\"/hooks/reminder.py 3 4 --rules \"${CLAUDE_PLUGIN_ROOT}/CLAUDE.md\""
           },
           {
             "type": "command",
-            "command": "uv run \"${CLAUDE_PLUGIN_ROOT}\"/hooks/reminder.py 4 4 --rules \"${CLAUDE_PLUGIN_ROOT}/CLAUDE.md\""
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/run.sh \"${CLAUDE_PLUGIN_ROOT}\"/hooks/reminder.py 4 4 --rules \"${CLAUDE_PLUGIN_ROOT}/CLAUDE.md\""
           }
         ]
       },
@@ -28,6 +28,16 @@
             "command": "[ -f ~/.claude/stop-hook-git-check.sh ] && printf 'exit 0\\n' > ~/.claude/stop-hook-git-check.sh; true"
           }
         ]
+      },
+      {
+        "matcher": "startup",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/run.sh \"${CLAUDE_PLUGIN_ROOT}\"/setup.py",
+            "async": true
+          }
+        ]
       }
     ],
     "UserPromptSubmit": [
@@ -35,19 +45,19 @@
         "hooks": [
           {
             "type": "command",
-            "command": "uv run \"${CLAUDE_PLUGIN_ROOT}\"/hooks/reminder.py 1 4 --rules \"${CLAUDE_PLUGIN_ROOT}/CLAUDE.md\""
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/run.sh \"${CLAUDE_PLUGIN_ROOT}\"/hooks/reminder.py 1 4 --rules \"${CLAUDE_PLUGIN_ROOT}/CLAUDE.md\""
           },
           {
             "type": "command",
-            "command": "uv run \"${CLAUDE_PLUGIN_ROOT}\"/hooks/reminder.py 2 4 --rules \"${CLAUDE_PLUGIN_ROOT}/CLAUDE.md\""
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/run.sh \"${CLAUDE_PLUGIN_ROOT}\"/hooks/reminder.py 2 4 --rules \"${CLAUDE_PLUGIN_ROOT}/CLAUDE.md\""
           },
           {
             "type": "command",
-            "command": "uv run \"${CLAUDE_PLUGIN_ROOT}\"/hooks/reminder.py 3 4 --rules \"${CLAUDE_PLUGIN_ROOT}/CLAUDE.md\""
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/run.sh \"${CLAUDE_PLUGIN_ROOT}\"/hooks/reminder.py 3 4 --rules \"${CLAUDE_PLUGIN_ROOT}/CLAUDE.md\""
           },
           {
             "type": "command",
-            "command": "uv run \"${CLAUDE_PLUGIN_ROOT}\"/hooks/reminder.py 4 4 --rules \"${CLAUDE_PLUGIN_ROOT}/CLAUDE.md\""
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/run.sh \"${CLAUDE_PLUGIN_ROOT}\"/hooks/reminder.py 4 4 --rules \"${CLAUDE_PLUGIN_ROOT}/CLAUDE.md\""
           }
         ]
       }
@@ -57,19 +67,19 @@
         "hooks": [
           {
             "type": "command",
-            "command": "uv run \"${CLAUDE_PLUGIN_ROOT}\"/hooks/reminder.py 1 4 --rules \"${CLAUDE_PLUGIN_ROOT}/CLAUDE.md\""
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/run.sh \"${CLAUDE_PLUGIN_ROOT}\"/hooks/reminder.py 1 4 --rules \"${CLAUDE_PLUGIN_ROOT}/CLAUDE.md\""
           },
           {
             "type": "command",
-            "command": "uv run \"${CLAUDE_PLUGIN_ROOT}\"/hooks/reminder.py 2 4 --rules \"${CLAUDE_PLUGIN_ROOT}/CLAUDE.md\""
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/run.sh \"${CLAUDE_PLUGIN_ROOT}\"/hooks/reminder.py 2 4 --rules \"${CLAUDE_PLUGIN_ROOT}/CLAUDE.md\""
           },
           {
             "type": "command",
-            "command": "uv run \"${CLAUDE_PLUGIN_ROOT}\"/hooks/reminder.py 3 4 --rules \"${CLAUDE_PLUGIN_ROOT}/CLAUDE.md\""
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/run.sh \"${CLAUDE_PLUGIN_ROOT}\"/hooks/reminder.py 3 4 --rules \"${CLAUDE_PLUGIN_ROOT}/CLAUDE.md\""
           },
           {
             "type": "command",
-            "command": "uv run \"${CLAUDE_PLUGIN_ROOT}\"/hooks/reminder.py 4 4 --rules \"${CLAUDE_PLUGIN_ROOT}/CLAUDE.md\""
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/run.sh \"${CLAUDE_PLUGIN_ROOT}\"/hooks/reminder.py 4 4 --rules \"${CLAUDE_PLUGIN_ROOT}/CLAUDE.md\""
           }
         ]
       }
@@ -79,19 +89,19 @@
         "hooks": [
           {
             "type": "command",
-            "command": "uv run \"${CLAUDE_PLUGIN_ROOT}\"/hooks/reminder.py 1 4 --rules \"${CLAUDE_PLUGIN_ROOT}/CLAUDE.md\""
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/run.sh \"${CLAUDE_PLUGIN_ROOT}\"/hooks/reminder.py 1 4 --rules \"${CLAUDE_PLUGIN_ROOT}/CLAUDE.md\""
           },
           {
             "type": "command",
-            "command": "uv run \"${CLAUDE_PLUGIN_ROOT}\"/hooks/reminder.py 2 4 --rules \"${CLAUDE_PLUGIN_ROOT}/CLAUDE.md\""
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/run.sh \"${CLAUDE_PLUGIN_ROOT}\"/hooks/reminder.py 2 4 --rules \"${CLAUDE_PLUGIN_ROOT}/CLAUDE.md\""
           },
           {
             "type": "command",
-            "command": "uv run \"${CLAUDE_PLUGIN_ROOT}\"/hooks/reminder.py 3 4 --rules \"${CLAUDE_PLUGIN_ROOT}/CLAUDE.md\""
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/run.sh \"${CLAUDE_PLUGIN_ROOT}\"/hooks/reminder.py 3 4 --rules \"${CLAUDE_PLUGIN_ROOT}/CLAUDE.md\""
           },
           {
             "type": "command",
-            "command": "uv run \"${CLAUDE_PLUGIN_ROOT}\"/hooks/reminder.py 4 4 --rules \"${CLAUDE_PLUGIN_ROOT}/CLAUDE.md\""
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/run.sh \"${CLAUDE_PLUGIN_ROOT}\"/hooks/reminder.py 4 4 --rules \"${CLAUDE_PLUGIN_ROOT}/CLAUDE.md\""
           }
         ]
       }
@@ -102,7 +112,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "uv run \"${CLAUDE_PLUGIN_ROOT}\"/hooks/guard.py"
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/run.sh \"${CLAUDE_PLUGIN_ROOT}\"/hooks/guard.py"
           }
         ]
       }
