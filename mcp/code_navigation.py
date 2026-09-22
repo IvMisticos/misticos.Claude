@@ -5,9 +5,11 @@
 # ///
 
 import asyncio
+import atexit
 import json
 import os
 import re
+import functools
 import subprocess
 import sys
 from pathlib import Path
@@ -184,11 +186,16 @@ class LanguageServer:
             self.answer_server_request(message)
 
     def answer_server_request(self, message):
-        result = None
-        if message["method"] == "workspace/configuration":
+        method = message["method"]
+        if method == "workspace/configuration":
             result = [None for _ in message.get("params", {}).get("items", [])]
-        if message["method"] == "workspace/applyEdit":
+        elif method == "workspace/applyEdit":
             result = {"applied": False}
+        elif method.startswith(("window/workDoneProgress", "client/")):
+            result = None
+        else:
+            self.send({"jsonrpc": "2.0", "id": message["id"], "error": {"code": -32601, "message": f"{method} is not supported"}})
+            return
         self.send({"jsonrpc": "2.0", "id": message["id"], "result": result})
 
     def open_document(self, path):
@@ -230,8 +237,18 @@ def utf16_offset_to_index(line_text, utf16_offset):
 
 
 def read_text(path):
-    with open(path, encoding="utf-8", errors="replace", newline="") as file:
+    with open(path, encoding="utf-8", newline="") as file:
         return file.read()
+
+
+def lines_of(path):
+    stat = os.stat(path)
+    return cached_lines(str(path), stat.st_mtime_ns, stat.st_size)
+
+
+@functools.lru_cache(maxsize=256)
+def cached_lines(path, mtime_ns, size):
+    return LINE_BREAK.split(read_text(Path(path)))
 
 
 starting_servers = {}
@@ -250,10 +267,18 @@ async def server_for(path):
     key = (name, project_root(path))
     starting = starting_servers.get(key)
     if starting is not None and starting.done() and (starting.exception() or not starting.result().alive):
+        if not starting.exception():
+            starting.result().stop()
         starting = None
     if starting is None:
         starting = starting_servers[key] = asyncio.ensure_future(start_server(*key))
     return await starting
+
+
+def stop_all_servers():
+    for starting in starting_servers.values():
+        if starting.done() and not starting.exception():
+            starting.result().stop()
 
 
 def resolved(file):
@@ -265,6 +290,8 @@ def resolved(file):
 
 def location_line(location):
     uri = location.get("targetUri") or location.get("uri")
+    if uri is None:
+        return "unknown location"
     range_ = location.get("targetSelectionRange") or location.get("range")
     path = from_uri(uri)
     if range_ is None:
@@ -274,9 +301,8 @@ def location_line(location):
 
 def position_text(path, position):
     try:
-        lines = LINE_BREAK.split(read_text(path))
-        line_text = lines[position["line"]]
-    except (OSError, IndexError):
+        line_text = lines_of(path)[position["line"]]
+    except (OSError, UnicodeDecodeError, IndexError):
         return f"{position['line'] + 1}:{position['character'] + 1}"
     return f"{position['line'] + 1}:{utf16_offset_to_index(line_text, position['character']) + 1}"
 
@@ -333,13 +359,14 @@ def symbol_kind(kind):
 
 
 def apply_workspace_edit(edit):
+    document_changes = edit.get("documentChanges") or []
+    for change in document_changes:
+        if "textDocument" not in change:
+            raise ValueError(f"the language server wants a file operation ({change.get('kind')}) that this tool does not apply; nothing was written")
     changed = []
     for uri, edits in (edit.get("changes") or {}).items():
         changed.append(apply_text_edits(from_uri(uri), edits))
-    for change in edit.get("documentChanges") or []:
-        if "textDocument" not in change:
-            raise ValueError(f"the language server wants a file operation ({change.get('kind')}) that this tool does not apply; nothing was written")
-    for change in edit.get("documentChanges") or []:
+    for change in document_changes:
         changed.append(apply_text_edits(from_uri(change["textDocument"]["uri"]), change["edits"]))
     return changed
 
@@ -358,6 +385,8 @@ def apply_text_edits(path, edits):
 
 
 def text_offset(lines, offsets, position):
+    if position["line"] >= len(lines):
+        return offsets[-1] + len(lines[-1])
     return offsets[position["line"]] + utf16_offset_to_index(lines[position["line"]], position["character"])
 
 
@@ -422,4 +451,5 @@ async def workspace_symbols(query: str, file_in_project: str) -> str:
 
 
 if __name__ == "__main__":
+    atexit.register(stop_all_servers)
     mcp.run()

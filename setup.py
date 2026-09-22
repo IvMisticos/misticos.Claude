@@ -27,7 +27,7 @@ TOOLCHAIN_PATH = os.pathsep.join([*map(str, TOOLCHAIN_BIN_DIRS), os.environ.get(
 
 
 def run(*command):
-    environment = {**os.environ, "PATH": TOOLCHAIN_PATH, "DOTNET_ROOT": str(HOME / ".dotnet")}
+    environment = {"DOTNET_ROOT": str(HOME / ".dotnet"), **os.environ, "PATH": TOOLCHAIN_PATH}
     subprocess.run(command, check=True, stdout=sys.stderr, env=environment)
 
 
