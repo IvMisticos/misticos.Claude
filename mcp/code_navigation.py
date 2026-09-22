@@ -6,17 +6,18 @@
 
 import asyncio
 import atexit
-import json
-import os
-import re
-import functools
 import subprocess
-import sys
 from pathlib import Path
-from urllib.parse import unquote, urlparse
-from urllib.request import pathname2url
 
+from lsp_client import LanguageServer
 from mcp.server.mcpserver import MCPServer
+from text_positions import (
+    apply_workspace_edit,
+    from_uri,
+    lines_of,
+    to_uri,
+    utf16_offset_to_index,
+)
 
 LANGUAGE_SERVERS = {
     "typescript": {
@@ -43,33 +44,12 @@ EXTENSION_TO_SERVER = {
     for name, server in LANGUAGE_SERVERS.items()
     for extension in server["extensions"]
 }
-TOOLCHAIN_BIN_DIRS = (".local/bin", ".bun/bin", ".dotnet/tools", ".dotnet")
-QUIET_SECONDS_BEFORE_READY = 2.0
-MAX_STARTUP_SECONDS = 90.0
-REQUEST_TIMEOUT_SECONDS = 60.0
-LINE_BREAK = re.compile(r"\r\n|\r|\n")
-
 mcp = MCPServer("code-navigation")
+SOLUTION_SUFFIXES = (".sln", ".slnx", ".slnf")
+PROJECT_SUFFIXES = (".csproj", ".fsproj", ".vbproj")
 
 
-def toolchain_environment():
-    home = Path.home()
-    environment = dict(os.environ)
-    bin_dirs = [str(home / directory) for directory in TOOLCHAIN_BIN_DIRS]
-    environment["PATH"] = os.pathsep.join([*bin_dirs, environment.get("PATH", "")])
-    environment.setdefault("DOTNET_ROOT", str(home / ".dotnet"))
-    return environment
-
-
-def to_uri(path):
-    return "file://" + pathname2url(str(path))
-
-
-def from_uri(uri):
-    return Path(unquote(urlparse(uri).path))
-
-
-def project_root(path):
+def git_root(path):
     try:
         output = subprocess.run(
             ["git", "-C", str(path.parent), "rev-parse", "--show-toplevel"],
@@ -82,247 +62,32 @@ def project_root(path):
         return Path.cwd()
 
 
-class LanguageServerExited(RuntimeError):
-    pass
+def nearest_directory_with(path, suffixes, stop_at):
+    for directory in [path.parent, *path.parents]:
+        if any(child.suffix in suffixes for child in directory.iterdir()):
+            return directory
+        if directory == stop_at:
+            return None
+    return None
 
 
-class LanguageServer:
-    def __init__(self, name, root):
-        self.name = name
-        self.root = root
-        self.process = None
-        self.pending = {}
-        self.next_id = 1
-        self.opened = {}
-        self.last_message_at = 0.0
-        self.reader_task = None
-
-    @property
-    def alive(self):
-        return (
-            self.process is not None
-            and self.process.returncode is None
-            and not self.reader_task.done()
-        )
-
-    async def start(self):
-        spec = LANGUAGE_SERVERS[self.name]
-        self.process = await asyncio.create_subprocess_exec(
-            *spec["command"],
-            cwd=self.root,
-            env=toolchain_environment(),
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=sys.stderr,
-        )
-        self.reader_task = asyncio.create_task(self.read_messages())
-        try:
-            await self.request(
-                "initialize",
-                {
-                    "processId": os.getpid(),
-                    "rootUri": to_uri(self.root),
-                    "workspaceFolders": [
-                        {"uri": to_uri(self.root), "name": self.root.name}
-                    ],
-                    "capabilities": {
-                        "window": {"workDoneProgress": True},
-                        "workspace": {"workspaceEdit": {"documentChanges": True}},
-                        "textDocument": {
-                            "hover": {"contentFormat": ["markdown", "plaintext"]}
-                        },
-                    },
-                },
-            )
-            self.notify("initialized", {})
-            await self.wait_until_quiet()
-        except Exception:
-            self.stop()
-            raise
-
-    def stop(self):
-        if self.process is not None and self.process.returncode is None:
-            self.process.kill()
-        if self.reader_task is not None:
-            self.reader_task.cancel()
-        self.fail_pending(LanguageServerExited(f"{self.name} language server exited"))
-
-    async def wait_until_quiet(self):
-        started = asyncio.get_event_loop().time()
-        while asyncio.get_event_loop().time() - started < MAX_STARTUP_SECONDS:
-            await asyncio.sleep(0.25)
-            if (
-                asyncio.get_event_loop().time() - self.last_message_at
-                >= QUIET_SECONDS_BEFORE_READY
-            ):
-                return
-
-    def send(self, message):
-        body = json.dumps(message).encode()
-        self.process.stdin.write(b"Content-Length: %d\r\n\r\n" % len(body) + body)
-
-    def notify(self, method, params):
-        self.send({"jsonrpc": "2.0", "method": method, "params": params})
-
-    async def request(self, method, params):
-        if not self.alive:
-            raise LanguageServerExited(f"{self.name} language server exited")
-        request_id = self.next_id
-        self.next_id += 1
-        future = asyncio.get_event_loop().create_future()
-        self.pending[request_id] = future
-        self.send(
-            {"jsonrpc": "2.0", "id": request_id, "method": method, "params": params}
-        )
-        try:
-            return await asyncio.wait_for(future, REQUEST_TIMEOUT_SECONDS)
-        finally:
-            self.pending.pop(request_id, None)
-
-    async def read_messages(self):
-        try:
-            while True:
-                message = await self.read_message()
-                self.last_message_at = asyncio.get_event_loop().time()
-                self.dispatch(message)
-        except (asyncio.IncompleteReadError, ValueError, TypeError, ConnectionError):
-            pass
-        finally:
-            self.fail_pending(
-                LanguageServerExited(f"{self.name} language server exited")
-            )
-
-    async def read_message(self):
-        length = None
-        while True:
-            line = await self.process.stdout.readline()
-            if not line:
-                raise asyncio.IncompleteReadError(line, None)
-            if line.lower().startswith(b"content-length:"):
-                length = int(line.split(b":")[1])
-            if line in (b"\r\n", b"\n"):
-                break
-        return json.loads(await self.process.stdout.readexactly(length))
-
-    def fail_pending(self, error):
-        for future in self.pending.values():
-            if not future.done():
-                future.set_exception(error)
-        self.pending.clear()
-
-    def dispatch(self, message):
-        if "id" in message and "method" not in message:
-            future = self.pending.pop(message["id"], None)
-            if future is None or future.done():
-                return
-            if "error" in message:
-                future.set_exception(
-                    RuntimeError(
-                        message["error"].get("message", "language server error")
-                    )
-                )
-            else:
-                future.set_result(message.get("result"))
-            return
-        if "id" in message:
-            self.answer_server_request(message)
-
-    def answer_server_request(self, message):
-        method = message["method"]
-        if method == "workspace/configuration":
-            result = [None for _ in message.get("params", {}).get("items", [])]
-        elif method == "workspace/applyEdit":
-            result = {"applied": False}
-        elif method.startswith(("window/workDoneProgress", "client/")):
-            result = None
-        else:
-            self.send(
-                {
-                    "jsonrpc": "2.0",
-                    "id": message["id"],
-                    "error": {"code": -32601, "message": f"{method} is not supported"},
-                }
-            )
-            return
-        self.send({"jsonrpc": "2.0", "id": message["id"], "result": result})
-
-    def open_document(self, path):
-        text = read_text(path)
-        uri = to_uri(path)
-        language_id = LANGUAGE_SERVERS[self.name]["extensions"][path.suffix]
-        if uri not in self.opened:
-            self.opened[uri] = (1, text)
-            self.notify(
-                "textDocument/didOpen",
-                {
-                    "textDocument": {
-                        "uri": uri,
-                        "languageId": language_id,
-                        "version": 1,
-                        "text": text,
-                    }
-                },
-            )
-            return text
-        version, known_text = self.opened[uri]
-        if text == known_text:
-            return text
-        self.opened[uri] = (version + 1, text)
-        self.notify(
-            "textDocument/didChange",
-            {
-                "textDocument": {"uri": uri, "version": version + 1},
-                "contentChanges": [{"text": text}],
-            },
-        )
-        return text
-
-    async def at_position(self, method, path, line, column, extra=None):
-        text = self.open_document(path)
-        lines = LINE_BREAK.split(text)
-        line_text = lines[line - 1] if 0 < line <= len(lines) else ""
-        position = {
-            "line": line - 1,
-            "character": utf16_length(line_text[: column - 1]),
-        }
-        params = {"textDocument": {"uri": to_uri(path)}, "position": position}
-        params.update(extra or {})
-        return await self.request(method, params)
-
-
-def utf16_length(text):
-    return len(text.encode("utf-16-le")) // 2
-
-
-def utf16_offset_to_index(line_text, utf16_offset):
-    units = 0
-    for index, character in enumerate(line_text):
-        if units >= utf16_offset:
-            return index
-        units += utf16_length(character)
-    return len(line_text)
-
-
-def read_text(path):
-    with open(path, encoding="utf-8", newline="") as file:
-        return file.read()
-
-
-def lines_of(path):
-    stat = os.stat(path)
-    return cached_lines(str(path), stat.st_mtime_ns, stat.st_size)
-
-
-@functools.lru_cache(maxsize=256)
-def cached_lines(path, mtime_ns, size):
-    return LINE_BREAK.split(read_text(Path(path)))
+def project_root(name, path):
+    repo = git_root(path)
+    if name != "csharp":
+        return repo
+    return (
+        nearest_directory_with(path, SOLUTION_SUFFIXES, repo)
+        or nearest_directory_with(path, PROJECT_SUFFIXES, repo)
+        or repo
+    )
 
 
 starting_servers = {}
 
 
 async def start_server(name, root):
-    server = LanguageServer(name, root)
+    spec = LANGUAGE_SERVERS[name]
+    server = LanguageServer(name, spec["command"], spec["extensions"], root)
     await server.start()
     return server
 
@@ -331,7 +96,7 @@ async def server_for(path):
     name = EXTENSION_TO_SERVER.get(path.suffix)
     if name is None:
         raise ValueError(f"no language server for {path.suffix} files")
-    key = (name, project_root(path))
+    key = (name, project_root(name, path))
     starting = starting_servers.get(key)
     if (
         starting is not None
@@ -458,55 +223,6 @@ SYMBOL_KINDS = {
 
 def symbol_kind(kind):
     return SYMBOL_KINDS.get(kind, "symbol")
-
-
-def apply_workspace_edit(edit):
-    document_changes = edit.get("documentChanges") or []
-    for change in document_changes:
-        if "textDocument" not in change:
-            raise ValueError(
-                f"the language server wants a file operation ({change.get('kind')}) that this tool does not apply; nothing was written"
-            )
-    changed = []
-    for uri, edits in (edit.get("changes") or {}).items():
-        changed.append(apply_text_edits(from_uri(uri), edits))
-    for change in document_changes:
-        changed.append(
-            apply_text_edits(from_uri(change["textDocument"]["uri"]), change["edits"])
-        )
-    return changed
-
-
-def apply_text_edits(path, edits):
-    text = read_text(path)
-    lines = LINE_BREAK.split(text)
-    offsets = line_offsets(text)
-    for edit in sorted(
-        edits,
-        key=lambda e: (e["range"]["start"]["line"], e["range"]["start"]["character"]),
-        reverse=True,
-    ):
-        start = text_offset(lines, offsets, edit["range"]["start"])
-        end = text_offset(lines, offsets, edit["range"]["end"])
-        text = text[:start] + edit["newText"] + text[end:]
-    with open(path, "w", encoding="utf-8", newline="") as file:
-        file.write(text)
-    return str(path)
-
-
-def text_offset(lines, offsets, position):
-    if position["line"] >= len(lines):
-        return offsets[-1] + len(lines[-1])
-    return offsets[position["line"]] + utf16_offset_to_index(
-        lines[position["line"]], position["character"]
-    )
-
-
-def line_offsets(text):
-    offsets = [0]
-    for match in LINE_BREAK.finditer(text):
-        offsets.append(match.end())
-    return offsets
 
 
 @mcp.tool()
