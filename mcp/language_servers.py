@@ -1,6 +1,7 @@
 import asyncio
 import os
 import shutil
+import sys
 from pathlib import Path
 
 LANGUAGE_SERVERS = {
@@ -46,24 +47,47 @@ def toolchain_environment():
     return environment
 
 
+INSTALL_TIMEOUT_SECONDS = 600.0
+installs = {}
+
+
+def installed_binary(spec, environment):
+    return shutil.which(spec["command"][0], path=environment["PATH"])
+
+
 async def ensure_installed(name):
     spec = LANGUAGE_SERVERS[name]
     environment = toolchain_environment()
-    binary, installer = spec["command"][0], spec["install"][0]
-    if shutil.which(binary, path=environment["PATH"]):
+    if installed_binary(spec, environment):
         return
+    install = installs.get(name)
+    if install is None or install.done():
+        install = installs[name] = asyncio.ensure_future(
+            install_server(spec, environment)
+        )
+    await asyncio.wait_for(asyncio.shield(install), INSTALL_TIMEOUT_SECONDS)
+
+
+async def install_server(spec, environment):
+    binary, installer = spec["command"][0], spec["install"][0]
     if not shutil.which(installer, path=environment["PATH"]):
         raise RuntimeError(
             f"{binary} is missing and {installer} is not installed to fetch it"
         )
+    print(f"installing {binary} with {' '.join(spec['install'])}", file=sys.stderr)
     process = await asyncio.create_subprocess_exec(
         *spec["install"],
         env=environment,
-        stdout=asyncio.subprocess.DEVNULL,
-        stderr=asyncio.subprocess.PIPE,
+        stdin=asyncio.subprocess.DEVNULL,
+        stdout=sys.stderr,
+        stderr=sys.stderr,
     )
-    _, stderr = await process.communicate()
+    await process.wait()
     if process.returncode != 0:
         raise RuntimeError(
-            f"installing {binary} failed: {stderr.decode(errors='replace').strip()[-500:]}"
+            f"{' '.join(spec['install'])} exited with {process.returncode}"
+        )
+    if not installed_binary(spec, environment):
+        raise RuntimeError(
+            f"{' '.join(spec['install'])} finished but {binary} is still not on PATH"
         )

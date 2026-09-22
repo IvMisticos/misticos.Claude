@@ -28,20 +28,24 @@ async def server_for(path):
         raise ValueError(f"no language server for {path.suffix} files")
     key = (name, project_root(name, path))
     starting = starting_servers.get(key)
-    if (
-        starting is not None
-        and starting.done()
-        and (starting.exception() or not starting.result().alive)
-    ):
-        if not starting.exception():
+    if starting is not None and starting.done() and not started_and_alive(starting):
+        if started_ok(starting):
             starting.result().stop()
         starting = None
     if starting is None:
         starting = starting_servers[key] = asyncio.ensure_future(start_server(*key))
-    return await starting
+    return await asyncio.shield(starting)
+
+
+def started_ok(starting):
+    return starting.done() and not starting.cancelled() and starting.exception() is None
+
+
+def started_and_alive(starting):
+    return started_ok(starting) and starting.result().alive
 
 
 def stop_all_servers():
     for starting in starting_servers.values():
-        if starting.done() and not starting.exception():
+        if started_ok(starting):
             starting.result().stop()
