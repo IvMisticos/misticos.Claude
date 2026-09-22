@@ -15,8 +15,20 @@ SEGMENT_SEPARATORS = re.compile(r"&&|\|\||\$?\(|[;&|\n(){}]")
 SHELL_RUNNERS = {"bash", "sh", "zsh", "eval"}
 GUARDED_PROGRAMS = {"gh", "git", *SHELL_RUNNERS}
 IDENTITY_KEYS = ("user.name", "user.email")
-COMMIT_WRITING_SUBCOMMANDS = {"commit", "am", "cherry-pick", "rebase", "revert", "merge"}
-IDENTITY_VARIABLES = ("GIT_AUTHOR_NAME", "GIT_AUTHOR_EMAIL", "GIT_COMMITTER_NAME", "GIT_COMMITTER_EMAIL")
+COMMIT_WRITING_SUBCOMMANDS = {
+    "commit",
+    "am",
+    "cherry-pick",
+    "rebase",
+    "revert",
+    "merge",
+}
+IDENTITY_VARIABLES = (
+    "GIT_AUTHOR_NAME",
+    "GIT_AUTHOR_EMAIL",
+    "GIT_COMMITTER_NAME",
+    "GIT_COMMITTER_EMAIL",
+)
 
 
 def command_words(command):
@@ -47,7 +59,13 @@ def gh_api_method(words):
             method = word.split("=", 1)[1].upper()
         elif word.startswith("-X") and len(word) > 2:
             method = word[2:].upper()
-        elif word in ("-f", "-F", "--field", "--raw-field", "--input") or word.startswith(("--field=", "--raw-field=", "--input=")):
+        elif word in (
+            "-f",
+            "-F",
+            "--field",
+            "--raw-field",
+            "--input",
+        ) or word.startswith(("--field=", "--raw-field=", "--input=")):
             fields_given = True
     if method is None:
         return "POST" if fields_given else "GET"
@@ -103,7 +121,9 @@ def segment_denial(segment):
     if not words:
         return None
     if words[0] in SHELL_RUNNERS:
-        return next((reason for reason in map(denial_reason, words[1:]) if reason), None)
+        return next(
+            (reason for reason in map(denial_reason, words[1:]) if reason), None
+        )
     if is_pull_request_write_through_gh(words):
         return (
             "Merge and create pull requests with the GitHub MCP tools, not gh. "

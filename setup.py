@@ -22,8 +22,23 @@ WEB_GUIDANCE_PLUGIN = "modern-web-guidance@googlechrome"
 CLOUD_SESSION_MARK = "CCR_AGENT_PROXY_ENABLED"
 
 
+TOOLCHAIN_BIN_DIRS = (
+    HOME / ".local" / "bin",
+    HOME / ".bun" / "bin",
+    HOME / ".dotnet" / "tools",
+)
+TOOLCHAIN_PATH = os.pathsep.join(
+    [*map(str, TOOLCHAIN_BIN_DIRS), os.environ.get("PATH", "")]
+)
+
+
 def run(*command):
-    subprocess.run(command, check=True, stdout=sys.stderr)
+    environment = {
+        "DOTNET_ROOT": str(HOME / ".dotnet"),
+        **os.environ,
+        "PATH": TOOLCHAIN_PATH,
+    }
+    subprocess.run(command, check=True, stdout=sys.stderr, env=environment)
 
 
 def run_pipeline(script):
@@ -71,13 +86,28 @@ def configure_codex():
     try:
         config = tomllib.loads(config_path.read_text()) if config_path.exists() else {}
     except tomllib.TOMLDecodeError as error:
-        print(f"setup: leaving {config_path} alone, it does not parse: {error}", file=sys.stderr)
+        print(
+            f"setup: leaving {config_path} alone, it does not parse: {error}",
+            file=sys.stderr,
+        )
         return
     wanted = dict(config)
     wanted.setdefault("personality", "none")
     wanted.setdefault("memories", {"use_memories": False, "generate_memories": False})
     if wanted != config:
         write_atomically(config_path, tomli_w.dumps(wanted))
+
+
+def install_language_servers():
+    def present(tool):
+        return shutil.which(tool, path=TOOLCHAIN_PATH) is not None
+
+    if present("bun") and not present("tsgo"):
+        run("bun", "add", "-g", "@typescript/native-preview")
+    if present("uv") and not present("ty"):
+        run("uv", "tool", "install", "ty")
+    if present("dotnet") and not present("csharp-ls"):
+        run("dotnet", "tool", "install", "-g", "csharp-ls")
 
 
 def install_cloud_tools():
@@ -91,7 +121,9 @@ def install_cloud_tools():
         run_pipeline("curl -fsSL https://bun.sh/install | bash -s canary")
     dotnet = HOME / ".dotnet" / "dotnet"
     if not dotnet.exists():
-        run_pipeline("curl -fsSL https://dot.net/v1/dotnet-install.sh | bash -s -- --channel LTS")
+        run_pipeline(
+            "curl -fsSL https://dot.net/v1/dotnet-install.sh | bash -s -- --channel LTS"
+        )
     local_bin = HOME / ".local" / "bin"
     local_bin.mkdir(parents=True, exist_ok=True)
     dotnet_link = local_bin / "dotnet"
@@ -104,6 +136,7 @@ def main():
     configure_claude_settings()
     configure_codex()
     install_cloud_tools()
+    install_language_servers()
 
 
 if __name__ == "__main__":
