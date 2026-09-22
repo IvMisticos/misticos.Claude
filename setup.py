@@ -98,18 +98,6 @@ def configure_codex():
         write_atomically(config_path, tomli_w.dumps(wanted))
 
 
-def install_language_servers():
-    def present(tool):
-        return shutil.which(tool, path=TOOLCHAIN_PATH) is not None
-
-    if present("bun") and not present("tsgo"):
-        run("bun", "add", "-g", "@typescript/native-preview")
-    if present("uv") and not present("ty"):
-        run("uv", "tool", "install", "ty")
-    if present("dotnet") and not present("csharp-ls"):
-        run("dotnet", "tool", "install", "-g", "csharp-ls")
-
-
 def install_cloud_tools():
     if CLOUD_SESSION_MARK not in os.environ or os.geteuid() != 0:
         return
@@ -136,7 +124,6 @@ def main():
     configure_claude_settings()
     configure_codex()
     install_cloud_tools()
-    install_language_servers()
 
 
 if __name__ == "__main__":

@@ -3,6 +3,7 @@ import asyncio
 from language_servers import (
     LANGUAGE_SERVERS,
     EXTENSION_TO_SERVER,
+    ensure_installed,
     toolchain_environment,
 )
 from lsp_client import LanguageServer
@@ -12,6 +13,7 @@ starting_servers = {}
 
 
 async def start_server(name, root):
+    await ensure_installed(name)
     spec = LANGUAGE_SERVERS[name]
     server = LanguageServer(
         name, spec["command"], spec["extensions"], root, toolchain_environment()
