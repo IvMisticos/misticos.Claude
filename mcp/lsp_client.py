@@ -3,23 +3,12 @@ import json
 import os
 import subprocess
 import sys
-from pathlib import Path
 
 from text_positions import LINE_BREAK, read_text, to_uri, utf16_length
 
-TOOLCHAIN_BIN_DIRS = (".local/bin", ".bun/bin", ".dotnet/tools", ".dotnet")
 QUIET_SECONDS_BEFORE_READY = 2.0
 MAX_STARTUP_SECONDS = 90.0
 REQUEST_TIMEOUT_SECONDS = 60.0
-
-
-def toolchain_environment():
-    home = Path.home()
-    environment = dict(os.environ)
-    bin_dirs = [str(home / directory) for directory in TOOLCHAIN_BIN_DIRS]
-    environment["PATH"] = os.pathsep.join([*bin_dirs, environment.get("PATH", "")])
-    environment.setdefault("DOTNET_ROOT", str(home / ".dotnet"))
-    return environment
 
 
 class LanguageServerExited(RuntimeError):
@@ -27,9 +16,10 @@ class LanguageServerExited(RuntimeError):
 
 
 class LanguageServer:
-    def __init__(self, name, command, language_ids, root):
+    def __init__(self, name, command, language_ids, root, environment):
         self.name = name
         self.command = command
+        self.environment = environment
         self.language_ids = language_ids
         self.root = root
         self.process = None
@@ -51,7 +41,7 @@ class LanguageServer:
         self.process = await asyncio.create_subprocess_exec(
             *self.command,
             cwd=self.root,
-            env=toolchain_environment(),
+            env=self.environment,
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=sys.stderr,
