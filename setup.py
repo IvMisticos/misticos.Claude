@@ -26,6 +26,16 @@ def run(*command):
     subprocess.run(command, check=True, stdout=sys.stderr)
 
 
+def run_pipeline(script):
+    run("bash", "-o", "pipefail", "-c", script)
+
+
+def write_atomically(path, text):
+    staged = path.with_name(path.name + ".installing")
+    staged.write_text(text)
+    os.replace(staged, path)
+
+
 def read_json(path):
     try:
         text = path.read_text()
@@ -42,7 +52,7 @@ def configure_claude_settings():
     wanted["attribution"] = {"commit": "", "pr": "", "sessionUrl": False}
     wanted["autoMemoryEnabled"] = False
     if wanted != settings:
-        settings_path.write_text(json.dumps(wanted, indent=2) + "\n")
+        write_atomically(settings_path, json.dumps(wanted, indent=2) + "\n")
 
 
 def install_web_guidance_plugin():
@@ -58,33 +68,40 @@ def configure_codex():
         return
     CODEX_DIR.mkdir(parents=True, exist_ok=True)
     config_path = CODEX_DIR / "config.toml"
-    config = tomllib.loads(config_path.read_text()) if config_path.exists() else {}
+    try:
+        config = tomllib.loads(config_path.read_text()) if config_path.exists() else {}
+    except tomllib.TOMLDecodeError as error:
+        print(f"setup: leaving {config_path} alone, it does not parse: {error}", file=sys.stderr)
+        return
     wanted = dict(config)
     wanted.setdefault("personality", "none")
     wanted.setdefault("memories", {"use_memories": False, "generate_memories": False})
     if wanted != config:
-        config_path.write_text(tomli_w.dumps(wanted))
+        write_atomically(config_path, tomli_w.dumps(wanted))
 
 
 def install_cloud_tools():
     if CLOUD_SESSION_MARK not in os.environ or os.geteuid() != 0:
         return
-    if shutil.which("git-lfs") is None:
+    packages = ("git-lfs", "curl", "jq", "gh", "unzip")
+    if any(shutil.which(package) is None for package in packages):
         run("apt-get", "update")
-        run("apt-get", "install", "-y", "git-lfs", "curl", "jq", "gh", "unzip")
+        run("apt-get", "install", "-y", *packages)
     if shutil.which("bun") is None and not (HOME / ".bun" / "bin" / "bun").exists():
-        run("bash", "-c", "curl -fsSL https://bun.sh/install | bash -s canary")
+        run_pipeline("curl -fsSL https://bun.sh/install | bash -s canary")
+    dotnet = HOME / ".dotnet" / "dotnet"
+    if not dotnet.exists():
+        run_pipeline("curl -fsSL https://dot.net/v1/dotnet-install.sh | bash -s -- --channel LTS")
     local_bin = HOME / ".local" / "bin"
+    local_bin.mkdir(parents=True, exist_ok=True)
     dotnet_link = local_bin / "dotnet"
-    if not dotnet_link.exists():
-        run("bash", "-c", "curl -fsSL https://dot.net/v1/dotnet-install.sh | bash -s -- --channel LTS")
-        local_bin.mkdir(parents=True, exist_ok=True)
-        dotnet_link.symlink_to(HOME / ".dotnet" / "dotnet")
+    dotnet_link.unlink(missing_ok=True)
+    dotnet_link.symlink_to(dotnet)
 
 
 def main():
-    configure_claude_settings()
     install_web_guidance_plugin()
+    configure_claude_settings()
     configure_codex()
     install_cloud_tools()
 
