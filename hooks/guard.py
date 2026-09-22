@@ -12,9 +12,10 @@ import sys
 OVERRIDE_MARK = "# misticos.Claude.ignore"
 PULL_REQUEST_WRITE_METHODS = {"POST", "PUT"}
 SEGMENT_SEPARATORS = re.compile(r"&&|\|\||\$?\(|[;&|\n(){}]")
-WRAPPER_WORDS = {"(", "{", "!", "if", "then", "else", "do", "command", "env", "exec", "sudo"}
 SHELL_RUNNERS = {"bash", "sh", "zsh", "eval"}
+GUARDED_PROGRAMS = {"gh", "git", *SHELL_RUNNERS}
 IDENTITY_KEYS = ("user.name", "user.email")
+COMMIT_WRITING_SUBCOMMANDS = {"commit", "am", "cherry-pick", "rebase", "revert", "merge"}
 IDENTITY_VARIABLES = ("GIT_AUTHOR_NAME", "GIT_AUTHOR_EMAIL", "GIT_COMMITTER_NAME", "GIT_COMMITTER_EMAIL")
 
 
@@ -29,12 +30,11 @@ def sets_identity_variable(word):
     return "=" in word and word.split("=", 1)[0] in IDENTITY_VARIABLES
 
 
-def without_wrappers(words):
-    while words and (words[0] in WRAPPER_WORDS or re.fullmatch(r"[A-Za-z_]\w*=.*", words[0])):
-        words = words[1:]
-    if words:
-        words = [os.path.basename(words[0]), *words[1:]]
-    return words
+def from_guarded_program(words):
+    for index, word in enumerate(words):
+        if os.path.basename(word) in GUARDED_PROGRAMS:
+            return [os.path.basename(word), *words[index + 1 :]]
+    return []
 
 
 def gh_api_method(words):
@@ -70,7 +70,7 @@ def git_config_writes_identity(words):
     reads = {"--get", "--get-all", "--get-regexp", "--list", "-l", "--show-origin"}
     if any(word in reads for word in after_config):
         return False
-    return any(word in IDENTITY_KEYS for word in after_config)
+    return any(word.lower() in IDENTITY_KEYS for word in after_config)
 
 
 def git_overrides_identity(words):
@@ -78,11 +78,15 @@ def git_overrides_identity(words):
         value = word[2:] if word.startswith("-c") and len(word) > 2 else None
         if word == "-c" and index + 1 < len(words):
             value = words[index + 1]
-        if value and value.split("=", 1)[0] in IDENTITY_KEYS:
+        if value and value.split("=", 1)[0].lower() in IDENTITY_KEYS:
             return True
         if word == "--author" or word.startswith("--author="):
-            return True
+            return writes_a_commit(words)
     return False
+
+
+def writes_a_commit(words):
+    return any(word in COMMIT_WRITING_SUBCOMMANDS for word in words)
 
 
 def sets_git_identity(raw_words, words):
@@ -95,7 +99,7 @@ def sets_git_identity(raw_words, words):
 
 def segment_denial(segment):
     raw_words = command_words(segment.strip())
-    words = without_wrappers(raw_words)
+    words = from_guarded_program(raw_words)
     if not words:
         return None
     if words[0] in SHELL_RUNNERS:
