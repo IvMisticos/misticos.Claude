@@ -143,7 +143,9 @@ def context_tokens_from_size(transcript_path):
 
 
 def payload_tokens(payload):
-    tool_text = json.dumps(payload.get("tool_input")) + str(payload.get("tool_output") or "")
+    tool_text = json.dumps(payload.get("tool_input")) + str(
+        payload.get("tool_output") or ""
+    )
     return len(tool_text) // CHARS_PER_TOKEN_ESTIMATE
 
 
@@ -212,7 +214,10 @@ def fire_id(event, payload):
     if payload.get("tool_use_id"):
         tool_uses.append(str(payload["tool_use_id"]))
     prompt = str(
-        payload.get("prompt_id") or payload.get("turn_id") or payload.get("generation_id") or ""
+        payload.get("prompt_id")
+        or payload.get("turn_id")
+        or payload.get("generation_id")
+        or ""
     )
     if not (prompt or tool_uses):
         return ""
@@ -344,10 +349,14 @@ def growth_reminder(rules, payload, options):
     fire = fire_id(event_name(payload), payload)
     if not fire and options.part > 1:
         return None
-    can_send_whole_copy = len(messages) <= options.entries and (fire or len(messages) == 1)
+    can_send_whole_copy = len(messages) <= options.entries and (
+        fire or len(messages) == 1
+    )
     if options.context_from == "payload":
         added = payload_tokens(payload)
-        action = claim_action_by_payload(session_id, fire, added, bool(can_send_whole_copy))
+        action = claim_action_by_payload(
+            session_id, fire, added, bool(can_send_whole_copy)
+        )
         return message_for_part(action, options.part, messages, rules)
     transcript_path = payload.get("transcript_path")
     if not transcript_path:
@@ -356,7 +365,11 @@ def growth_reminder(rules, payload, options):
     if tokens is None:
         if options.part != 1 or event_name(payload).lower() != "userpromptsubmit":
             return None
-        return pointer_reminder(rules) if transcript_fits_in_tail(transcript_path) else None
+        return (
+            pointer_reminder(rules)
+            if transcript_fits_in_tail(transcript_path)
+            else None
+        )
     action = claim_action(session_id, fire, tokens, bool(can_send_whole_copy))
     return message_for_part(action, options.part, messages, rules)
 
@@ -392,7 +405,9 @@ def reminder_for(event, payload, options):
 def hook_output(event, reminder, shape):
     if shape == "cursor":
         return {"additional_context": reminder}
-    return {"hookSpecificOutput": {"hookEventName": event, "additionalContext": reminder}}
+    return {
+        "hookSpecificOutput": {"hookEventName": event, "additionalContext": reminder}
+    }
 
 
 class QuietArgumentParser(argparse.ArgumentParser):
@@ -405,8 +420,14 @@ def parsed_options(argv):
     parser.add_argument("part", type=int, nargs="?", default=1)
     parser.add_argument("entries", type=int, nargs="?")
     parser.add_argument("--rules", required=True)
-    parser.add_argument("--context-from", choices=("transcript", "size", "payload"), default="transcript")
-    parser.add_argument("--output-shape", choices=("claude", "cursor"), default="claude")
+    parser.add_argument(
+        "--context-from",
+        choices=("transcript", "size", "payload"),
+        default="transcript",
+    )
+    parser.add_argument(
+        "--output-shape", choices=("claude", "cursor"), default="claude"
+    )
     options = parser.parse_args(argv)
     if options.entries is None:
         options.entries = options.part
