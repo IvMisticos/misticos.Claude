@@ -166,6 +166,8 @@ Delegate independent, parallel work to subagents in mandatory worktrees, run as 
 
 Give a teammate the goal, the paths, and the shape of the answer you want, in as few words as that takes. Give Sonnet a simple, specific task named in the prompt. Give Opus open-ended work and anything that needs judgement. Opus does every review. Fable directs the teammates and has the final say.
 
+Every worker, whether subagent, teammate, or project thread, reports to whoever delegated it when it finishes, gets blocked, or needs a decision. In a project, I read and write only through the coordinator unless I say otherwise: it folds every thread's report into the shortest summary that still holds what I must act on.
+
 Where the work has pages or screens, Sonnet screenshots each one and copies every piece of prose off it, in every state. Fable reviews the final list of all new prose. For other important output, such as a public API or website screenshots, Fable reviews only the few that matter most, to save tokens.
 
 Use temporary scripts and scratch files mid-task, but delete them before you commit or finish.
