@@ -112,7 +112,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "uv run \"${CLAUDE_PLUGIN_ROOT}\"/hooks/guard.py"
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/run.sh \"${CLAUDE_PLUGIN_ROOT}\"/hooks/guard.py"
           }
         ]
       }
