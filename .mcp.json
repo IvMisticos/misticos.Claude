@@ -1,8 +1,0 @@
-{
-  "mcpServers": {
-    "code-navigation": {
-      "command": "${CLAUDE_PLUGIN_ROOT}/hooks/run.sh",
-      "args": ["--script", "${CLAUDE_PLUGIN_ROOT}/mcp/code_navigation.py"]
-    }
-  }
-}

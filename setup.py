@@ -22,8 +22,13 @@ WEB_GUIDANCE_PLUGIN = "modern-web-guidance@googlechrome"
 CLOUD_SESSION_MARK = "CCR_AGENT_PROXY_ENABLED"
 
 
+TOOLCHAIN_BIN_DIRS = (HOME / ".local" / "bin", HOME / ".bun" / "bin", HOME / ".dotnet" / "tools")
+TOOLCHAIN_PATH = os.pathsep.join([*map(str, TOOLCHAIN_BIN_DIRS), os.environ.get("PATH", "")])
+
+
 def run(*command):
-    subprocess.run(command, check=True, stdout=sys.stderr)
+    environment = {**os.environ, "PATH": TOOLCHAIN_PATH, "DOTNET_ROOT": str(HOME / ".dotnet")}
+    subprocess.run(command, check=True, stdout=sys.stderr, env=environment)
 
 
 def run_pipeline(script):
@@ -81,13 +86,14 @@ def configure_codex():
 
 
 def install_language_servers():
-    home_bin = [HOME / ".local" / "bin", HOME / ".bun" / "bin", HOME / ".dotnet" / "tools"]
-    path = os.pathsep.join([*map(str, home_bin), os.environ.get("PATH", "")])
-    if shutil.which("bun", path=path) and not shutil.which("tsgo", path=path):
+    def present(tool):
+        return shutil.which(tool, path=TOOLCHAIN_PATH) is not None
+
+    if present("bun") and not present("tsgo"):
         run("bun", "add", "-g", "@typescript/native-preview")
-    if shutil.which("uv", path=path) and not shutil.which("ty", path=path):
+    if present("uv") and not present("ty"):
         run("uv", "tool", "install", "ty")
-    if shutil.which("dotnet", path=path) and not shutil.which("csharp-ls", path=path):
+    if present("dotnet") and not present("csharp-ls"):
         run("dotnet", "tool", "install", "-g", "csharp-ls")
 
 
