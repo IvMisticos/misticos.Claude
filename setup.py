@@ -22,12 +22,22 @@ WEB_GUIDANCE_PLUGIN = "modern-web-guidance@googlechrome"
 CLOUD_SESSION_MARK = "CCR_AGENT_PROXY_ENABLED"
 
 
-TOOLCHAIN_BIN_DIRS = (HOME / ".local" / "bin", HOME / ".bun" / "bin", HOME / ".dotnet" / "tools")
-TOOLCHAIN_PATH = os.pathsep.join([*map(str, TOOLCHAIN_BIN_DIRS), os.environ.get("PATH", "")])
+TOOLCHAIN_BIN_DIRS = (
+    HOME / ".local" / "bin",
+    HOME / ".bun" / "bin",
+    HOME / ".dotnet" / "tools",
+)
+TOOLCHAIN_PATH = os.pathsep.join(
+    [*map(str, TOOLCHAIN_BIN_DIRS), os.environ.get("PATH", "")]
+)
 
 
 def run(*command):
-    environment = {"DOTNET_ROOT": str(HOME / ".dotnet"), **os.environ, "PATH": TOOLCHAIN_PATH}
+    environment = {
+        "DOTNET_ROOT": str(HOME / ".dotnet"),
+        **os.environ,
+        "PATH": TOOLCHAIN_PATH,
+    }
     subprocess.run(command, check=True, stdout=sys.stderr, env=environment)
 
 
@@ -76,7 +86,10 @@ def configure_codex():
     try:
         config = tomllib.loads(config_path.read_text()) if config_path.exists() else {}
     except tomllib.TOMLDecodeError as error:
-        print(f"setup: leaving {config_path} alone, it does not parse: {error}", file=sys.stderr)
+        print(
+            f"setup: leaving {config_path} alone, it does not parse: {error}",
+            file=sys.stderr,
+        )
         return
     wanted = dict(config)
     wanted.setdefault("personality", "none")
@@ -108,7 +121,9 @@ def install_cloud_tools():
         run_pipeline("curl -fsSL https://bun.sh/install | bash -s canary")
     dotnet = HOME / ".dotnet" / "dotnet"
     if not dotnet.exists():
-        run_pipeline("curl -fsSL https://dot.net/v1/dotnet-install.sh | bash -s -- --channel LTS")
+        run_pipeline(
+            "curl -fsSL https://dot.net/v1/dotnet-install.sh | bash -s -- --channel LTS"
+        )
     local_bin = HOME / ".local" / "bin"
     local_bin.mkdir(parents=True, exist_ok=True)
     dotnet_link = local_bin / "dotnet"
