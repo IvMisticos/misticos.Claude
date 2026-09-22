@@ -19,7 +19,6 @@ CLAUDE_DIR = HOME / ".claude"
 CODEX_DIR = HOME / ".codex"
 INSTALLED_PLUGINS = CLAUDE_DIR / "plugins" / "installed_plugins.json"
 WEB_GUIDANCE_PLUGIN = "modern-web-guidance@googlechrome"
-OLD_REMINDER_COMMAND = "~/.claude/reminder.py"
 CLOUD_SESSION_MARK = "CCR_AGENT_PROXY_ENABLED"
 
 
@@ -35,23 +34,6 @@ def read_json(path):
     return json.loads(text) if text.strip() else {}
 
 
-def without_old_reminder(hooks):
-    kept = {}
-    for event, groups in hooks.items():
-        kept_groups = []
-        for group in groups:
-            entries = [
-                entry
-                for entry in group.get("hooks", [])
-                if not str(entry.get("command", "")).startswith(OLD_REMINDER_COMMAND)
-            ]
-            if entries:
-                kept_groups.append({**group, "hooks": entries})
-        if kept_groups:
-            kept[event] = kept_groups
-    return kept
-
-
 def configure_claude_settings():
     CLAUDE_DIR.mkdir(parents=True, exist_ok=True)
     settings_path = CLAUDE_DIR / "settings.json"
@@ -59,8 +41,6 @@ def configure_claude_settings():
     wanted = dict(settings)
     wanted["attribution"] = {"commit": "", "pr": "", "sessionUrl": False}
     wanted["autoMemoryEnabled"] = False
-    wanted.pop("outputStyle", None)
-    wanted["hooks"] = without_old_reminder(settings.get("hooks") or {})
     if wanted != settings:
         settings_path.write_text(json.dumps(wanted, indent=2) + "\n")
 
