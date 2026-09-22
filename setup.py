@@ -80,6 +80,17 @@ def configure_codex():
         write_atomically(config_path, tomli_w.dumps(wanted))
 
 
+def install_language_servers():
+    home_bin = [HOME / ".local" / "bin", HOME / ".bun" / "bin", HOME / ".dotnet" / "tools"]
+    path = os.pathsep.join([*map(str, home_bin), os.environ.get("PATH", "")])
+    if shutil.which("bun", path=path) and not shutil.which("tsgo", path=path):
+        run("bun", "add", "-g", "@typescript/native-preview")
+    if shutil.which("uv", path=path) and not shutil.which("ty", path=path):
+        run("uv", "tool", "install", "ty")
+    if shutil.which("dotnet", path=path) and not shutil.which("csharp-ls", path=path):
+        run("dotnet", "tool", "install", "-g", "csharp-ls")
+
+
 def install_cloud_tools():
     if CLOUD_SESSION_MARK not in os.environ or os.geteuid() != 0:
         return
@@ -104,6 +115,7 @@ def main():
     configure_claude_settings()
     configure_codex()
     install_cloud_tools()
+    install_language_servers()
 
 
 if __name__ == "__main__":
