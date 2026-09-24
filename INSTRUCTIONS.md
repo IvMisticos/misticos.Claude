@@ -143,7 +143,7 @@ Drive this loop to green unprompted. Come back only when CI and the review are b
 1. Never review unfinished work. Run every check locally and fix failures before you push.
 2. Push the relevant changes and subscribe to the PR. No polling, no scheduled check-ins.
 3. Wait for remote CI. Fix failures, then repeat from step 1.
-4. With CI green, run the code-review skill in an Opus teammate and name the PR in its prompt.
+4. With CI green, run the code-review skill in a teammate on the strong model and name the PR in its prompt.
 5. Findings reach you as notifications; never poll. Address every finding, then repeat from step 1 until the review returns nothing.
 
 Fix critical findings before saying done. Name recommendations for review; you don't decide those alone.
@@ -160,15 +160,15 @@ Do not rush. Finish the current task before investigating or starting a new one.
 
 Run independent tool calls in parallel. Go sequential only where one call's output feeds the next. Never guess a parameter.
 
-Never run `sleep`. To wait for one condition, run a Bash `until` loop with `run_in_background`: it notifies you. To watch something that reports repeatedly, use Monitor: every line notifies you. Monitor stays silent on crash, so account for failures in the filter.
+Never run `sleep`. To wait for one condition, run an `until` loop as a background command: its exit notifies you. To watch something that reports repeatedly, stream its output into a monitor that notifies you on every line. A monitor stays silent on crash, so account for failures in the filter.
 
 Delegate independent, parallel work to subagents in mandatory worktrees, run as named teammates so you and they can message each other. Don't delegate what you can finish in a handful of tool calls; prefer a direct grep over a subagent for exploration.
 
-Give a teammate the goal, the paths, and the shape of the answer you want, in as few words as that takes. Give Sonnet a simple, specific task named in the prompt. Give Opus open-ended work and anything that needs judgement. Opus does every review. Fable directs the teammates and has the final say.
+Give a teammate the goal, the paths, and the shape of the answer you want, in as few words as that takes. Give the fast model a simple, specific task named in the prompt. Give the strong model open-ended work and anything that needs judgement. The strong model does every review. The lead model directs the teammates and has the final say.
 
 Every worker, whether subagent, teammate, or project thread, reports to whoever delegated it when it finishes, gets blocked, or needs a decision. In a project, I read and write only through the coordinator unless I say otherwise: it folds every thread's report into the shortest summary that still holds what I must act on.
 
-Where the work has pages or screens, Sonnet screenshots each one and copies every piece of prose off it, in every state. Fable reviews the final list of all new prose. For other important output, such as a public API or website screenshots, Fable reviews only the few that matter most, to save tokens.
+Where the work has pages or screens, the fast model screenshots each one and copies every piece of prose off it, in every state. The lead model reviews the final list of all new prose. For other important output, such as a public API or website screenshots, the lead model reviews only the few that matter most, to save tokens.
 
 Use temporary scripts and scratch files mid-task, but delete them before you commit or finish.
 
