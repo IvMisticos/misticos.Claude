@@ -51,6 +51,7 @@ LATER_PART_PREAMBLE = (
     "{name} continues here, part {number} of {total}. It overrides your "
     "defaults. Follow it at all times."
 )
+MODEL_TIER = re.compile(r"\bthe (fast|strong|lead) model\b", re.IGNORECASE)
 BLOCK_BREAKS = (r"(?=\n\n# )", r"(?=\n\n)", r"(?=\n)")
 IDLE = ""
 POINTER = "pointer"
@@ -59,12 +60,19 @@ COPY = "copy"
 Baselines = collections.namedtuple(
     "Baselines", "pointed_at copied_at fire action seen", defaults=(0,)
 )
-Rules = collections.namedtuple("Rules", "path name")
+Rules = collections.namedtuple("Rules", "path name model_names")
 
 
-def rules_at(path):
+def rules_at(path, model_names):
     expanded = os.path.expanduser(path)
-    return Rules(expanded, os.path.basename(expanded))
+    return Rules(expanded, os.path.basename(expanded), model_names)
+
+
+def with_model_names(text, model_names):
+    def named(match):
+        return model_names.get(match[1].lower()) or match[0]
+
+    return MODEL_TIER.sub(named, text)
 
 
 def pointer_reminder(rules):
@@ -189,7 +197,7 @@ def part_messages(text, budget, name, first_preamble):
 def full_copy_messages(rules, first_preamble):
     try:
         with open(rules.path, encoding="utf-8", errors="replace") as rules_file:
-            text = rules_file.read().strip()
+            text = with_model_names(rules_file.read().strip(), rules.model_names)
     except OSError as error:
         print(f"reminder: cannot read rules: {error}", file=sys.stderr)
         return ()
@@ -394,7 +402,12 @@ def session_start_reminder(rules, payload, options):
 
 
 def reminder_for(event, payload, options):
-    rules = rules_at(options.rules)
+    model_names = {
+        "fast": options.fast_model,
+        "strong": options.strong_model,
+        "lead": options.lead_model,
+    }
+    rules = rules_at(options.rules, model_names)
     if event.lower() in ("sessionstart", "subagentstart"):
         return session_start_reminder(rules, payload, options)
     if payload.get("agent_id") or payload.get("subagent_id"):
@@ -420,6 +433,9 @@ def parsed_options(argv):
     parser.add_argument("part", type=int, nargs="?", default=1)
     parser.add_argument("entries", type=int, nargs="?")
     parser.add_argument("--rules", required=True)
+    parser.add_argument("--fast-model")
+    parser.add_argument("--strong-model")
+    parser.add_argument("--lead-model")
     parser.add_argument(
         "--context-from",
         choices=("transcript", "size", "payload"),
