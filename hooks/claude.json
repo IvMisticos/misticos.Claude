@@ -5,19 +5,19 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/run.sh \"${CLAUDE_PLUGIN_ROOT}\"/hooks/reminder.py 1 4 --rules \"${CLAUDE_PLUGIN_ROOT}/CLAUDE.md\" --fast-model Sonnet --strong-model Opus --lead-model Fable"
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/run.sh \"${CLAUDE_PLUGIN_ROOT}\"/hooks/reminder.py 1 4 --rules \"${CLAUDE_PLUGIN_ROOT}/INSTRUCTIONS.md\" --fast-model Sonnet --strong-model Opus --lead-model Fable"
           },
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/run.sh \"${CLAUDE_PLUGIN_ROOT}\"/hooks/reminder.py 2 4 --rules \"${CLAUDE_PLUGIN_ROOT}/CLAUDE.md\" --fast-model Sonnet --strong-model Opus --lead-model Fable"
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/run.sh \"${CLAUDE_PLUGIN_ROOT}\"/hooks/reminder.py 2 4 --rules \"${CLAUDE_PLUGIN_ROOT}/INSTRUCTIONS.md\" --fast-model Sonnet --strong-model Opus --lead-model Fable"
           },
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/run.sh \"${CLAUDE_PLUGIN_ROOT}\"/hooks/reminder.py 3 4 --rules \"${CLAUDE_PLUGIN_ROOT}/CLAUDE.md\" --fast-model Sonnet --strong-model Opus --lead-model Fable"
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/run.sh \"${CLAUDE_PLUGIN_ROOT}\"/hooks/reminder.py 3 4 --rules \"${CLAUDE_PLUGIN_ROOT}/INSTRUCTIONS.md\" --fast-model Sonnet --strong-model Opus --lead-model Fable"
           },
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/run.sh \"${CLAUDE_PLUGIN_ROOT}\"/hooks/reminder.py 4 4 --rules \"${CLAUDE_PLUGIN_ROOT}/CLAUDE.md\" --fast-model Sonnet --strong-model Opus --lead-model Fable"
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/run.sh \"${CLAUDE_PLUGIN_ROOT}\"/hooks/reminder.py 4 4 --rules \"${CLAUDE_PLUGIN_ROOT}/INSTRUCTIONS.md\" --fast-model Sonnet --strong-model Opus --lead-model Fable"
           }
         ]
       },
@@ -45,19 +45,19 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/run.sh \"${CLAUDE_PLUGIN_ROOT}\"/hooks/reminder.py 1 4 --rules \"${CLAUDE_PLUGIN_ROOT}/CLAUDE.md\" --fast-model Sonnet --strong-model Opus --lead-model Fable"
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/run.sh \"${CLAUDE_PLUGIN_ROOT}\"/hooks/reminder.py 1 4 --rules \"${CLAUDE_PLUGIN_ROOT}/INSTRUCTIONS.md\" --fast-model Sonnet --strong-model Opus --lead-model Fable"
           },
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/run.sh \"${CLAUDE_PLUGIN_ROOT}\"/hooks/reminder.py 2 4 --rules \"${CLAUDE_PLUGIN_ROOT}/CLAUDE.md\" --fast-model Sonnet --strong-model Opus --lead-model Fable"
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/run.sh \"${CLAUDE_PLUGIN_ROOT}\"/hooks/reminder.py 2 4 --rules \"${CLAUDE_PLUGIN_ROOT}/INSTRUCTIONS.md\" --fast-model Sonnet --strong-model Opus --lead-model Fable"
           },
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/run.sh \"${CLAUDE_PLUGIN_ROOT}\"/hooks/reminder.py 3 4 --rules \"${CLAUDE_PLUGIN_ROOT}/CLAUDE.md\" --fast-model Sonnet --strong-model Opus --lead-model Fable"
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/run.sh \"${CLAUDE_PLUGIN_ROOT}\"/hooks/reminder.py 3 4 --rules \"${CLAUDE_PLUGIN_ROOT}/INSTRUCTIONS.md\" --fast-model Sonnet --strong-model Opus --lead-model Fable"
           },
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/run.sh \"${CLAUDE_PLUGIN_ROOT}\"/hooks/reminder.py 4 4 --rules \"${CLAUDE_PLUGIN_ROOT}/CLAUDE.md\" --fast-model Sonnet --strong-model Opus --lead-model Fable"
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/run.sh \"${CLAUDE_PLUGIN_ROOT}\"/hooks/reminder.py 4 4 --rules \"${CLAUDE_PLUGIN_ROOT}/INSTRUCTIONS.md\" --fast-model Sonnet --strong-model Opus --lead-model Fable"
           }
         ]
       }
@@ -67,19 +67,19 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/run.sh \"${CLAUDE_PLUGIN_ROOT}\"/hooks/reminder.py 1 4 --rules \"${CLAUDE_PLUGIN_ROOT}/CLAUDE.md\" --fast-model Sonnet --strong-model Opus --lead-model Fable"
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/run.sh \"${CLAUDE_PLUGIN_ROOT}\"/hooks/reminder.py 1 4 --rules \"${CLAUDE_PLUGIN_ROOT}/INSTRUCTIONS.md\" --fast-model Sonnet --strong-model Opus --lead-model Fable"
           },
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/run.sh \"${CLAUDE_PLUGIN_ROOT}\"/hooks/reminder.py 2 4 --rules \"${CLAUDE_PLUGIN_ROOT}/CLAUDE.md\" --fast-model Sonnet --strong-model Opus --lead-model Fable"
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/run.sh \"${CLAUDE_PLUGIN_ROOT}\"/hooks/reminder.py 2 4 --rules \"${CLAUDE_PLUGIN_ROOT}/INSTRUCTIONS.md\" --fast-model Sonnet --strong-model Opus --lead-model Fable"
           },
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/run.sh \"${CLAUDE_PLUGIN_ROOT}\"/hooks/reminder.py 3 4 --rules \"${CLAUDE_PLUGIN_ROOT}/CLAUDE.md\" --fast-model Sonnet --strong-model Opus --lead-model Fable"
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/run.sh \"${CLAUDE_PLUGIN_ROOT}\"/hooks/reminder.py 3 4 --rules \"${CLAUDE_PLUGIN_ROOT}/INSTRUCTIONS.md\" --fast-model Sonnet --strong-model Opus --lead-model Fable"
           },
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/run.sh \"${CLAUDE_PLUGIN_ROOT}\"/hooks/reminder.py 4 4 --rules \"${CLAUDE_PLUGIN_ROOT}/CLAUDE.md\" --fast-model Sonnet --strong-model Opus --lead-model Fable"
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/run.sh \"${CLAUDE_PLUGIN_ROOT}\"/hooks/reminder.py 4 4 --rules \"${CLAUDE_PLUGIN_ROOT}/INSTRUCTIONS.md\" --fast-model Sonnet --strong-model Opus --lead-model Fable"
           }
         ]
       }
@@ -89,19 +89,19 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/run.sh \"${CLAUDE_PLUGIN_ROOT}\"/hooks/reminder.py 1 4 --rules \"${CLAUDE_PLUGIN_ROOT}/CLAUDE.md\" --fast-model Sonnet --strong-model Opus --lead-model Fable"
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/run.sh \"${CLAUDE_PLUGIN_ROOT}\"/hooks/reminder.py 1 4 --rules \"${CLAUDE_PLUGIN_ROOT}/INSTRUCTIONS.md\" --fast-model Sonnet --strong-model Opus --lead-model Fable"
           },
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/run.sh \"${CLAUDE_PLUGIN_ROOT}\"/hooks/reminder.py 2 4 --rules \"${CLAUDE_PLUGIN_ROOT}/CLAUDE.md\" --fast-model Sonnet --strong-model Opus --lead-model Fable"
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/run.sh \"${CLAUDE_PLUGIN_ROOT}\"/hooks/reminder.py 2 4 --rules \"${CLAUDE_PLUGIN_ROOT}/INSTRUCTIONS.md\" --fast-model Sonnet --strong-model Opus --lead-model Fable"
           },
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/run.sh \"${CLAUDE_PLUGIN_ROOT}\"/hooks/reminder.py 3 4 --rules \"${CLAUDE_PLUGIN_ROOT}/CLAUDE.md\" --fast-model Sonnet --strong-model Opus --lead-model Fable"
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/run.sh \"${CLAUDE_PLUGIN_ROOT}\"/hooks/reminder.py 3 4 --rules \"${CLAUDE_PLUGIN_ROOT}/INSTRUCTIONS.md\" --fast-model Sonnet --strong-model Opus --lead-model Fable"
           },
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/run.sh \"${CLAUDE_PLUGIN_ROOT}\"/hooks/reminder.py 4 4 --rules \"${CLAUDE_PLUGIN_ROOT}/CLAUDE.md\" --fast-model Sonnet --strong-model Opus --lead-model Fable"
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/run.sh \"${CLAUDE_PLUGIN_ROOT}\"/hooks/reminder.py 4 4 --rules \"${CLAUDE_PLUGIN_ROOT}/INSTRUCTIONS.md\" --fast-model Sonnet --strong-model Opus --lead-model Fable"
           }
         ]
       }
