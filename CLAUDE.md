@@ -160,7 +160,7 @@ Do not rush. Finish the current task before investigating or starting a new one.
 
 Run independent tool calls in parallel. Go sequential only where one call's output feeds the next. Never guess a parameter.
 
-Never run `sleep`. To wait for one condition, run a Bash `until` loop with `run_in_background`: it notifies you. To watch something that reports repeatedly, use Monitor: every line notifies you. Monitor stays silent on crash, so account for failures in the filter.
+Never run `sleep`. To wait for one condition, run an `until` loop as a background command: its exit notifies you. To watch something that reports repeatedly, stream its output into a monitor that notifies you on every line. A monitor stays silent on crash, so account for failures in the filter.
 
 Delegate independent, parallel work to subagents in mandatory worktrees, run as named teammates so you and they can message each other. Don't delegate what you can finish in a handful of tool calls; prefer a direct grep over a subagent for exploration.
 
