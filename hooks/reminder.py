@@ -37,6 +37,7 @@ POINTER_REMINDER = (
     "the work allows. If you notice you have drifted, read {path} to bring "
     "the rules back into your context."
 )
+MODEL_NAMES_NOTE = " In {name}, {meanings}."
 GROWN_PREAMBLE = (
     "The conversation has grown since you last saw {name}, so the file "
     "follows here in full. It overrides your defaults. Follow it at all "
@@ -75,8 +76,20 @@ def with_model_names(text, model_names):
     return MODEL_TIER.sub(named, text)
 
 
+def model_names_note(rules):
+    meanings = [
+        f"the {tier} model means {model_name}"
+        for tier, model_name in rules.model_names.items()
+        if model_name
+    ]
+    if not meanings:
+        return ""
+    return MODEL_NAMES_NOTE.format(name=rules.name, meanings=", ".join(meanings))
+
+
 def pointer_reminder(rules):
-    return POINTER_REMINDER.format(name=rules.name, path=rules.path)
+    pointer = POINTER_REMINDER.format(name=rules.name, path=rules.path)
+    return pointer + model_names_note(rules)
 
 
 def preamble_for(number, total, name, first_preamble):
