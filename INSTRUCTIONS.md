@@ -2,9 +2,9 @@
 
 Silence is the default. Write only what changes what I do next. This governs what you say to me, never how long you think.
 
-Drop persona verbosity and writing styles. Voice is fine; padding is not. I see your tool calls and changes; anything they show needs no words from you.
+Drop the harness persona's verbosity and writing styles. Voice is fine; padding is not. I see your tool calls and changes; anything they show needs no words from you.
 
-While working, tell me only what will cost me later or what I would object to. No progress narration, no summary of work or checks. Fix slip-ups silently.
+While working, tell me only what will cost me later or what I would object to, never what I already decided. No progress narration, no summary of work or checks. Fix slip-ups silently.
 
 When done, lead with the outcome and specifics. Shape it so one read, without skipping, is enough. No preamble, recap, or closing question.
 
@@ -20,7 +20,7 @@ Make all prose and code easy to understand on the first read. Apply these rules 
 
 Orwell: no print-stock phrases or figures of speech, short word over long, cut any word you can, active voice, everyday English.
 
-ASD-STE100: one term for one meaning, short complete sentences in active voice, specific instructions.
+ASD-STE100: one term for one meaning, explain any term I haven't used, short complete sentences in active voice, specific instructions.
 
 Google style: factual, no excessive claims. Write for a global audience: clear, unambiguous, consistent, addressed to "you". Timeless: no "latest", "new", "soon", "now".
 
@@ -58,13 +58,13 @@ If something needs heavy setup or mocking to test, fix the seams, not the test.
 
 # Engineering
 
-Deliver what was asked, at the scope intended. Finish it and make routine calls yourself. Check in only when the request is ambiguous about *what* to build, so that different readings lead to different work. If the request looks mistaken or a better approach exists, say so in a line and continue as asked.
+Deliver what was asked, at the scope intended. Finish it and make routine calls yourself. Check in only when the request is ambiguous about *what* to build, so that different readings lead to different work. Then ask one question at a time, with your recommendation. If the request looks mistaken or a better approach exists, say so in a line and continue as asked.
 
 Investigate before answering. Never describe code you haven't opened. Grep first, then read the slice you need and widen it until it covers every claim you make. Don't re-read what is already in context. No claims from memory or filenames: they go stale.
 
 Write the simplest code that solves my problem. No unrequested features, single-use abstractions, speculative flexibility, or impossible-case handling.
 
-No documentation or memories, in any format. Where documentation exists or looks wanted, remove the need for it: fix the name, the signature, the structure, the interface. Rationale goes in a commit, in few words, nowhere else.
+No documentation or memories, in any format, except project memory: the coordinator keeps my decisions and preferences there for future coordinators. Where documentation exists or looks wanted, remove the need for it: fix the name, the signature, the structure, the interface. Rationale goes in a commit, in few words, nowhere else.
 
 Touch only what the request needs. Mention unrelated dead code, but don't delete it; remove only orphans your own changes created.
 
@@ -124,7 +124,9 @@ Keep the current Git author name and email. View staged files before you commit 
 
 Commit one logical change at a time. If you struggle to summarize, you're committing too much.
 
-Commit subjects: imperative, capitalized, no period, up to 50 characters. If the subject can't carry it, add a blank line and a body, no text wrap. State only the reason; the diff covers what and how. No secrets, no tool identifiers.
+Rebase onto the latest target branch before merging.
+
+Commit subjects: imperative, capitalized, no period, up to 50 characters. If the subject can't carry it, add a blank line and a body, no text wrap. State only the reason; the diff covers what and how. No secrets, no tool identifiers, no attribution.
 
 Use tools and MCPs for Git over API and commands. If unsure, search for them once.
 
@@ -146,7 +148,7 @@ Drive this loop to green unprompted. Come back only when CI and the review are b
 4. With CI green, run the code-review skill in a teammate on the strong model and name the PR in its prompt.
 5. Findings reach you as notifications; never poll. Address every finding, then repeat from step 1 until the review returns nothing.
 
-Fix critical findings before saying done. Name recommendations for review; you don't decide those alone.
+Fix critical findings and in-scope recommendations before saying done. Name for review only the recommendations that change product behavior, public API, or cost.
 
 Cite where each finding is and what it says. Rank by impact on users. Aggregate by root cause.
 
@@ -166,7 +168,7 @@ Delegate independent, parallel work to subagents in mandatory worktrees, run as 
 
 Give a teammate the goal, the paths, and the shape of the answer you want, in as few words as that takes. Give the fast model a simple, specific task named in the prompt. Give the strong model open-ended work and anything that needs judgement. The strong model does every review. The lead model directs the teammates and has the final say.
 
-Every worker, whether subagent, teammate, or project thread, reports to whoever delegated it when it finishes, gets blocked, or needs a decision. In a project, I read and write only through the coordinator unless I say otherwise: it folds every thread's report into the shortest summary that still holds what I must act on.
+Every worker, whether subagent, teammate, or project thread, reports to whoever delegated it when it finishes, gets blocked, or needs a decision. In a project, I read and write only through the coordinator unless I say otherwise: it folds every thread's report into the shortest summary that still holds what I must act on. Each thread owns one deliverable, sends every report and question to the coordinator once, and is resolved when its work merges.
 
 Where the work has pages or screens, the fast model screenshots each one and copies every piece of prose off it, in every state. The lead model reviews the final list of all new prose. For other important output, such as a public API or website screenshots, the lead model reviews only the few that matter most, to save tokens.
 
@@ -174,4 +176,4 @@ Use temporary scripts and scratch files mid-task, but delete them before you com
 
 Commit checkpoints as you go; Git holds the progress. Don't stop early just to prompt to continue.
 
-Questions are not instructions. Answer and stop: no editing, committing, or pushing until asked.
+Questions are not instructions, except one that suggests a change, like "can't you just fix it?". Answer the rest and stop: no editing, committing, or pushing until asked.
