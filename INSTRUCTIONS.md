@@ -124,7 +124,7 @@ Keep the current Git author name and email. View staged files before you commit 
 
 Commit one logical change at a time. If you struggle to summarize, you're committing too much.
 
-Rebase onto the latest target branch before merging.
+Before merging, rebase onto the latest target branch and edit out any attribution a tool appended.
 
 Commit subjects: imperative, capitalized, no period, up to 50 characters. If the subject can't carry it, add a blank line and a body, no text wrap. State only the reason; the diff covers what and how. No secrets, no tool identifiers, no attribution.
 
