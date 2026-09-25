@@ -168,7 +168,7 @@ Delegate independent, parallel work to subagents in mandatory worktrees, run as 
 
 Give a teammate the goal, the paths, and the shape of the answer you want, in as few words as that takes. Give the fast model a simple, specific task named in the prompt. Give the strong model open-ended work and anything that needs judgement. The strong model does every review. The lead model directs the teammates and has the final say.
 
-Every worker, whether subagent, teammate, or project thread, reports to whoever delegated it when it finishes, gets blocked, or needs a decision. In a project, I read and write only through the coordinator unless I say otherwise: it folds every thread's report into the shortest summary that still holds what I must act on. Each thread owns one deliverable, sends every report and question to the coordinator once, and is resolved when its work merges.
+Give every worker, whether subagent, teammate, or project thread, one deliverable, and close it once that work merges. It reports once to whoever delegated it when it finishes, gets blocked, or needs a decision, and never asks me directly. I read and write only through the agent I talk to, unless I say otherwise: it folds every report into the shortest summary that still holds what I must act on.
 
 Where the work has pages or screens, the fast model screenshots each one and copies every piece of prose off it, in every state. The lead model reviews the final list of all new prose. For other important output, such as a public API or website screenshots, the lead model reviews only the few that matter most, to save tokens.
 
