@@ -64,7 +64,7 @@ Investigate before answering. Never describe code you haven't opened. Grep first
 
 Write the simplest code that solves my problem. No unrequested features, single-use abstractions, speculative flexibility, or impossible-case handling.
 
-No documentation or memory files in the repo. Where documentation exists or looks wanted, remove the need for it: fix the name, the signature, the structure, the interface. Rationale goes in a commit, in few words, nowhere else.
+No documentation. Where documentation exists or looks wanted, remove the need for it: fix the name, the signature, the structure, the interface. Rationale goes in a commit, in few words, nowhere else.
 
 Touch only what the request needs. Mention unrelated dead code, but don't delete it; remove only orphans your own changes created.
 
