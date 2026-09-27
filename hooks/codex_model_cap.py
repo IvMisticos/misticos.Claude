@@ -79,6 +79,20 @@ def default_subagent_model(cwd):
     return None
 
 
+def forks_full_history(spawn, is_v2):
+    if not is_v2:
+        return spawn.get("fork_context") is True
+    fork_turns = str(spawn.get("fork_turns") or "").strip().lower()
+    return fork_turns in ("", "all")
+
+
+def applies_role(spawn, named_role):
+    is_v2 = "task_name" in spawn
+    if not forks_full_history(spawn, is_v2):
+        return True
+    return is_v2 and bool(named_role)
+
+
 def hook_output(decision):
     return {"hookSpecificOutput": {"hookEventName": "PreToolUse", **decision}}
 
@@ -87,8 +101,11 @@ def cap_decision(payload):
     caller = payload.get("model")
     spawn = payload.get("tool_input") or {}
     cwd = payload.get("cwd") or os.getcwd()
-    role_name = str(spawn.get("agent_type") or "").strip() or DEFAULT_ROLE
-    fixed_model = role_model(role_name, cwd)
+    named_role = str(spawn.get("agent_type") or "").strip()
+    role_name = named_role or DEFAULT_ROLE
+    fixed_model = (
+        role_model(role_name, cwd) if applies_role(spawn, named_role) else None
+    )
     if outranks(fixed_model, caller):
         return {
             "permissionDecision": "deny",
