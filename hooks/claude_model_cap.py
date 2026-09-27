@@ -102,10 +102,8 @@ def wanted_agent_model(definition, caller):
     return caller if model == INHERIT else model
 
 
-def forced_decision(main_model, caller):
-    forced_model = os.environ.get("CLAUDE_CODE_SUBAGENT_MODEL") or INHERIT
-    if forced_model == INHERIT:
-        forced_model = main_model
+def forced_decision(caller):
+    forced_model = os.environ.get("CLAUDE_CODE_SUBAGENT_MODEL")
     if not outranks(forced_model, caller):
         return None
     return {
@@ -117,10 +115,10 @@ def forced_decision(main_model, caller):
     }
 
 
-def agent_decision(tool_input, cwd, main_model, caller):
+def agent_decision(tool_input, cwd, caller):
     force_flag = os.environ.get("CLAUDE_CODE_SUBAGENT_MODEL_FORCE", "")
     if force_flag.strip().lower() in TRUTHY_FLAGS:
-        return forced_decision(main_model, caller)
+        return forced_decision(caller)
     requested_model = tool_input.get("model")
     if requested_model:
         if not outranks(requested_model, caller):
@@ -149,7 +147,7 @@ def cap_decision(payload):
         return None
     if payload.get("tool_name") in ("Agent", "Task"):
         cwd = payload.get("cwd") or os.getcwd()
-        return agent_decision(tool_input, cwd, main_model, caller)
+        return agent_decision(tool_input, cwd, caller)
     return session_decision(tool_input, main_model, caller)
 
 
