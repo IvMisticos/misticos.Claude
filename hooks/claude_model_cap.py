@@ -7,10 +7,11 @@ import glob
 import json
 import os
 import sys
+from pathlib import Path
 
 from model_tiers import outranks, tier_name, tier_rank
 
-AGENT_DEFINITION_DIRS = ("{cwd}/.claude/agents", "~/.claude/agents")
+PLUGIN_CACHE = "~/.claude/plugins/cache"
 INHERIT = "inherit"
 
 
@@ -53,32 +54,50 @@ def caller_model(payload, main_model):
     return latest_model(transcript_path, include_sidechains=True)
 
 
-def frontmatter_model(definition_path):
+def frontmatter(definition_path):
     try:
         with open(definition_path, encoding="utf-8") as definition:
             lines = definition.read().splitlines()
     except OSError:
-        return None
+        return {}
     if lines[:1] != ["---"]:
-        return None
+        return {}
+    fields = {}
     for line in lines[1:]:
         if line == "---":
-            return None
+            return fields
         key, _, value = line.partition(":")
-        if key.strip() == "model":
-            return value.strip().strip("\"'")
-    return None
+        fields[key.strip()] = value.strip().strip("\"'")
+    return {}
+
+
+def agent_dirs(cwd):
+    project_dirs = [folder / ".claude" / "agents" for folder in (cwd, *cwd.parents)]
+    return [*project_dirs, Path("~/.claude/agents").expanduser()]
+
+
+def plugin_agent_dirs(plugin):
+    pattern = os.path.join(os.path.expanduser(PLUGIN_CACHE), "*", plugin, "*", "agents")
+    return map(Path, glob.glob(pattern))
+
+
+def definitions_named(name, directories):
+    for directory in directories:
+        for path in sorted(directory.glob("**/*.md")):
+            fields = frontmatter(path)
+            if fields.get("name") == name:
+                yield fields
 
 
 def definition_model(subagent_type, cwd):
     if os.environ.get("CLAUDE_CODE_SUBAGENT_MODEL_FORCE") == "1":
         return None
-    for directory in AGENT_DEFINITION_DIRS:
-        path = os.path.expanduser(directory.format(cwd=cwd))
-        model = frontmatter_model(os.path.join(path, f"{subagent_type}.md"))
-        if model:
-            return model
-    return None
+    plugin, _, plugin_agent = str(subagent_type).rpartition(":")
+    if plugin:
+        definitions = definitions_named(plugin_agent, plugin_agent_dirs(plugin))
+    else:
+        definitions = definitions_named(subagent_type, agent_dirs(Path(cwd)))
+    return next(definitions, {}).get("model")
 
 
 def resolved_agent_model(tool_input, cwd, main_model):
@@ -96,10 +115,12 @@ def capped_input(payload):
     main_model = latest_model(payload.get("transcript_path") or "")
     caller = caller_model(payload, main_model)
     if payload.get("tool_name") in ("Agent", "Task"):
-        requested = resolved_agent_model(tool_input, payload.get("cwd"), main_model)
+        requested = resolved_agent_model(
+            tool_input, payload.get("cwd") or os.getcwd(), main_model
+        )
         capped = tier_name(caller)
     else:
-        requested = tool_input.get("model")
+        requested = tool_input.get("model") or main_model
         capped = caller
     if not outranks(requested, caller):
         return None

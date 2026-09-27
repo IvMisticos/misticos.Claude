@@ -4,8 +4,8 @@ TIER_LEVELS = (
     {"haiku"},
     {"sonnet", "luna"},
     {"terra"},
-    {"opus", "sol"},
-    {"fable", "astra"},
+    {"opus", "opusplan", "sol"},
+    {"fable", "best", "astra"},
 )
 
 
