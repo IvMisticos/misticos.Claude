@@ -156,10 +156,10 @@ def claude_alias(model):
     return next((alias for alias in CLAUDE_ALIASES if tier_rank(alias) == rank), None)
 
 
-def wanted_agent_model(definition, main_model):
+def wanted_agent_model(definition, caller):
     if definition == INHERIT:
-        return main_model
-    return definition or os.environ.get("CLAUDE_CODE_SUBAGENT_MODEL") or main_model
+        return caller
+    return definition or os.environ.get("CLAUDE_CODE_SUBAGENT_MODEL") or caller
 
 
 def is_forced():
@@ -177,7 +177,7 @@ def forced_model_denial(forced_model, caller):
     }
 
 
-def agent_decision(tool_input, cwd, main_model, caller):
+def agent_decision(tool_input, cwd, caller):
     if is_forced():
         forced_model = os.environ.get("CLAUDE_CODE_SUBAGENT_MODEL")
         if outranks(forced_model, caller):
@@ -189,10 +189,11 @@ def agent_decision(tool_input, cwd, main_model, caller):
             return None
         return {"updatedInput": {**tool_input, "model": claude_alias(caller)}}
     definition = definition_model(tool_input.get("subagent_type"), cwd)
-    wanted_model = wanted_agent_model(definition, main_model)
+    wanted_model = wanted_agent_model(definition, caller)
+    if not claude_alias(wanted_model):
+        return None
     pinned_model = caller if outranks(wanted_model, caller) else wanted_model
-    alias = claude_alias(pinned_model) or claude_alias(caller)
-    return {"updatedInput": {**tool_input, "model": alias}}
+    return {"updatedInput": {**tool_input, "model": claude_alias(pinned_model)}}
 
 
 def session_decision(tool_input, main_model, caller):
@@ -210,7 +211,7 @@ def cap_decision(payload):
         return None
     if payload.get("tool_name") in ("Agent", "Task"):
         cwd = payload.get("cwd") or os.getcwd()
-        return agent_decision(tool_input, cwd, main_model, caller)
+        return agent_decision(tool_input, cwd, caller)
     return session_decision(tool_input, main_model, caller)
 
 
