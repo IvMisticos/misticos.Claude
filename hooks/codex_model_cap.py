@@ -23,14 +23,21 @@ def read_toml(path):
         return {}
 
 
+def project_folders(cwd):
+    for folder in (cwd, *cwd.parents):
+        yield folder
+        if (folder / ".git").exists():
+            return
+
+
 def config_folders(cwd):
-    project_folders = [
+    project_layers = [
         folder / ".codex"
-        for folder in (Path(cwd), *Path(cwd).parents)
+        for folder in project_folders(Path(cwd))
         if (folder / ".codex").is_dir()
     ]
-    user_folder = Path(os.environ.get("CODEX_HOME") or "~/.codex").expanduser()
-    return [*project_folders, user_folder]
+    user_layer = Path(os.environ.get("CODEX_HOME") or "~/.codex").expanduser()
+    return [*project_layers, user_layer]
 
 
 def agents_table(folder):
@@ -38,12 +45,11 @@ def agents_table(folder):
     return agents if isinstance(agents, dict) else {}
 
 
-def declared_role_file(folder, role_name):
-    role = agents_table(folder).get(role_name)
-    config_file = role.get("config_file") if isinstance(role, dict) else None
-    if not config_file or not (folder / config_file).is_file():
-        return None
-    return folder / config_file
+def declared_role_files(folder):
+    for table_key, role in agents_table(folder).items():
+        config_file = role.get("config_file") if isinstance(role, dict) else None
+        if config_file and (folder / config_file).is_file():
+            yield table_key, folder / config_file
 
 
 def discovered_role_files(folder):
@@ -51,22 +57,21 @@ def discovered_role_files(folder):
     return map(Path, glob.glob(pattern, recursive=True))
 
 
-def layer_role_file(folder, role_name):
-    declared = declared_role_file(folder, role_name)
-    if declared:
-        return declared
-    return next(
-        (
-            role_file
-            for role_file in discovered_role_files(folder)
-            if read_toml(role_file).get("name") == role_name
-        ),
-        None,
-    )
+def layer_roles(folder):
+    roles = {}
+    declared_files = set()
+    for table_key, role_file in declared_role_files(folder):
+        declared_files.add(role_file.resolve())
+        roles.setdefault(read_toml(role_file).get("name") or table_key, role_file)
+    for role_file in discovered_role_files(folder):
+        role_name = read_toml(role_file).get("name")
+        if role_name and role_file.resolve() not in declared_files:
+            roles.setdefault(role_name, role_file)
+    return roles
 
 
 def role_model(role_name, cwd):
-    role_files = (layer_role_file(folder, role_name) for folder in config_folders(cwd))
+    role_files = (layer_roles(folder).get(role_name) for folder in config_folders(cwd))
     role_file = next((role_file for role_file in role_files if role_file), None)
     return read_toml(role_file).get("model") if role_file else None
 
