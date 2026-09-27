@@ -117,7 +117,7 @@
         ]
       },
       {
-        "matcher": "Agent|Task|mcp__.*__create_session",
+        "matcher": "Agent|Task|mcp__Claude_Code_Remote__create_session|mcp__claude-code-remote__create_session",
         "hooks": [
           {
             "type": "command",
