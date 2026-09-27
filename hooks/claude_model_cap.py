@@ -90,7 +90,7 @@ def definitions_named(name, directories):
 
 
 def definition_model(subagent_type, cwd):
-    if os.environ.get("CLAUDE_CODE_SUBAGENT_MODEL_FORCE") == "1":
+    if not subagent_type:
         return None
     plugin, _, plugin_agent = str(subagent_type).rpartition(":")
     if plugin:
@@ -110,21 +110,43 @@ def resolved_agent_model(tool_input, cwd, main_model):
     return main_model if model == INHERIT else model
 
 
-def capped_input(payload):
+def forced_model_denial(forced_model, caller):
+    return {
+        "permissionDecision": "deny",
+        "permissionDecisionReason": (
+            f"CLAUDE_CODE_SUBAGENT_MODEL_FORCE runs every subagent on "
+            f"{forced_model}, above your {caller}. Do the work yourself."
+        ),
+    }
+
+
+def agent_decision(tool_input, cwd, main_model, caller):
+    if os.environ.get("CLAUDE_CODE_SUBAGENT_MODEL_FORCE"):
+        forced_model = os.environ.get("CLAUDE_CODE_SUBAGENT_MODEL")
+        if outranks(forced_model, caller):
+            return forced_model_denial(forced_model, caller)
+        return None
+    requested = resolved_agent_model(tool_input, cwd, main_model)
+    if not outranks(requested, caller):
+        return None
+    return {"updatedInput": {**tool_input, "model": tier_name(caller)}}
+
+
+def session_decision(tool_input, main_model, caller):
+    requested = tool_input.get("model") or main_model
+    if not outranks(requested, caller):
+        return None
+    return {"updatedInput": {**tool_input, "model": caller}}
+
+
+def cap_decision(payload):
     tool_input = payload.get("tool_input") or {}
     main_model = latest_model(payload.get("transcript_path") or "")
     caller = caller_model(payload, main_model)
     if payload.get("tool_name") in ("Agent", "Task"):
-        requested = resolved_agent_model(
-            tool_input, payload.get("cwd") or os.getcwd(), main_model
-        )
-        capped = tier_name(caller)
-    else:
-        requested = tool_input.get("model") or main_model
-        capped = caller
-    if not outranks(requested, caller):
-        return None
-    return {**tool_input, "model": capped}
+        cwd = payload.get("cwd") or os.getcwd()
+        return agent_decision(tool_input, cwd, main_model, caller)
+    return session_decision(tool_input, main_model, caller)
 
 
 def main():
@@ -132,16 +154,11 @@ def main():
         payload = json.loads(sys.stdin.read() or "{}")
     except json.JSONDecodeError:
         return
-    updated_input = capped_input(payload)
-    if not updated_input:
+    decision = cap_decision(payload)
+    if not decision:
         return
     json.dump(
-        {
-            "hookSpecificOutput": {
-                "hookEventName": "PreToolUse",
-                "updatedInput": updated_input,
-            }
-        },
+        {"hookSpecificOutput": {"hookEventName": "PreToolUse", **decision}},
         sys.stdout,
     )
 
