@@ -11,20 +11,30 @@ from pathlib import Path
 
 from model_tiers import outranks, tier_name, tier_rank
 
-PLUGIN_CACHE = "~/.claude/plugins/cache"
+INSTALLED_PLUGINS = "~/.claude/plugins/installed_plugins.json"
 INHERIT = "inherit"
+TRANSCRIPT_TAIL_BYTES = 1 << 20
+TRUTHY_FLAGS = ("1", "true", "yes", "on")
+
+
+def transcript_tail_lines(transcript_path):
+    with open(transcript_path, "rb") as transcript:
+        transcript.seek(0, os.SEEK_END)
+        start = max(0, transcript.tell() - TRANSCRIPT_TAIL_BYTES)
+        transcript.seek(start)
+        lines = transcript.read().split(b"\n")
+    return lines if start == 0 else lines[1:]
 
 
 def transcript_models(transcript_path, include_sidechains):
     try:
-        with open(transcript_path, encoding="utf-8", errors="replace") as transcript:
-            lines = transcript.readlines()
+        lines = transcript_tail_lines(transcript_path)
     except OSError:
         return
     for line in reversed(lines):
         try:
             entry = json.loads(line)
-        except json.JSONDecodeError:
+        except (UnicodeDecodeError, json.JSONDecodeError):
             continue
         if not isinstance(entry, dict) or entry.get("type") != "assistant":
             continue
@@ -56,7 +66,7 @@ def caller_model(payload, main_model):
 
 def frontmatter(definition_path):
     try:
-        with open(definition_path, encoding="utf-8") as definition:
+        with open(definition_path, encoding="utf-8", errors="replace") as definition:
             lines = definition.read().splitlines()
     except OSError:
         return {}
@@ -76,9 +86,23 @@ def agent_dirs(cwd):
     return [*project_dirs, Path("~/.claude/agents").expanduser()]
 
 
+def installed_plugins():
+    try:
+        with open(os.path.expanduser(INSTALLED_PLUGINS), encoding="utf-8") as registry:
+            registry_data = json.load(registry)
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return {}
+    plugins = registry_data.get("plugins") if isinstance(registry_data, dict) else None
+    return plugins if isinstance(plugins, dict) else {}
+
+
 def plugin_agent_dirs(plugin):
-    pattern = os.path.join(os.path.expanduser(PLUGIN_CACHE), "*", plugin, "*", "agents")
-    return map(Path, glob.glob(pattern))
+    for key, installs in installed_plugins().items():
+        if key.split("@", 1)[0] != plugin or not isinstance(installs, list):
+            continue
+        for install in installs:
+            if isinstance(install, dict) and install.get("installPath"):
+                yield Path(install["installPath"]) / "agents"
 
 
 def definitions_named(name, directories):
@@ -110,6 +134,11 @@ def resolved_agent_model(tool_input, cwd, main_model):
     return main_model if model == INHERIT else model
 
 
+def is_forced():
+    flag = os.environ.get("CLAUDE_CODE_SUBAGENT_MODEL_FORCE", "")
+    return flag.strip().lower() in TRUTHY_FLAGS
+
+
 def forced_model_denial(forced_model, caller):
     return {
         "permissionDecision": "deny",
@@ -121,7 +150,7 @@ def forced_model_denial(forced_model, caller):
 
 
 def agent_decision(tool_input, cwd, main_model, caller):
-    if os.environ.get("CLAUDE_CODE_SUBAGENT_MODEL_FORCE"):
+    if is_forced():
         forced_model = os.environ.get("CLAUDE_CODE_SUBAGENT_MODEL")
         if outranks(forced_model, caller):
             return forced_model_denial(forced_model, caller)
