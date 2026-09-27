@@ -41,7 +41,9 @@ def agents_table(folder):
 def declared_role_file(folder, role_name):
     role = agents_table(folder).get(role_name)
     config_file = role.get("config_file") if isinstance(role, dict) else None
-    return folder / config_file if config_file else None
+    if not config_file or not (folder / config_file).is_file():
+        return None
+    return folder / config_file
 
 
 def discovered_role_files(folder):
