@@ -12,6 +12,8 @@ from pathlib import Path
 
 from model_tiers import outranks
 
+DEFAULT_ROLE = "default"
+
 
 def read_toml(path):
     try:
@@ -47,19 +49,24 @@ def discovered_role_files(folder):
     return map(Path, glob.glob(pattern, recursive=True))
 
 
-def layer_role(folder, role_name):
+def layer_role_file(folder, role_name):
     declared = declared_role_file(folder, role_name)
     if declared:
-        return read_toml(declared)
-    roles = map(read_toml, discovered_role_files(folder))
-    return next((role for role in roles if role.get("name") == role_name), {})
+        return declared
+    return next(
+        (
+            role_file
+            for role_file in discovered_role_files(folder)
+            if read_toml(role_file).get("name") == role_name
+        ),
+        None,
+    )
 
 
 def role_model(role_name, cwd):
-    layer_models = (
-        layer_role(folder, role_name).get("model") for folder in config_folders(cwd)
-    )
-    return next((model for model in layer_models if model), None)
+    role_files = (layer_role_file(folder, role_name) for folder in config_folders(cwd))
+    role_file = next((role_file for role_file in role_files if role_file), None)
+    return read_toml(role_file).get("model") if role_file else None
 
 
 def default_subagent_model(cwd):
@@ -78,14 +85,14 @@ def cap_decision(payload):
     caller = payload.get("model")
     spawn = payload.get("tool_input") or {}
     cwd = payload.get("cwd") or os.getcwd()
-    role_name = spawn.get("agent_type")
-    fixed_model = role_model(role_name, cwd) if role_name else None
+    role_name = str(spawn.get("agent_type") or "").strip() or DEFAULT_ROLE
+    fixed_model = role_model(role_name, cwd)
     if outranks(fixed_model, caller):
         return {
             "permissionDecision": "deny",
             "permissionDecisionReason": (
                 f"The {role_name} role runs on {fixed_model}, above your {caller}. "
-                "Spawn with a role at or below your model, or with no agent_type."
+                "Spawn with a role at or below your model."
             ),
         }
     requested = spawn.get("model") or default_subagent_model(cwd)
