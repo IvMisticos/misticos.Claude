@@ -4,13 +4,11 @@
 # ///
 
 import glob
-import json
 import os
-import sys
 import tomllib
 from pathlib import Path
 
-from model_tiers import outranks
+from model_cap import outranks, project_folders, run_pre_tool_use
 
 DEFAULT_ROLE = "default"
 
@@ -21,13 +19,6 @@ def read_toml(path):
             return tomllib.load(toml_file)
     except (OSError, tomllib.TOMLDecodeError):
         return {}
-
-
-def project_folders(cwd):
-    for folder in (cwd, *cwd.parents):
-        yield folder
-        if (folder / ".git").exists():
-            return
 
 
 def config_folders(cwd):
@@ -98,10 +89,6 @@ def applies_role(spawn, named_role):
     return is_v2 and bool(named_role)
 
 
-def hook_output(decision):
-    return {"hookSpecificOutput": {"hookEventName": "PreToolUse", **decision}}
-
-
 def cap_decision(payload):
     caller = payload.get("model")
     spawn = payload.get("tool_input") or {}
@@ -125,15 +112,5 @@ def cap_decision(payload):
     return {"permissionDecision": "allow", "updatedInput": {**spawn, "model": caller}}
 
 
-def main():
-    try:
-        payload = json.loads(sys.stdin.read() or "{}")
-    except json.JSONDecodeError:
-        return
-    decision = cap_decision(payload)
-    if decision:
-        json.dump(hook_output(decision), sys.stdout)
-
-
 if __name__ == "__main__":
-    main()
+    run_pre_tool_use(cap_decision)

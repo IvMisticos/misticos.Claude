@@ -7,26 +7,15 @@ import glob
 import json
 import os
 import re
-import sys
 from pathlib import Path
 
-from model_tiers import outranks, tier_rank
+from model_cap import outranks, project_folders, run_pre_tool_use, tier_rank
+from reminder import transcript_tail_lines
 
-INSTALLED_PLUGINS = "~/.claude/plugins/installed_plugins.json"
 INHERIT = "inherit"
-TRANSCRIPT_TAIL_BYTES = 1 << 20
 TRUTHY_FLAGS = ("1", "true", "yes", "on")
 FRONTMATTER = re.compile(r"---\s*\n([\s\S]*?)---\s*\n?")
 CLAUDE_ALIASES = ("haiku", "sonnet", "opus", "fable")
-
-
-def transcript_tail_lines(transcript_path):
-    with open(transcript_path, "rb") as transcript:
-        transcript.seek(0, os.SEEK_END)
-        start = max(0, transcript.tell() - TRANSCRIPT_TAIL_BYTES)
-        transcript.seek(start)
-        lines = transcript.read().split(b"\n")
-    return lines if start == 0 else lines[1:]
 
 
 def transcript_models(transcript_path, include_sidechains):
@@ -70,7 +59,7 @@ def caller_model(payload, main_model):
 def frontmatter(definition_path):
     try:
         with open(definition_path, encoding="utf-8", errors="replace") as definition:
-            text = definition.read().lstrip("\ufeff").replace("\r\n", "\n")
+            text = definition.read().lstrip("﻿").replace("\r\n", "\n")
     except OSError:
         return {}
     block = FRONTMATTER.match(text)
@@ -86,69 +75,21 @@ def frontmatter(definition_path):
     return fields
 
 
-def project_folders(cwd):
-    for folder in (cwd, *cwd.parents):
-        yield folder
-        if (folder / ".git").exists():
-            return
-
-
 def agent_dirs(cwd):
     project_dirs = [folder / ".claude" / "agents" for folder in project_folders(cwd)]
     return [*project_dirs, Path("~/.claude/agents").expanduser()]
 
 
-def installed_plugins():
-    try:
-        with open(os.path.expanduser(INSTALLED_PLUGINS), encoding="utf-8") as registry:
-            registry_data = json.load(registry)
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
-        return {}
-    plugins = registry_data.get("plugins") if isinstance(registry_data, dict) else None
-    return plugins if isinstance(plugins, dict) else {}
-
-
-def plugin_agent_dirs(plugin):
-    for key, installs in installed_plugins().items():
-        if key.split("@", 1)[0] != plugin or not isinstance(installs, list):
-            continue
-        for install in installs:
-            if isinstance(install, dict) and install.get("installPath"):
-                yield Path(install["installPath"]) / "agents"
-
-
-def loose_name(name):
-    return re.sub(r"[\s_-]", "", str(name).lower())
-
-
-def definitions_in(directories):
-    for directory in directories:
-        for path in sorted(directory.glob("**/*.md")):
-            yield frontmatter(path)
-
-
-def definition_named(name, directories):
-    definitions = [
-        fields for fields in definitions_in(directories) if fields.get("name")
-    ]
-    exact = [fields for fields in definitions if fields["name"] == name]
-    if exact:
-        return exact[0]
-    loose = [
-        fields
-        for fields in definitions
-        if loose_name(fields["name"]) == loose_name(name)
-    ]
-    return loose[0] if len(loose) == 1 else {}
-
-
 def definition_model(subagent_type, cwd):
     if not subagent_type:
         return None
-    plugin, _, plugin_agent = str(subagent_type).rpartition(":")
-    if plugin:
-        return definition_named(plugin_agent, plugin_agent_dirs(plugin)).get("model")
-    return definition_named(subagent_type, agent_dirs(Path(cwd))).get("model")
+    definitions = (
+        frontmatter(path)
+        for directory in agent_dirs(Path(cwd))
+        for path in sorted(directory.glob("**/*.md"))
+    )
+    named = (fields for fields in definitions if fields.get("name") == subagent_type)
+    return next(named, {}).get("model")
 
 
 def claude_alias(model):
@@ -162,12 +103,10 @@ def wanted_agent_model(definition, caller):
     return definition or os.environ.get("CLAUDE_CODE_SUBAGENT_MODEL") or caller
 
 
-def is_forced():
-    flag = os.environ.get("CLAUDE_CODE_SUBAGENT_MODEL_FORCE", "")
-    return flag.strip().lower() in TRUTHY_FLAGS
-
-
-def forced_model_denial(forced_model, caller):
+def forced_decision(caller):
+    forced_model = os.environ.get("CLAUDE_CODE_SUBAGENT_MODEL")
+    if not outranks(forced_model, caller):
+        return None
     return {
         "permissionDecision": "deny",
         "permissionDecisionReason": (
@@ -178,11 +117,9 @@ def forced_model_denial(forced_model, caller):
 
 
 def agent_decision(tool_input, cwd, caller):
-    if is_forced():
-        forced_model = os.environ.get("CLAUDE_CODE_SUBAGENT_MODEL")
-        if outranks(forced_model, caller):
-            return forced_model_denial(forced_model, caller)
-        return None
+    force_flag = os.environ.get("CLAUDE_CODE_SUBAGENT_MODEL_FORCE", "")
+    if force_flag.strip().lower() in TRUTHY_FLAGS:
+        return forced_decision(caller)
     requested_model = tool_input.get("model")
     if requested_model:
         if not outranks(requested_model, caller):
@@ -215,19 +152,5 @@ def cap_decision(payload):
     return session_decision(tool_input, main_model, caller)
 
 
-def main():
-    try:
-        payload = json.loads(sys.stdin.read() or "{}")
-    except json.JSONDecodeError:
-        return
-    decision = cap_decision(payload)
-    if not decision:
-        return
-    json.dump(
-        {"hookSpecificOutput": {"hookEventName": "PreToolUse", **decision}},
-        sys.stdout,
-    )
-
-
 if __name__ == "__main__":
-    main()
+    run_pre_tool_use(cap_decision)

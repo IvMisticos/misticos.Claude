@@ -6,7 +6,7 @@
 import json
 import sys
 
-from model_tiers import outranks
+from model_cap import outranks
 
 ALLOW = {"permission": "allow"}
 

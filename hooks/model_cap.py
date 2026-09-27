@@ -1,4 +1,6 @@
+import json
 import re
+import sys
 
 TIER_LEVELS = (
     {"haiku"},
@@ -39,3 +41,21 @@ def outranks(requested, caller):
     if requested_rank != caller_rank or tier_name(requested) != tier_name(caller):
         return requested_rank > caller_rank
     return bool(version(requested)) and version(requested) > version(caller)
+
+
+def project_folders(cwd):
+    for folder in (cwd, *cwd.parents):
+        yield folder
+        if (folder / ".git").exists():
+            return
+
+
+def run_pre_tool_use(decide):
+    try:
+        payload = json.loads(sys.stdin.read() or "{}")
+    except json.JSONDecodeError:
+        return
+    decision = decide(payload)
+    if decision:
+        output = {"hookEventName": "PreToolUse", **decision}
+        json.dump({"hookSpecificOutput": output}, sys.stdout)
