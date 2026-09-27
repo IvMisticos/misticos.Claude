@@ -6,15 +6,18 @@
 import glob
 import json
 import os
+import re
 import sys
 from pathlib import Path
 
-from model_tiers import outranks, tier_name, tier_rank
+from model_tiers import outranks, tier_rank
 
 INSTALLED_PLUGINS = "~/.claude/plugins/installed_plugins.json"
 INHERIT = "inherit"
 TRANSCRIPT_TAIL_BYTES = 1 << 20
 TRUTHY_FLAGS = ("1", "true", "yes", "on")
+FRONTMATTER = re.compile(r"---\s*\n([\s\S]*?)---\s*\n?")
+CLAUDE_ALIASES = ("haiku", "sonnet", "opus", "fable")
 
 
 def transcript_tail_lines(transcript_path):
@@ -67,18 +70,20 @@ def caller_model(payload, main_model):
 def frontmatter(definition_path):
     try:
         with open(definition_path, encoding="utf-8", errors="replace") as definition:
-            lines = definition.read().splitlines()
+            text = definition.read().lstrip("\ufeff").replace("\r\n", "\n")
     except OSError:
         return {}
-    if lines[:1] != ["---"]:
+    block = FRONTMATTER.match(text)
+    if not block:
         return {}
+    top_level_lines = (
+        line for line in block[1].splitlines() if line and not line[0].isspace()
+    )
     fields = {}
-    for line in lines[1:]:
-        if line == "---":
-            return fields
+    for line in top_level_lines:
         key, _, value = line.partition(":")
         fields[key.strip()] = value.strip().strip("\"'")
-    return {}
+    return fields
 
 
 def agent_dirs(cwd):
@@ -105,12 +110,29 @@ def plugin_agent_dirs(plugin):
                 yield Path(install["installPath"]) / "agents"
 
 
-def definitions_named(name, directories):
+def loose_name(name):
+    return re.sub(r"[\s_-]", "", str(name).lower())
+
+
+def definitions_in(directories):
     for directory in directories:
         for path in sorted(directory.glob("**/*.md")):
-            fields = frontmatter(path)
-            if fields.get("name") == name:
-                yield fields
+            yield frontmatter(path)
+
+
+def definition_named(name, directories):
+    definitions = [
+        fields for fields in definitions_in(directories) if fields.get("name")
+    ]
+    exact = [fields for fields in definitions if fields["name"] == name]
+    if exact:
+        return exact[0]
+    loose = [
+        fields
+        for fields in definitions
+        if loose_name(fields["name"]) == loose_name(name)
+    ]
+    return loose[0] if len(loose) == 1 else {}
 
 
 def definition_model(subagent_type, cwd):
@@ -118,20 +140,19 @@ def definition_model(subagent_type, cwd):
         return None
     plugin, _, plugin_agent = str(subagent_type).rpartition(":")
     if plugin:
-        definitions = definitions_named(plugin_agent, plugin_agent_dirs(plugin))
-    else:
-        definitions = definitions_named(subagent_type, agent_dirs(Path(cwd)))
-    return next(definitions, {}).get("model")
+        return definition_named(plugin_agent, plugin_agent_dirs(plugin)).get("model")
+    return definition_named(subagent_type, agent_dirs(Path(cwd))).get("model")
 
 
-def resolved_agent_model(tool_input, cwd, main_model):
-    model = (
-        tool_input.get("model")
-        or definition_model(tool_input.get("subagent_type"), cwd)
-        or os.environ.get("CLAUDE_CODE_SUBAGENT_MODEL")
-        or INHERIT
-    )
-    return main_model if model == INHERIT else model
+def claude_alias(model):
+    rank = tier_rank(model)
+    return next((alias for alias in CLAUDE_ALIASES if tier_rank(alias) == rank), None)
+
+
+def default_agent_model(explicit_model, main_model):
+    if explicit_model == INHERIT:
+        return main_model
+    return os.environ.get("CLAUDE_CODE_SUBAGENT_MODEL") or main_model
 
 
 def is_forced():
@@ -155,10 +176,19 @@ def agent_decision(tool_input, cwd, main_model, caller):
         if outranks(forced_model, caller):
             return forced_model_denial(forced_model, caller)
         return None
-    requested = resolved_agent_model(tool_input, cwd, main_model)
-    if not outranks(requested, caller):
+    explicit_model = tool_input.get("model") or definition_model(
+        tool_input.get("subagent_type"), cwd
+    )
+    if explicit_model and explicit_model != INHERIT:
+        if not outranks(explicit_model, caller):
+            return None
+        return {"updatedInput": {**tool_input, "model": claude_alias(caller)}}
+    default_model = default_agent_model(explicit_model, main_model)
+    pinned_model = caller if outranks(default_model, caller) else default_model
+    alias = claude_alias(pinned_model) or claude_alias(caller)
+    if alias == tool_input.get("model"):
         return None
-    return {"updatedInput": {**tool_input, "model": tier_name(caller)}}
+    return {"updatedInput": {**tool_input, "model": alias}}
 
 
 def session_decision(tool_input, main_model, caller):
@@ -172,6 +202,8 @@ def cap_decision(payload):
     tool_input = payload.get("tool_input") or {}
     main_model = latest_model(payload.get("transcript_path") or "")
     caller = caller_model(payload, main_model)
+    if not claude_alias(caller):
+        return None
     if payload.get("tool_name") in ("Agent", "Task"):
         cwd = payload.get("cwd") or os.getcwd()
         return agent_decision(tool_input, cwd, main_model, caller)
