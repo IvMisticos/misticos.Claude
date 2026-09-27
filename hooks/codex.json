@@ -77,6 +77,17 @@
           }
         ]
       }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "spawn_agent|collaborationspawn_agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/run.sh \"${CLAUDE_PLUGIN_ROOT}\"/hooks/codex_model_cap.py"
+          }
+        ]
+      }
     ]
   }
 }

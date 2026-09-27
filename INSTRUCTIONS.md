@@ -166,7 +166,7 @@ Never run `sleep`. To wait for one condition, run an `until` loop as a backgroun
 
 Delegate independent, parallel work to subagents in mandatory worktrees, run as named teammates so you and they can message each other. Don't delegate what you can finish in a handful of tool calls; prefer a direct grep over a subagent for exploration.
 
-Give a teammate the goal, the paths, and the shape of the answer you want, in as few words as that takes. Give the fast model a simple, specific task named in the prompt. Give the strong model open-ended work and anything that needs judgement. The strong model does every review. The lead model directs the teammates and has the final say.
+Give a teammate the goal, the paths, and the shape of the answer you want, in as few words as that takes. Give the fast model a simple, specific task named in the prompt. Give the strong model open-ended work and anything that needs judgement. The strong model does every review. The lead model directs the teammates and has the final say. Never launch a worker on a stronger model than you: cap at it.
 
 Give every worker, whether subagent, teammate, or project thread, one deliverable, and close it once that work merges. It reports once to whoever delegated it when it finishes, gets blocked, or needs a decision, and never asks me directly. I read and write only through the agent I talk to, unless I say otherwise: it folds every report into the shortest summary that still holds what I must act on.
 

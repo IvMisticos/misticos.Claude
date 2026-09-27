@@ -28,6 +28,11 @@
       {
         "command": "uv run \"${CURSOR_PLUGIN_ROOT}/hooks/reminder.py\" 4 4 --rules \"${CURSOR_PLUGIN_ROOT}/INSTRUCTIONS.md\" --context-from payload --output-shape cursor"
       }
+    ],
+    "subagentStart": [
+      {
+        "command": "uv run \"${CURSOR_PLUGIN_ROOT}/hooks/cursor_model_cap.py\""
+      }
     ]
   }
 }
