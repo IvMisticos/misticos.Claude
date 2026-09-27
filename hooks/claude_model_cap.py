@@ -86,8 +86,15 @@ def frontmatter(definition_path):
     return fields
 
 
+def project_folders(cwd):
+    for folder in (cwd, *cwd.parents):
+        yield folder
+        if (folder / ".git").exists():
+            return
+
+
 def agent_dirs(cwd):
-    project_dirs = [folder / ".claude" / "agents" for folder in (cwd, *cwd.parents)]
+    project_dirs = [folder / ".claude" / "agents" for folder in project_folders(cwd)]
     return [*project_dirs, Path("~/.claude/agents").expanduser()]
 
 
@@ -149,10 +156,10 @@ def claude_alias(model):
     return next((alias for alias in CLAUDE_ALIASES if tier_rank(alias) == rank), None)
 
 
-def default_agent_model(explicit_model, main_model):
-    if explicit_model == INHERIT:
+def wanted_agent_model(definition, main_model):
+    if definition == INHERIT:
         return main_model
-    return os.environ.get("CLAUDE_CODE_SUBAGENT_MODEL") or main_model
+    return definition or os.environ.get("CLAUDE_CODE_SUBAGENT_MODEL") or main_model
 
 
 def is_forced():
@@ -176,18 +183,15 @@ def agent_decision(tool_input, cwd, main_model, caller):
         if outranks(forced_model, caller):
             return forced_model_denial(forced_model, caller)
         return None
-    explicit_model = tool_input.get("model") or definition_model(
-        tool_input.get("subagent_type"), cwd
-    )
-    if explicit_model and explicit_model != INHERIT:
-        if not outranks(explicit_model, caller):
+    requested_model = tool_input.get("model")
+    if requested_model:
+        if not outranks(requested_model, caller):
             return None
         return {"updatedInput": {**tool_input, "model": claude_alias(caller)}}
-    default_model = default_agent_model(explicit_model, main_model)
-    pinned_model = caller if outranks(default_model, caller) else default_model
+    definition = definition_model(tool_input.get("subagent_type"), cwd)
+    wanted_model = wanted_agent_model(definition, main_model)
+    pinned_model = caller if outranks(wanted_model, caller) else wanted_model
     alias = claude_alias(pinned_model) or claude_alias(caller)
-    if alias == tool_input.get("model"):
-        return None
     return {"updatedInput": {**tool_input, "model": alias}}
 
 
