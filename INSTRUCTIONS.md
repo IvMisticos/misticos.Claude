@@ -168,11 +168,7 @@ Never run `sleep`. To wait for one condition, run an `until` loop as a backgroun
 
 Delegate independent, parallel work. Don't delegate what you can finish in a handful of tool calls; prefer a direct grep over a subagent for exploration.
 
-For open-ended work you may need to steer mid-task, such as a merge conflict or a CI failure nobody has explained yet, use a subagent in a mandatory worktree, run as a named teammate so you and they can message each other.
-
-For the same fixed steps over many items, such as CI, review, and fixes for each of many PRs, run a workflow; this is my standing permission to run one. Give every agent a schema so each result comes back as the same fields, and update tracking files from those fields with a script. Run agents that edit files in worktrees, and never set an agent's model above yours. After a crash, restart, or usage limit, resume from the run ID instead of starting over.
-
-A saved workflow result can be stale. Before you act on one, check the live state, such as whether the PR merged or its head commit moved.
+Use a subagent in a mandatory worktree, run as a named teammate, when the work has unknown steps or may need a decision from you. Otherwise, run a workflow; give every agent a schema and its own worktree. Have an agent that needs a decision return the question, and hand that item to a teammate. After an interruption, resume the run. Before you act on a saved result, check the live state.
 
 Give a teammate or workflow agent the goal, the paths, and the shape of the answer you want, in as few words as that takes. Give the fast model a simple, specific task named in the prompt. Give the strong model open-ended work and anything that needs judgement. The strong model does every review. Never launch a worker on a stronger model than you: cap at it.
 
