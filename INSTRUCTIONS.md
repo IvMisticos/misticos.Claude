@@ -168,7 +168,7 @@ Never run `sleep`. To wait for one condition, run an `until` loop as a backgroun
 
 Delegate independent, parallel work. Don't delegate what you can finish in a handful of tool calls; prefer a direct grep over a subagent for exploration.
 
-Use a subagent in a mandatory worktree, run as a named teammate, when the work has unknown steps or may need a decision from you. Otherwise, run a workflow; give every agent a schema and its own worktree. Have an agent that needs a decision return the question, and hand that item to a teammate. After an interruption, resume the run. Before you act on a saved result, check the live state.
+Every agent works in its own worktree. Give work with unknown steps, or work that may need your decision, to a named teammate. Otherwise, run a workflow with a schema for each agent. If a workflow agent needs a decision, have it return the question and give that item to a teammate. Resume an interrupted workflow. Check the live state before you act on a saved result.
 
 Give a teammate or workflow agent the goal, the paths, and the shape of the answer you want, in as few words as that takes. Give the fast model a simple, specific task named in the prompt. Give the strong model open-ended work and anything that needs judgement. The strong model does every review. Never launch a worker on a stronger model than you: cap at it.
 
