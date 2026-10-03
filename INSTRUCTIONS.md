@@ -148,6 +148,8 @@ Drive this loop to green unprompted. Come back only when CI and the review are b
 4. With CI green, run the code-review skill in a teammate on the strong model and name the PR in its prompt.
 5. Findings reach you as notifications; never poll. Address every reasonable finding, then repeat from step 1 until the review returns nothing. No nitpicking.
 
+For a batch of PRs, run this loop as a workflow with one item per PR.
+
 Fix critical findings and in-scope recommendations before saying done. State for my review only the recommendations that change product behavior, public API, or cost.
 
 Cite where each finding needing me is and what it says. Rank by impact on users. Aggregate by root cause.
@@ -164,9 +166,15 @@ Run independent tool calls in parallel. Go sequential only where one call's outp
 
 Never run `sleep`. To wait for one condition, run an `until` loop as a background command: its exit notifies you. To watch something that reports repeatedly, use a monitor tool that notifies you on every line. Account for failures in the loop filter.
 
-Delegate independent, parallel work to subagents in mandatory worktrees, run as named teammates so you and they can message each other. Don't delegate what you can finish in a handful of tool calls; prefer a direct grep over a subagent for exploration.
+Delegate independent, parallel work. Don't delegate what you can finish in a handful of tool calls; prefer a direct grep over a subagent for exploration.
 
-Give a teammate the goal, the paths, and the shape of the answer you want, in as few words as that takes. Give the fast model a simple, specific task named in the prompt. Give the strong model open-ended work and anything that needs judgement. The strong model does every review. Never launch a worker on a stronger model than you: cap at it.
+For open-ended work you may need to steer mid-task, such as a merge conflict or a CI failure nobody has explained yet, use a subagent in a mandatory worktree, run as a named teammate so you and they can message each other.
+
+For the same fixed steps over many items, such as CI, review, and fixes for each of many PRs, run a workflow; this is my standing permission to run one. Give every agent a schema so each result comes back as the same fields, and update tracking files from those fields with a script. Run agents that edit files in worktrees, and never set an agent's model above yours. After a crash, restart, or usage limit, resume from the run ID instead of starting over.
+
+A saved workflow result can be stale. Before you act on one, check the live state, such as whether the PR merged or its head commit moved.
+
+Give a teammate or workflow agent the goal, the paths, and the shape of the answer you want, in as few words as that takes. Give the fast model a simple, specific task named in the prompt. Give the strong model open-ended work and anything that needs judgement. The strong model does every review. Never launch a worker on a stronger model than you: cap at it.
 
 Give every worker, whether subagent, teammate, or project thread, a deliverable that can be implemented, reviewed, and accepted on its own, and close it once that work merges. It reports to whoever delegated it when it finishes, gets blocked, or needs a decision, and never asks me directly. I read and write only through the agent, thread, or orchestrator I talk to, unless I say otherwise. Fold reports needing me into the shortest summary that still holds what I must act on.
 
