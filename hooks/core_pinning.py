@@ -4,6 +4,7 @@ import os
 import sys
 from dataclasses import dataclass
 from pathlib import Path
+from typing import NamedTuple
 
 CAN_PIN_CORES = hasattr(os, "sched_setaffinity")
 
@@ -51,16 +52,30 @@ def plan_cores(count, alone):
     return CorePlan(everything, frozenset(benchmark), frozenset(reserved))
 
 
-def all_threads():
+class Thread(NamedTuple):
+    id: int
+    started: int
+
+
+def started_at(task):
+    fields_after_name = (task / "stat").read_text().rsplit(")", 1)[1].split()
+    return int(fields_after_name[19])
+
+
+def live_threads():
     for task in Path("/proc").glob("[0-9]*/task/[0-9]*"):
-        yield int(task.name)
+        try:
+            started = started_at(task)
+        except OSError:
+            continue
+        yield Thread(int(task.name), started)
 
 
 def snapshot_masks():
     masks = {}
-    for thread in all_threads():
+    for thread in live_threads():
         with contextlib.suppress(OSError):
-            masks[thread] = os.sched_getaffinity(thread)
+            masks[thread] = os.sched_getaffinity(thread.id)
     return masks
 
 
@@ -76,16 +91,16 @@ def move_off_reserved_cores(plan, masks_before):
     for thread, mask in masks_before.items():
         if mask & plan.reserved:
             with contextlib.suppress(OSError):
-                os.sched_setaffinity(thread, (mask - plan.reserved) or plan.others)
+                os.sched_setaffinity(thread.id, (mask - plan.reserved) or plan.others)
 
 
 def restore_threads(plan, masks_before):
-    for thread in all_threads():
+    for thread in live_threads():
         with contextlib.suppress(OSError):
             if thread in masks_before:
-                os.sched_setaffinity(thread, masks_before[thread])
-            elif os.sched_getaffinity(thread) in (plan.others, plan.benchmark):
-                os.sched_setaffinity(thread, plan.everything)
+                os.sched_setaffinity(thread.id, masks_before[thread])
+            elif os.sched_getaffinity(thread.id) in (plan.others, plan.benchmark):
+                os.sched_setaffinity(thread.id, plan.everything)
 
 
 def save_pinning(state_path, plan, masks_before):
@@ -94,7 +109,8 @@ def save_pinning(state_path, plan, masks_before):
         "benchmark": sorted(plan.benchmark),
         "reserved": sorted(plan.reserved),
         "masks_before": {
-            str(thread): sorted(mask) for thread, mask in masks_before.items()
+            f"{thread.id}:{thread.started}": sorted(mask)
+            for thread, mask in masks_before.items()
         },
     }
     staged = state_path.with_name(state_path.name + ".saving")
@@ -113,7 +129,8 @@ def load_pinning(state_path):
         frozenset(state["reserved"]),
     )
     masks_before = {
-        int(thread): set(mask) for thread, mask in state["masks_before"].items()
+        Thread(*map(int, thread.split(":"))): set(mask)
+        for thread, mask in state["masks_before"].items()
     }
     return plan, masks_before
 
