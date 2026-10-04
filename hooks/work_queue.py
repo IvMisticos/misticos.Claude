@@ -22,7 +22,8 @@ MACHINE_LOCK = LOCK_DIR / "machine.lock"
 TURNSTILE_LOCK = LOCK_DIR / "turnstile.lock"
 BENCHMARK_LOCK = LOCK_DIR / "benchmark.lock"
 PINNING_STATE = LOCK_DIR / "pinning.json"
-BUILD_SLOTS = max(1, (os.cpu_count() or 1) // 2)
+USABLE_CPUS = len(os.sched_getaffinity(0)) if CAN_PIN_CORES else os.cpu_count() or 1
+BUILD_SLOTS = max(1, USABLE_CPUS // 2)
 SLOT_POLL_SECONDS = 0.5
 QUEUED_SUBCOMMANDS = {
     "dotnet": {"build", "test", "publish", "pack"},
