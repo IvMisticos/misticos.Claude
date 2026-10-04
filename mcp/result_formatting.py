@@ -42,6 +42,37 @@ def hover_text(result):
     )
 
 
+SHOWN_SEVERITIES = {1: "error", 2: "warning", 3: "info"}
+
+
+def diagnostics_text(path, diagnostics):
+    shown = sorted(
+        (
+            diagnostic
+            for diagnostic in diagnostics
+            if diagnostic.get("severity", 1) in SHOWN_SEVERITIES
+        ),
+        key=lambda diagnostic: position_key(diagnostic["range"]["start"]),
+    )
+    lines = [diagnostic_line(path, diagnostic) for diagnostic in shown]
+    return "\n".join(lines) or "no errors or warnings"
+
+
+def diagnostic_line(path, diagnostic):
+    severity = SHOWN_SEVERITIES[diagnostic.get("severity", 1)]
+    code = f" {diagnostic['code']}" if diagnostic.get("code") is not None else ""
+    start = place(path, diagnostic["range"]["start"])
+    return f"{start} {severity}{code}: {diagnostic['message']}"
+
+
+def place(path, position):
+    return f"{path}:{position_text(path, position)}"
+
+
+def position_key(position):
+    return position["line"], position["character"]
+
+
 def symbols_text(result):
     lines = symbol_lines(result or [], 0)
     return "\n".join(lines) or "no symbols"

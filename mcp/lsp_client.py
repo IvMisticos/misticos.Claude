@@ -62,7 +62,8 @@ class LanguageServer:
                         "window": {"workDoneProgress": True},
                         "workspace": {"workspaceEdit": {"documentChanges": True}},
                         "textDocument": {
-                            "hover": {"contentFormat": ["markdown", "plaintext"]}
+                            "hover": {"contentFormat": ["markdown", "plaintext"]},
+                            "diagnostic": {},
                         },
                     },
                 },

@@ -8,7 +8,12 @@ import atexit
 from pathlib import Path
 
 from mcp.server.mcpserver import MCPServer
-from result_formatting import hover_text, locations_text, symbols_text
+from result_formatting import (
+    diagnostics_text,
+    hover_text,
+    locations_text,
+    symbols_text,
+)
 from server_registry import server_for, stop_all_servers
 from text_positions import to_uri
 from workspace_edits import apply_workspace_edit
@@ -90,6 +95,18 @@ async def workspace_symbols(query: str, file_in_project: str) -> str:
     path = resolved(file_in_project)
     server = await server_for(path)
     return symbols_text(await server.request("workspace/symbol", {"query": query}))
+
+
+@mcp.tool()
+async def diagnostics(file: str) -> str:
+    """Compile errors and warnings in a file, without building the project."""
+    path = resolved(file)
+    server = await server_for(path)
+    server.open_document(path)
+    report = await server.request(
+        "textDocument/diagnostic", {"textDocument": {"uri": to_uri(path)}}
+    )
+    return diagnostics_text(path, report["items"])
 
 
 if __name__ == "__main__":
