@@ -6,7 +6,6 @@
 import argparse
 import contextlib
 import fcntl
-import functools
 import os
 import signal
 import subprocess
@@ -163,21 +162,6 @@ def build_slot():
         slot = free_build_slot()
     with slot:
         yield
-
-
-def build_would_wait():
-    probes = (
-        free_build_slot,
-        functools.partial(try_lock, TURNSTILE_LOCK, fcntl.LOCK_EX),
-        functools.partial(try_lock, MACHINE_LOCK, fcntl.LOCK_SH),
-    )
-    with contextlib.ExitStack() as taken:
-        for probe in probes:
-            handle = probe()
-            if handle is None:
-                return True
-            taken.enter_context(handle)
-    return False
 
 
 def exit_status(returncode):
