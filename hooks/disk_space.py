@@ -13,6 +13,7 @@ import traceback
 from reminder import QuietArgumentParser, hook_output
 
 LOW_SPACE_BYTES = 1 << 30
+LOW_SPACE_SHARE = 0.1
 BYTES_PER_MIB = 1 << 20
 OUT_OF_SPACE_ERROR = re.compile(
     r"no space left on device|disk quota exceeded|not enough space on the disk"
@@ -61,19 +62,23 @@ def watched_paths(payload):
     return (cwd, os.path.expanduser("~"), *temp_dirs, "/tmp")
 
 
+def is_low(usage):
+    return usage.free < min(LOW_SPACE_BYTES, usage.total * LOW_SPACE_SHARE)
+
+
 def low_disks(paths):
     seen_devices = set()
     for path in paths:
         try:
             device = os.stat(path).st_dev
-            free = shutil.disk_usage(path).free
+            usage = shutil.disk_usage(path)
         except OSError:
             continue
         if device in seen_devices:
             continue
         seen_devices.add(device)
-        if free < LOW_SPACE_BYTES:
-            yield path, free
+        if is_low(usage):
+            yield path, usage.free
 
 
 def disk_warning(payload):
