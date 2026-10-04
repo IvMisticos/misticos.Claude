@@ -88,6 +88,8 @@ def notice(message):
 
 def open_lock_file(path):
     LOCK_DIR.mkdir(mode=0o700, exist_ok=True)
+    if LOCK_DIR.lstat().st_uid != os.getuid():
+        sys.exit(f"queue: {LOCK_DIR} belongs to another user")
     return open(path, "a")
 
 
