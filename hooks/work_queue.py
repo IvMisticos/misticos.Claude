@@ -24,6 +24,7 @@ PINNING_STATE = LOCK_DIR / "pinning.json"
 USABLE_CPUS = len(os.sched_getaffinity(0)) if CAN_PIN_CORES else os.cpu_count() or 1
 BUILD_SLOTS = max(1, USABLE_CPUS // 2)
 SLOT_POLL_SECONDS = 0.5
+STOP_SIGNALS = (signal.SIGTERM, signal.SIGHUP)
 QUEUED_SUBCOMMANDS = {
     "dotnet": {"build", "test", "publish", "pack"},
     "cargo": {
@@ -170,7 +171,14 @@ def exit_status(returncode):
 
 def run_held(command):
     environment = {**os.environ, HELD_VARIABLE: "1"}
-    return exit_status(subprocess.run(command, env=environment, check=False).returncode)
+    child = subprocess.Popen(command, env=environment)
+
+    def forward_to_child(signal_number, _frame):
+        child.send_signal(signal_number)
+
+    for stop_signal in STOP_SIGNALS:
+        signal.signal(stop_signal, forward_to_child)
+    return exit_status(child.wait())
 
 
 def run_build(command):
@@ -232,7 +240,7 @@ def exit_on_signal(signal_number, _frame):
 
 
 def main():
-    for stop_signal in (signal.SIGTERM, signal.SIGHUP):
+    for stop_signal in STOP_SIGNALS:
         signal.signal(stop_signal, exit_on_signal)
     if sys.argv[1:2] == ["tool"]:
         return run_tool(sys.argv[2], sys.argv[3:])
