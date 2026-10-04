@@ -74,26 +74,33 @@ class Call(NamedTuple):
 
 
 def calls_text(calls):
-    return "\n".join(call_lines(call) for call in calls) or "no calls"
+    call_sites_by_function = {}
+    for call in calls:
+        call_sites = call_sites_by_function.setdefault(function_line(call.function), {})
+        call_sites.update(call_site_places(call))
+    blocks = [
+        call_block(function, call_sites)
+        for function, call_sites in call_sites_by_function.items()
+    ]
+    return "\n".join(blocks) or "no calls"
 
 
-def call_lines(call):
-    function = call.function
-    definition = place(from_uri(function["uri"]), function["selectionRange"]["start"])
-    call_site_path = from_uri(call.call_site_uri)
-    call_site_starts = {
-        position_key(range_["start"]): range_["start"]
+def call_site_places(call):
+    path = from_uri(call.call_site_uri)
+    return {
+        (str(path), *position_key(range_["start"])): place(path, range_["start"])
         for range_ in call.call_site_ranges
     }
-    return "\n".join(
-        [
-            f"{function['name']} ({symbol_kind(function.get('kind'))}) {definition}",
-            *(
-                f"  called at {place(call_site_path, start)}"
-                for _, start in sorted(call_site_starts.items())
-            ),
-        ]
-    )
+
+
+def call_block(function, call_sites):
+    lines = [f"  called at {call_sites[site]}" for site in sorted(call_sites)]
+    return "\n".join([function, *lines])
+
+
+def function_line(function):
+    definition = place(from_uri(function["uri"]), function["selectionRange"]["start"])
+    return f"{function['name']} ({symbol_kind(function.get('kind'))}) {definition}"
 
 
 def place(path, position):
