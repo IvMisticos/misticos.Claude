@@ -27,6 +27,14 @@
       },
       {
         "command": "uv run \"${CURSOR_PLUGIN_ROOT}/hooks/reminder.py\" 4 4 --rules \"${CURSOR_PLUGIN_ROOT}/INSTRUCTIONS.md\" --context-from payload --output-shape cursor"
+      },
+      {
+        "command": "uv run \"${CURSOR_PLUGIN_ROOT}/hooks/disk_space.py\" --output-shape cursor"
+      }
+    ],
+    "postToolUseFailure": [
+      {
+        "command": "uv run \"${CURSOR_PLUGIN_ROOT}/hooks/disk_space.py\" --output-shape cursor"
       }
     ],
     "subagentStart": [

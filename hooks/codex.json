@@ -76,6 +76,14 @@
             "additionalContextLimit": 0
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/run.sh \"${CLAUDE_PLUGIN_ROOT}\"/hooks/disk_space.py"
+          }
+        ]
       }
     ],
     "PreToolUse": [
