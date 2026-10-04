@@ -117,7 +117,9 @@ async def functions_at(file, line, column):
     functions = await server.at_position(
         "textDocument/prepareCallHierarchy", path, line, column
     )
-    return server, functions or []
+    if not functions:
+        raise ValueError(f"no function at {file}:{line}:{column}")
+    return server, functions
 
 
 @mcp.tool()
