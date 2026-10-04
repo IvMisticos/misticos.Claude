@@ -42,8 +42,14 @@ class FileChanges(NamedTuple):
 
 
 class ProjectFileChanges:
-    def __init__(self, root, source_suffixes, config_files):
-        self.root = root
+    def __init__(self, repo, server_root, source_suffixes, config_files):
+        self.repo = repo
+        self.server_root = str(server_root)
+        self.server_root_ancestors = {
+            str(directory)
+            for directory in server_root.parents
+            if directory == repo or repo in directory.parents
+        }
         self.source_suffixes = tuple(source_suffixes)
         self.config_file = re.compile("|".join(map(fnmatch.translate, config_files)))
         self.stamps = self.current_stamps()
@@ -51,12 +57,20 @@ class ProjectFileChanges:
     def is_config(self, path):
         return self.config_file.match(os.path.basename(path)) is not None
 
+    def configures_server_root(self, path):
+        if not self.is_config(path):
+            return False
+        return (
+            path.startswith(self.server_root + os.sep)
+            or os.path.dirname(path) in self.server_root_ancestors
+        )
+
     def is_watched(self, path):
         return path.endswith(self.source_suffixes) or self.is_config(path)
 
     def current_stamps(self):
         stamps = {}
-        for path in unignored_files_under(self.root):
+        for path in unignored_files_under(self.repo):
             if not self.is_watched(path):
                 continue
             try:
@@ -79,5 +93,7 @@ class ProjectFileChanges:
         changes = created + deleted + changed
         return FileChanges(
             events=[{"uri": to_uri(path), "type": change} for path, change in changes],
-            config_changed=any(self.is_config(path) for path, _ in changes),
+            config_changed=any(
+                self.configures_server_root(path) for path, _ in changes
+            ),
         )

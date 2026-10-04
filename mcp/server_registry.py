@@ -42,10 +42,10 @@ async def server_for(path):
 
 def file_changes_for(key, repo):
     if key not in project_file_changes:
-        name, _ = key
+        name, root = key
         spec = LANGUAGE_SERVERS[name]
         project_file_changes[key] = ProjectFileChanges(
-            repo, spec["extensions"], spec["config_files"]
+            repo, root, spec["extensions"], spec["config_files"]
         )
     return project_file_changes[key]
 
