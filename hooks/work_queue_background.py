@@ -4,12 +4,26 @@
 # ///
 
 import os
+import shlex
 
-from guard import command_words
 from model_cap import run_pre_tool_use
 
 if os.name == "posix":
     from work_queue import build_would_wait, queues
+
+
+def command_tokens(command):
+    try:
+        lexer = shlex.shlex(command, posix=True, punctuation_chars=True)
+        lexer.whitespace_split = True
+        tokens = list(lexer)
+    except ValueError:
+        tokens = command.split()
+    for token in tokens:
+        if any(character.isspace() for character in token):
+            yield from command_tokens(token)
+        else:
+            yield token
 
 
 def runs_benchmark(words):
@@ -27,7 +41,7 @@ def runs_queued_tool(words):
 
 
 def would_wait(command):
-    words = command_words(command)
+    words = list(command_tokens(command))
     return runs_benchmark(words) or (runs_queued_tool(words) and build_would_wait())
 
 
