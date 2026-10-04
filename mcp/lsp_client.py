@@ -4,7 +4,6 @@ import os
 import subprocess
 import sys
 
-from project_files import ProjectFileChanges
 from text_positions import LINE_BREAK, read_text, to_uri, utf16_length
 
 QUIET_SECONDS_BEFORE_READY = 2.0
@@ -17,7 +16,7 @@ class LanguageServerExited(RuntimeError):
 
 
 class LanguageServer:
-    def __init__(self, name, command, language_ids, config_files, root, environment):
+    def __init__(self, name, command, language_ids, root, environment):
         self.name = name
         self.command = command
         self.environment = environment
@@ -29,7 +28,6 @@ class LanguageServer:
         self.opened = {}
         self.last_message_at = 0.0
         self.reader_task = None
-        self.file_changes = ProjectFileChanges(root, language_ids, config_files)
 
     @property
     def alive(self):
