@@ -39,7 +39,9 @@ def nearest_directory_with(path, suffixes, repo):
 
 
 def solution_mentioning(project_file, repo):
-    for solution in files_under(repo, SOLUTION_SUFFIXES):
+    for solution in map(Path, files_under(repo)):
+        if solution.suffix not in SOLUTION_SUFFIXES:
+            continue
         try:
             if project_file.name in solution.read_text(
                 encoding="utf-8", errors="replace"

@@ -1,5 +1,5 @@
 import os
-from pathlib import Path
+import subprocess
 
 from text_positions import to_uri
 
@@ -7,7 +7,7 @@ SKIPPED_DIRECTORIES = {"bin", "obj", "node_modules"}
 CREATED, CHANGED, DELETED = 1, 2, 3
 
 
-def files_under(root, suffixes):
+def files_under(root):
     for directory, subdirectories, files in os.walk(root):
         subdirectories[:] = [
             name
@@ -15,15 +15,31 @@ def files_under(root, suffixes):
             if not name.startswith(".") and name not in SKIPPED_DIRECTORIES
         ]
         for name in files:
-            if Path(name).suffix in suffixes:
-                yield Path(directory) / name
+            yield os.path.join(directory, name)
+
+
+def unignored_files_under(root):
+    try:
+        output = subprocess.run(
+            ["git", "-C", str(root), "ls-files", "-z"]
+            + ["--cached", "--others", "--exclude-standard"],
+            capture_output=True,
+            check=True,
+        ).stdout
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return files_under(root)
+    return [
+        os.path.join(root, os.fsdecode(name)) for name in output.split(b"\0") if name
+    ]
 
 
 def file_stamps(root, suffixes):
     stamps = {}
-    for path in files_under(root, suffixes):
+    for path in unignored_files_under(root):
+        if not path.endswith(suffixes):
+            continue
         try:
-            stat = path.stat()
+            stat = os.stat(path)
         except OSError:
             continue
         stamps[path] = (stat.st_mtime_ns, stat.st_size)
