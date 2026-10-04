@@ -64,6 +64,7 @@ class LanguageServer:
                         "textDocument": {
                             "hover": {"contentFormat": ["markdown", "plaintext"]},
                             "diagnostic": {},
+                            "callHierarchy": {},
                         },
                     },
                 },

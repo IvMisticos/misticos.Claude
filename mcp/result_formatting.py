@@ -1,3 +1,5 @@
+from typing import NamedTuple
+
 from text_positions import from_uri, lines_of, utf16_offset_to_index
 
 
@@ -63,6 +65,35 @@ def diagnostic_line(path, diagnostic):
     code = f" {diagnostic['code']}" if diagnostic.get("code") is not None else ""
     start = place(path, diagnostic["range"]["start"])
     return f"{start} {severity}{code}: {diagnostic['message']}"
+
+
+class Call(NamedTuple):
+    function: dict
+    call_site_uri: str
+    call_site_ranges: list
+
+
+def calls_text(calls):
+    return "\n".join(call_lines(call) for call in calls) or "no calls"
+
+
+def call_lines(call):
+    function = call.function
+    definition = place(from_uri(function["uri"]), function["selectionRange"]["start"])
+    call_site_path = from_uri(call.call_site_uri)
+    call_site_starts = {
+        position_key(range_["start"]): range_["start"]
+        for range_ in call.call_site_ranges
+    }
+    return "\n".join(
+        [
+            f"{function['name']} ({symbol_kind(function.get('kind'))}) {definition}",
+            *(
+                f"  called at {place(call_site_path, start)}"
+                for _, start in sorted(call_site_starts.items())
+            ),
+        ]
+    )
 
 
 def place(path, position):

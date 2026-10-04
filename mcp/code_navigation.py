@@ -9,6 +9,8 @@ from pathlib import Path
 
 from mcp.server.mcpserver import MCPServer
 from result_formatting import (
+    Call,
+    calls_text,
     diagnostics_text,
     hover_text,
     locations_text,
@@ -107,6 +109,47 @@ async def diagnostics(file: str) -> str:
         "textDocument/diagnostic", {"textDocument": {"uri": to_uri(path)}}
     )
     return diagnostics_text(path, report["items"])
+
+
+async def functions_at(file, line, column):
+    path = resolved(file)
+    server = await server_for(path)
+    functions = await server.at_position(
+        "textDocument/prepareCallHierarchy", path, line, column
+    )
+    return server, functions or []
+
+
+@mcp.tool()
+async def callers(file: str, line: int, column: int) -> str:
+    """Functions that call the function at file:line:column (1-based), each with the places it calls from."""
+    server, functions = await functions_at(file, line, column)
+    calls = []
+    for function in functions:
+        incoming = await server.request(
+            "callHierarchy/incomingCalls", {"item": function}
+        )
+        calls.extend(
+            Call(call["from"], call["from"]["uri"], call["fromRanges"])
+            for call in incoming or []
+        )
+    return calls_text(calls)
+
+
+@mcp.tool()
+async def callees(file: str, line: int, column: int) -> str:
+    """Functions that the function at file:line:column (1-based) calls, each with the places it is called."""
+    server, functions = await functions_at(file, line, column)
+    calls = []
+    for function in functions:
+        outgoing = await server.request(
+            "callHierarchy/outgoingCalls", {"item": function}
+        )
+        calls.extend(
+            Call(call["to"], function["uri"], call["fromRanges"])
+            for call in outgoing or []
+        )
+    return calls_text(calls)
 
 
 if __name__ == "__main__":
