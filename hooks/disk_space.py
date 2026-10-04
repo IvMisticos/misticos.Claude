@@ -8,7 +8,6 @@ import os
 import re
 import shutil
 import sys
-import tempfile
 import traceback
 
 from reminder import QuietArgumentParser, hook_output
@@ -16,17 +15,24 @@ from reminder import QuietArgumentParser, hook_output
 LOW_SPACE_BYTES = 1 << 30
 BYTES_PER_MIB = 1 << 20
 OUT_OF_SPACE_ERROR = re.compile(
-    r"\bENOSPC\b|\bEDQUOT\b|(?i:no space left on device|disk quota exceeded"
-    r"|not enough space on the disk|database or disk is full)"
+    r"no space left on device|disk quota exceeded|not enough space on the disk"
+    r"|database or disk is full",
+    re.IGNORECASE,
 )
 READ_ONLY_TOOLS = {"Read", "Grep", "Glob", "LS", "WebFetch", "WebSearch"}
 TOOL_RESULT_FIELDS = ("tool_response", "tool_output", "error_message")
-RAN_OUT = "A tool call ran out of disk space."
+TEMP_DIR_VARIABLES = ("TMPDIR", "TEMP", "TMP")
 RUNNING_LOW = "Only {free} MiB of disk is free at {path}."
-CLEAN_UP = (
-    "Free space now: delete build output, package caches and clones you no "
-    "longer need. Keep the uv cache: the hooks run from it. Delete only what "
-    "you created or can regenerate."
+FREE_SPACE_NOW = "Free space now."
+RAN_OUT = (
+    "A tool result reports running out of disk space. If a write of yours "
+    "failed, free space now. If you only read text that quotes such an "
+    "error, ignore this."
+)
+HOW_TO_CLEAN_UP = (
+    "Delete build output, package caches and clones you no longer need. Keep "
+    "the uv cache: the hooks run from it. Delete only what you created or can "
+    "regenerate."
 )
 
 
@@ -51,7 +57,8 @@ def ran_out_of_space(payload):
 
 def watched_paths(payload):
     cwd = payload.get("cwd") or os.getcwd()
-    return (cwd, tempfile.gettempdir(), os.path.expanduser("~"))
+    temp_dirs = filter(None, map(os.environ.get, TEMP_DIR_VARIABLES))
+    return (cwd, os.path.expanduser("~"), *temp_dirs, "/tmp")
 
 
 def low_disks(paths):
@@ -69,16 +76,16 @@ def low_disks(paths):
             yield path, free
 
 
-def warning_causes(payload):
-    if ran_out_of_space(payload):
-        yield RAN_OUT
-    for path, free in low_disks(watched_paths(payload)):
-        yield RUNNING_LOW.format(free=free // BYTES_PER_MIB, path=path)
-
-
 def disk_warning(payload):
-    causes = list(warning_causes(payload))
-    return " ".join([*causes, CLEAN_UP]) if causes else None
+    low_space = [
+        RUNNING_LOW.format(free=free // BYTES_PER_MIB, path=path)
+        for path, free in low_disks(watched_paths(payload))
+    ]
+    if low_space:
+        return " ".join([*low_space, FREE_SPACE_NOW, HOW_TO_CLEAN_UP])
+    if ran_out_of_space(payload):
+        return f"{RAN_OUT} {HOW_TO_CLEAN_UP}"
+    return None
 
 
 def parsed_options(argv):
