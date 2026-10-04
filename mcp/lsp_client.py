@@ -4,6 +4,7 @@ import os
 import subprocess
 import sys
 
+from project_files import ProjectFileChanges
 from text_positions import LINE_BREAK, read_text, to_uri, utf16_length
 
 QUIET_SECONDS_BEFORE_READY = 2.0
@@ -28,6 +29,7 @@ class LanguageServer:
         self.opened = {}
         self.last_message_at = 0.0
         self.reader_task = None
+        self.file_changes = ProjectFileChanges(root, language_ids)
 
     @property
     def alive(self):
@@ -207,6 +209,18 @@ class LanguageServer:
             },
         )
         return text
+
+    def close_document(self, uri):
+        if self.opened.pop(uri, None) is not None:
+            self.notify("textDocument/didClose", {"textDocument": {"uri": uri}})
+
+    def sync_with_disk(self):
+        changes = self.file_changes.since_last_check()
+        if not changes:
+            return
+        for change in changes:
+            self.close_document(change["uri"])
+        self.notify("workspace/didChangeWatchedFiles", {"changes": changes})
 
     async def at_position(self, method, path, line, column, extra=None):
         text = self.open_document(path)

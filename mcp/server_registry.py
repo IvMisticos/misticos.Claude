@@ -34,7 +34,9 @@ async def server_for(path):
         starting = None
     if starting is None:
         starting = starting_servers[key] = asyncio.ensure_future(start_server(*key))
-    return await asyncio.shield(starting)
+    server = await asyncio.shield(starting)
+    server.sync_with_disk()
+    return server
 
 
 def started_ok(starting):
