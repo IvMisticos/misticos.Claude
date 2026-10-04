@@ -71,8 +71,7 @@ def csharp_root(path, repo):
     return solution_mentioning(project_file, repo) or project_file.parent
 
 
-def project_root(name, path):
-    repo = git_root(path)
+def project_root(name, path, repo):
     if name != "csharp":
         return repo
     return csharp_root(path, repo)

@@ -8,7 +8,7 @@ from language_servers import (
 )
 from lsp_client import LanguageServer
 from project_files import ProjectFileChanges
-from project_roots import project_root
+from project_roots import git_root, project_root
 
 REPLACED_SERVER_GRACE_SECONDS = 120.0
 starting_servers = {}
@@ -30,8 +30,9 @@ async def server_for(path):
     name = EXTENSION_TO_SERVER.get(path.suffix)
     if name is None:
         raise ValueError(f"no language server for {path.suffix} files")
-    key = (name, project_root(name, path))
-    changes = file_changes_for(key).since_last_check()
+    repo = git_root(path)
+    key = (name, project_root(name, path, repo))
+    changes = file_changes_for(key, repo).since_last_check()
     if changes.config_changed:
         replace_server(key)
     server = await running_server(key)
@@ -39,12 +40,12 @@ async def server_for(path):
     return server
 
 
-def file_changes_for(key):
+def file_changes_for(key, repo):
     if key not in project_file_changes:
-        name, root = key
+        name, _ = key
         spec = LANGUAGE_SERVERS[name]
         project_file_changes[key] = ProjectFileChanges(
-            root, spec["extensions"], spec["config_files"]
+            repo, spec["extensions"], spec["config_files"]
         )
     return project_file_changes[key]
 
