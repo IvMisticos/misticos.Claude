@@ -4,12 +4,16 @@ set -euo pipefail
 
 bin_dir=$(cd "$(dirname "$0")" && pwd -P)
 
-first_outside_bin_dir() {
+is_queue_bin_dir() {
+  [ -f "$1/../hooks/work_queue.py" ]
+}
+
+first_real() {
   local name=$1 dir
   local -a dirs
   IFS=: read -ra dirs <<< "$PATH:$HOME/.local/bin"
   for dir in "${dirs[@]}"; do
-    if [ -f "$dir/$name" ] && [ -x "$dir/$name" ] && ! [ "$dir/$name" -ef "$bin_dir/$name" ]; then
+    if [ -f "$dir/$name" ] && [ -x "$dir/$name" ] && ! is_queue_bin_dir "$dir"; then
       printf '%s\n' "$dir/$name"
       return 0
     fi
@@ -19,12 +23,13 @@ first_outside_bin_dir() {
 }
 
 if [ "${1:-}" = tool ]; then
-  real=$(first_outside_bin_dir "$2")
+  real=$(first_real "$2")
   if [ -n "${MISTICOS_QUEUE_HELD:-}" ]; then
     exec "$real" "${@:3}"
   fi
   set -- tool "$real" "${@:3}"
 fi
 
-uv=$(first_outside_bin_dir uv)
-exec "$uv" run --script "$bin_dir/../hooks/work_queue.py" "$@"
+uv=$(first_real uv)
+python=$("$uv" python find --system '>=3.11')
+exec "$python" "$bin_dir/../hooks/work_queue.py" "$@"
