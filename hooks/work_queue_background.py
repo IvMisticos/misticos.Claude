@@ -11,16 +11,27 @@ from model_cap import run_pre_tool_use
 if os.name == "posix":
     from work_queue import build_would_wait, queues
 
+SHELLS = {"bash", "sh", "zsh"}
 
-def command_tokens(command):
+
+def shell_tokens(command):
     try:
         lexer = shlex.shlex(command, posix=True, punctuation_chars=True)
         lexer.whitespace_split = True
-        tokens = list(lexer)
+        return list(lexer)
     except ValueError:
-        tokens = command.split()
-    for token in tokens:
-        if any(character.isspace() for character in token):
+        return command.split()
+
+
+def command_tokens(command):
+    tokens = shell_tokens(command)
+    for index, token in enumerate(tokens):
+        runs_inline_script = (
+            index >= 2
+            and os.path.basename(tokens[index - 2]) in SHELLS
+            and tokens[index - 1] == "-c"
+        )
+        if runs_inline_script:
             yield from command_tokens(token)
         else:
             yield token
