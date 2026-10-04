@@ -12,17 +12,18 @@ import signal
 import subprocess
 import sys
 import time
-from dataclasses import dataclass
 from pathlib import Path
+
+from core_pinning import CAN_PIN_CORES, pinned, plan_cores, restore_abandoned_pinning
 
 HELD_VARIABLE = "MISTICOS_QUEUE_HELD"
 LOCK_DIR = Path("/tmp") / f"misticos-queue-{os.getuid()}"
 MACHINE_LOCK = LOCK_DIR / "machine.lock"
 TURNSTILE_LOCK = LOCK_DIR / "turnstile.lock"
 BENCHMARK_LOCK = LOCK_DIR / "benchmark.lock"
+PINNING_STATE = LOCK_DIR / "pinning.json"
 BUILD_SLOTS = max(1, (os.cpu_count() or 1) // 2)
 SLOT_POLL_SECONDS = 0.5
-CAN_PIN_CORES = hasattr(os, "sched_setaffinity")
 QUEUED_SUBCOMMANDS = {
     "dotnet": {"build", "test", "publish", "pack"},
     "cargo": {
@@ -49,17 +50,6 @@ GLOBAL_OPTIONS_WITH_VALUE = {
     "uv": {"--directory", "--project", "--cache-dir", "--config-file", "--color"},
     "bun": {"--cwd", "--config", "-c"},
 }
-
-
-@dataclass(frozen=True)
-class CorePlan:
-    everything: frozenset[int]
-    benchmark: frozenset[int]
-    reserved: frozenset[int]
-
-    @property
-    def others(self):
-        return self.everything - self.reserved
 
 
 def positionals(tool, arguments):
@@ -166,76 +156,6 @@ def build_would_wait():
     return False
 
 
-def hyperthreads(cpu):
-    listing = Path(f"/sys/devices/system/cpu/cpu{cpu}/topology/thread_siblings_list")
-    try:
-        text = listing.read_text().strip()
-    except OSError:
-        return {cpu}
-    siblings = {cpu}
-    for part in text.split(","):
-        first, _, last = part.partition("-")
-        siblings.update(range(int(first), int(last or first) + 1))
-    return siblings
-
-
-def plan_cores(count, alone):
-    everything = frozenset(os.sched_getaffinity(0))
-    benchmark, reserved = set(), set()
-    for cpu in sorted(everything, reverse=True):
-        if len(benchmark) == count:
-            break
-        if cpu not in reserved:
-            benchmark.add(cpu)
-            reserved |= hyperthreads(cpu) & everything
-    if len(benchmark) < count:
-        sys.exit(f"queue: --cores {count} asks for more cores than this machine has")
-    if reserved == everything and not alone:
-        sys.exit(
-            f"queue: --cores {count} leaves no core for other work. "
-            "Pass --alone to use every core."
-        )
-    return CorePlan(everything, frozenset(benchmark), frozenset(reserved))
-
-
-def other_threads():
-    own_process = str(os.getpid())
-    for task in Path("/proc").glob("[0-9]*/task/[0-9]*"):
-        if task.parent.parent.name != own_process:
-            yield int(task.name)
-
-
-def move_off_reserved_cores(plan):
-    original_masks = {}
-    for thread in other_threads():
-        with contextlib.suppress(OSError):
-            mask = os.sched_getaffinity(thread)
-            if mask & plan.reserved:
-                os.sched_setaffinity(thread, (mask - plan.reserved) or plan.others)
-                original_masks[thread] = mask
-    return original_masks
-
-
-def restore_moved_threads(plan, original_masks):
-    for thread in other_threads():
-        with contextlib.suppress(OSError):
-            if thread in original_masks:
-                os.sched_setaffinity(thread, original_masks[thread])
-            elif os.sched_getaffinity(thread) in (plan.others, plan.benchmark):
-                os.sched_setaffinity(thread, plan.everything)
-
-
-@contextlib.contextmanager
-def pinned(plan):
-    original_masks = move_off_reserved_cores(plan) if plan.others else {}
-    os.sched_setaffinity(0, plan.benchmark)
-    try:
-        yield
-    finally:
-        os.sched_setaffinity(0, plan.everything)
-        restore_moved_threads(plan, original_masks)
-
-
 def exit_status(returncode):
     return 128 - returncode if returncode < 0 else returncode
 
@@ -261,17 +181,19 @@ def run_benchmark(command, cores, alone):
     if not CAN_PIN_CORES and not alone:
         notice("this system cannot pin cores, so the benchmark runs alone")
         alone = True
-    plan = plan_cores(cores, alone) if CAN_PIN_CORES else None
     with contextlib.ExitStack() as held:
         held.enter_context(
             locked(BENCHMARK_LOCK, fcntl.LOCK_EX, "waiting for the running benchmark")
         )
+        if CAN_PIN_CORES:
+            restore_abandoned_pinning(PINNING_STATE)
+        plan = plan_cores(cores, alone) if CAN_PIN_CORES else None
         if alone:
             held.enter_context(
                 machine_locked(fcntl.LOCK_EX, "waiting for builds to finish")
             )
         if plan:
-            held.enter_context(pinned(plan))
+            held.enter_context(pinned(plan, PINNING_STATE))
         return run_held(command)
 
 
