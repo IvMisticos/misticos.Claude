@@ -181,7 +181,18 @@ def run_held(command):
     return exit_status(child.wait())
 
 
+def restore_pinning_of_killed_benchmark():
+    if not CAN_PIN_CORES:
+        return
+    benchmark = try_lock(BENCHMARK_LOCK, fcntl.LOCK_EX)
+    if benchmark is None:
+        return
+    with benchmark:
+        restore_abandoned_pinning(PINNING_STATE)
+
+
 def run_build(command):
+    restore_pinning_of_killed_benchmark()
     alone_message = "waiting for a benchmark that runs alone"
     with build_slot(), machine_locked(fcntl.LOCK_SH, alone_message):
         return run_held(command)
