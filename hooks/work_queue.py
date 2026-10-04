@@ -25,6 +25,7 @@ USABLE_CPUS = len(os.sched_getaffinity(0)) if CAN_PIN_CORES else os.cpu_count() 
 BUILD_SLOTS = max(1, USABLE_CPUS // 2)
 SLOT_POLL_SECONDS = 0.5
 STOP_SIGNALS = (signal.SIGTERM, signal.SIGHUP)
+SIGNALS_PYTHON_IGNORES = (signal.SIGPIPE, signal.SIGXFSZ)
 QUEUED_SUBCOMMANDS = {
     "dotnet": {"build", "test", "publish", "pack"},
     "cargo": {
@@ -198,9 +199,15 @@ def run_build(command):
         return run_held(command)
 
 
+def exec_unqueued(executable, arguments):
+    for ignored_signal in SIGNALS_PYTHON_IGNORES:
+        signal.signal(ignored_signal, signal.SIG_DFL)
+    os.execv(executable, [executable, *arguments])
+
+
 def run_tool(executable, arguments):
     if not queues(Path(executable).name, arguments):
-        os.execv(executable, [executable, *arguments])
+        exec_unqueued(executable, arguments)
     return run_build([executable, *arguments])
 
 
