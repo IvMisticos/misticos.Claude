@@ -43,6 +43,11 @@ QUEUED_RUN_TARGETS = {
     "bun": {"build", "test"},
     "uv": {"pytest"},
 }
+GLOBAL_OPTIONS_WITH_VALUE = {
+    "cargo": {"-C", "-Z", "--config", "--color"},
+    "uv": {"--directory", "--project", "--cache-dir", "--config-file", "--color"},
+    "bun": {"--cwd", "--config", "-c"},
+}
 
 
 @dataclass(frozen=True)
@@ -56,11 +61,21 @@ class CorePlan:
         return self.everything - self.reserved
 
 
+def positionals(tool, arguments):
+    options_with_value = GLOBAL_OPTIONS_WITH_VALUE.get(tool, set())
+    words = iter(arguments)
+    for word in words:
+        if word in options_with_value:
+            next(words, None)
+        elif not word.startswith(("-", "+")):
+            yield word
+
+
 def queues(tool, arguments):
-    positionals = [word for word in arguments if not word.startswith(("-", "+"))]
-    if not positionals:
+    words = list(positionals(tool, arguments))
+    if not words:
         return False
-    subcommand, *rest = positionals
+    subcommand, *rest = words
     if subcommand in QUEUED_SUBCOMMANDS.get(tool, ()):
         return True
     return subcommand == "run" and bool(QUEUED_RUN_TARGETS.get(tool, set()) & set(rest))
