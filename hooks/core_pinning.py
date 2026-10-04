@@ -176,7 +176,7 @@ def clear_reserved_cores(plan, masks_before, state_path):
 
 @contextlib.contextmanager
 def pinned(plan, state_path):
-    masks_before = snapshot_masks()
+    masks_before = snapshot_masks() if plan.others else {}
     save_pinning(state_path, plan, masks_before)
     try:
         if plan.others:
