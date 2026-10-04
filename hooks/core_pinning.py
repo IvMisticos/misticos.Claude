@@ -64,9 +64,15 @@ def snapshot_masks():
     return masks
 
 
+def threads_born_on_reserved_cores(plan, known_threads):
+    return {
+        thread: mask
+        for thread, mask in snapshot_masks().items()
+        if thread not in known_threads and mask & plan.reserved
+    }
+
+
 def move_off_reserved_cores(plan, masks_before):
-    if not plan.others:
-        return
     for thread, mask in masks_before.items():
         if mask & plan.reserved:
             with contextlib.suppress(OSError):
@@ -119,12 +125,21 @@ def restore_abandoned_pinning(state_path):
     state_path.unlink(missing_ok=True)
 
 
+def clear_reserved_cores(plan, masks_before, state_path):
+    move_off_reserved_cores(plan, masks_before)
+    while late := threads_born_on_reserved_cores(plan, masks_before):
+        masks_before |= late
+        save_pinning(state_path, plan, masks_before)
+        move_off_reserved_cores(plan, late)
+
+
 @contextlib.contextmanager
 def pinned(plan, state_path):
     masks_before = snapshot_masks()
     save_pinning(state_path, plan, masks_before)
     try:
-        move_off_reserved_cores(plan, masks_before)
+        if plan.others:
+            clear_reserved_cores(plan, masks_before, state_path)
         os.sched_setaffinity(0, plan.benchmark)
         yield
     finally:
