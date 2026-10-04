@@ -121,17 +121,17 @@ def save_pinning(state_path, plan, masks_before):
 def load_pinning(state_path):
     try:
         state = json.loads(state_path.read_text())
-    except (OSError, ValueError):
+        plan = CorePlan(
+            frozenset(state["everything"]),
+            frozenset(state["benchmark"]),
+            frozenset(state["reserved"]),
+        )
+        masks_before = {
+            Thread(*map(int, thread.split(":"))): set(mask)
+            for thread, mask in state["masks_before"].items()
+        }
+    except (OSError, ValueError, KeyError, TypeError):
         return None
-    plan = CorePlan(
-        frozenset(state["everything"]),
-        frozenset(state["benchmark"]),
-        frozenset(state["reserved"]),
-    )
-    masks_before = {
-        Thread(*map(int, thread.split(":"))): set(mask)
-        for thread, mask in state["masks_before"].items()
-    }
     return plan, masks_before
 
 
