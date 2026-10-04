@@ -1,5 +1,8 @@
+import fnmatch
 import os
+import re
 import subprocess
+from typing import NamedTuple
 
 from text_positions import to_uri
 
@@ -33,28 +36,39 @@ def unignored_files_under(root):
     ]
 
 
-def file_stamps(root, suffixes):
-    stamps = {}
-    for path in unignored_files_under(root):
-        if not path.endswith(suffixes):
-            continue
-        try:
-            stat = os.stat(path)
-        except OSError:
-            continue
-        stamps[path] = (stat.st_mtime_ns, stat.st_size)
-    return stamps
+class FileChanges(NamedTuple):
+    events: list
+    config_changed: bool
 
 
 class ProjectFileChanges:
-    def __init__(self, root, suffixes):
+    def __init__(self, root, source_suffixes, config_files):
         self.root = root
-        self.suffixes = tuple(suffixes)
-        self.stamps = file_stamps(root, self.suffixes)
+        self.source_suffixes = tuple(source_suffixes)
+        self.config_file = re.compile("|".join(map(fnmatch.translate, config_files)))
+        self.stamps = self.current_stamps()
+
+    def is_config(self, path):
+        return self.config_file.match(os.path.basename(path)) is not None
+
+    def is_watched(self, path):
+        return path.endswith(self.source_suffixes) or self.is_config(path)
+
+    def current_stamps(self):
+        stamps = {}
+        for path in unignored_files_under(self.root):
+            if not self.is_watched(path):
+                continue
+            try:
+                stat = os.stat(path)
+            except OSError:
+                continue
+            stamps[path] = (stat.st_mtime_ns, stat.st_size)
+        return stamps
 
     def since_last_check(self):
         previous = self.stamps
-        current = self.stamps = file_stamps(self.root, self.suffixes)
+        current = self.stamps = self.current_stamps()
         created = [(path, CREATED) for path in current.keys() - previous.keys()]
         deleted = [(path, DELETED) for path in previous.keys() - current.keys()]
         changed = [
@@ -62,7 +76,8 @@ class ProjectFileChanges:
             for path in current.keys() & previous.keys()
             if current[path] != previous[path]
         ]
-        return [
-            {"uri": to_uri(path), "type": change}
-            for path, change in created + deleted + changed
-        ]
+        changes = created + deleted + changed
+        return FileChanges(
+            events=[{"uri": to_uri(path), "type": change} for path, change in changes],
+            config_changed=any(self.is_config(path) for path, _ in changes),
+        )

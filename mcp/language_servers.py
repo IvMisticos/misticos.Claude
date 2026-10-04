@@ -18,16 +18,27 @@ LANGUAGE_SERVERS = {
             ".mjs": "javascript",
             ".cjs": "javascript",
         },
+        "config_files": ["tsconfig*.json", "jsconfig*.json", "package.json"],
     },
     "csharp": {
         "command": ["csharp-ls"],
         "install": ["dotnet", "tool", "install", "-g", "csharp-ls"],
         "extensions": {".cs": "csharp"},
+        "config_files": [
+            "*.csproj",
+            "*.sln",
+            "*.slnx",
+            "*.slnf",
+            "*.props",
+            "*.targets",
+            "global.json",
+        ],
     },
     "python": {
         "command": ["ty", "server"],
         "install": ["uv", "tool", "install", "ty"],
         "extensions": {".py": "python", ".pyi": "python"},
+        "config_files": ["pyproject.toml", "ty.toml"],
     },
 }
 EXTENSION_TO_SERVER = {

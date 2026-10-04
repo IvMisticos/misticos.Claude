@@ -17,7 +17,7 @@ class LanguageServerExited(RuntimeError):
 
 
 class LanguageServer:
-    def __init__(self, name, command, language_ids, root, environment):
+    def __init__(self, name, command, language_ids, config_files, root, environment):
         self.name = name
         self.command = command
         self.environment = environment
@@ -29,7 +29,7 @@ class LanguageServer:
         self.opened = {}
         self.last_message_at = 0.0
         self.reader_task = None
-        self.file_changes = ProjectFileChanges(root, language_ids)
+        self.file_changes = ProjectFileChanges(root, language_ids, config_files)
 
     @property
     def alive(self):
@@ -216,13 +216,12 @@ class LanguageServer:
         if self.opened.pop(uri, None) is not None:
             self.notify("textDocument/didClose", {"textDocument": {"uri": uri}})
 
-    def sync_with_disk(self):
-        changes = self.file_changes.since_last_check()
-        if not changes:
+    def apply_file_changes(self, events):
+        if not events:
             return
-        for change in changes:
-            self.close_document(change["uri"])
-        self.notify("workspace/didChangeWatchedFiles", {"changes": changes})
+        for event in events:
+            self.close_document(event["uri"])
+        self.notify("workspace/didChangeWatchedFiles", {"changes": events})
 
     async def at_position(self, method, path, line, column, extra=None):
         text = self.open_document(path)

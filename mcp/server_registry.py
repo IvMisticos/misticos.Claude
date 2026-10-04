@@ -16,7 +16,12 @@ async def start_server(name, root):
     await ensure_installed(name)
     spec = LANGUAGE_SERVERS[name]
     server = LanguageServer(
-        name, spec["command"], spec["extensions"], root, toolchain_environment()
+        name,
+        spec["command"],
+        spec["extensions"],
+        spec["config_files"],
+        root,
+        toolchain_environment(),
     )
     await server.start()
     return server
@@ -27,6 +32,17 @@ async def server_for(path):
     if name is None:
         raise ValueError(f"no language server for {path.suffix} files")
     key = (name, project_root(name, path))
+    server = await running_server(key)
+    changes = server.file_changes.since_last_check()
+    if changes.config_changed:
+        server.stop()
+        del starting_servers[key]
+        return await running_server(key)
+    server.apply_file_changes(changes.events)
+    return server
+
+
+async def running_server(key):
     starting = starting_servers.get(key)
     if starting is not None and starting.done() and not started_and_alive(starting):
         if started_ok(starting):
@@ -34,9 +50,7 @@ async def server_for(path):
         starting = None
     if starting is None:
         starting = starting_servers[key] = asyncio.ensure_future(start_server(*key))
-    server = await asyncio.shield(starting)
-    server.sync_with_disk()
-    return server
+    return await asyncio.shield(starting)
 
 
 def started_ok(starting):
