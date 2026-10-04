@@ -56,72 +56,77 @@ def all_threads():
         yield int(task.name)
 
 
-def move_off_reserved_cores(plan):
-    original_masks = {}
+def snapshot_masks():
+    masks = {}
+    for thread in all_threads():
+        with contextlib.suppress(OSError):
+            masks[thread] = os.sched_getaffinity(thread)
+    return masks
+
+
+def move_off_reserved_cores(plan, masks_before):
     if not plan.others:
-        return original_masks
-    for thread in all_threads():
-        with contextlib.suppress(OSError):
-            mask = os.sched_getaffinity(thread)
-            if mask & plan.reserved:
+        return
+    for thread, mask in masks_before.items():
+        if mask & plan.reserved:
+            with contextlib.suppress(OSError):
                 os.sched_setaffinity(thread, (mask - plan.reserved) or plan.others)
-                original_masks[thread] = mask
-    return original_masks
 
 
-def restore_threads(plan, original_masks):
+def restore_threads(plan, masks_before):
     for thread in all_threads():
         with contextlib.suppress(OSError):
-            if thread in original_masks:
-                os.sched_setaffinity(thread, original_masks[thread])
+            if thread in masks_before:
+                os.sched_setaffinity(thread, masks_before[thread])
             elif os.sched_getaffinity(thread) in (plan.others, plan.benchmark):
                 os.sched_setaffinity(thread, plan.everything)
 
 
-def save_pinning(state_path, plan, original_masks):
+def save_pinning(state_path, plan, masks_before):
     state = {
         "everything": sorted(plan.everything),
         "benchmark": sorted(plan.benchmark),
         "reserved": sorted(plan.reserved),
-        "original_masks": {
-            str(thread): sorted(mask) for thread, mask in original_masks.items()
+        "masks_before": {
+            str(thread): sorted(mask) for thread, mask in masks_before.items()
         },
     }
-    state_path.write_text(json.dumps(state))
+    staged = state_path.with_name(state_path.name + ".saving")
+    staged.write_text(json.dumps(state))
+    os.replace(staged, state_path)
 
 
 def load_pinning(state_path):
     try:
         state = json.loads(state_path.read_text())
-    except FileNotFoundError:
+    except (OSError, ValueError):
         return None
     plan = CorePlan(
         frozenset(state["everything"]),
         frozenset(state["benchmark"]),
         frozenset(state["reserved"]),
     )
-    original_masks = {
-        int(thread): set(mask) for thread, mask in state["original_masks"].items()
+    masks_before = {
+        int(thread): set(mask) for thread, mask in state["masks_before"].items()
     }
-    return plan, original_masks
+    return plan, masks_before
 
 
 def restore_abandoned_pinning(state_path):
     abandoned = load_pinning(state_path)
-    if abandoned is None:
-        return
-    restore_threads(*abandoned)
-    state_path.unlink()
+    if abandoned:
+        restore_threads(*abandoned)
+    state_path.unlink(missing_ok=True)
 
 
 @contextlib.contextmanager
 def pinned(plan, state_path):
-    original_masks = {}
+    masks_before = snapshot_masks()
+    save_pinning(state_path, plan, masks_before)
     try:
-        original_masks = move_off_reserved_cores(plan)
-        save_pinning(state_path, plan, original_masks)
+        move_off_reserved_cores(plan, masks_before)
         os.sched_setaffinity(0, plan.benchmark)
         yield
     finally:
-        restore_threads(plan, original_masks)
+        restore_threads(plan, masks_before)
         state_path.unlink(missing_ok=True)
