@@ -10,30 +10,68 @@ SKIPPED_DIRECTORIES = {"bin", "obj", "node_modules"}
 CREATED, CHANGED, DELETED = 1, 2, 3
 
 
+def is_skipped_directory(name):
+    return name.startswith(".") or name in SKIPPED_DIRECTORIES
+
+
 def files_under(root):
     for directory, subdirectories, files in os.walk(root):
         subdirectories[:] = [
-            name
-            for name in subdirectories
-            if not name.startswith(".") and name not in SKIPPED_DIRECTORIES
+            name for name in subdirectories if not is_skipped_directory(name)
         ]
         for name in files:
             yield os.path.join(directory, name)
 
 
-def unignored_files_under(root):
+class ProjectFiles(NamedTuple):
+    unignored: list
+    ignored: list
+
+
+def project_files_under(root):
     try:
-        output = subprocess.run(
-            ["git", "-C", str(root), "ls-files", "-z"]
-            + ["--cached", "--others", "--exclude-standard"],
-            capture_output=True,
-            check=True,
-        ).stdout
+        unignored = git_listed(root, "--cached", "--others", "--exclude-standard")
+        ignored_entries = git_listed(
+            root, "--others", "--ignored", "--exclude-standard", "--directory"
+        )
     except (subprocess.CalledProcessError, FileNotFoundError):
-        return files_under(root)
+        return ProjectFiles(unignored=list(files_under(root)), ignored=[])
+    ignored = [path for entry in ignored_entries for path in ignored_files(entry)]
+    return ProjectFiles(unignored, ignored)
+
+
+def git_listed(root, *options):
+    output = subprocess.run(
+        ["git", "-C", str(root), "ls-files", "-z", *options],
+        capture_output=True,
+        check=True,
+    ).stdout
     return [
         os.path.join(root, os.fsdecode(name)) for name in output.split(b"\0") if name
     ]
+
+
+def ignored_files(entry):
+    if not entry.endswith("/"):
+        return [entry]
+    if is_skipped_directory(os.path.basename(entry[:-1])) or is_virtualenv(entry):
+        return []
+    return files_under(entry)
+
+
+def is_virtualenv(directory):
+    return os.path.exists(os.path.join(directory, "pyvenv.cfg"))
+
+
+def file_stamps(paths):
+    stamps = {}
+    for path in paths:
+        try:
+            stat = os.stat(path)
+        except OSError:
+            continue
+        stamps[path] = (stat.st_mtime_ns, stat.st_size)
+    return stamps
 
 
 class FileChanges(NamedTuple):
@@ -54,6 +92,9 @@ class ProjectFileChanges:
         self.config_file = re.compile("|".join(map(fnmatch.translate, config_files)))
         self.stamps = self.current_stamps()
 
+    def is_source(self, path):
+        return path.endswith(self.source_suffixes)
+
     def is_config(self, path):
         return self.config_file.match(os.path.basename(path)) is not None
 
@@ -65,20 +106,18 @@ class ProjectFileChanges:
             or os.path.dirname(path) in self.server_root_ancestors
         )
 
-    def is_watched(self, path):
-        return path.endswith(self.source_suffixes) or self.is_config(path)
-
     def current_stamps(self):
-        stamps = {}
-        for path in unignored_files_under(self.repo):
-            if not self.is_watched(path):
-                continue
-            try:
-                stat = os.stat(path)
-            except OSError:
-                continue
-            stamps[path] = (stat.st_mtime_ns, stat.st_size)
-        return stamps
+        files = project_files_under(self.repo)
+        return file_stamps(
+            [
+                *(
+                    path
+                    for path in files.unignored
+                    if self.is_source(path) or self.is_config(path)
+                ),
+                *(path for path in files.ignored if self.is_source(path)),
+            ]
+        )
 
     def since_last_check(self):
         previous = self.stamps
