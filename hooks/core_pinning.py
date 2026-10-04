@@ -57,18 +57,29 @@ class Thread(NamedTuple):
     started: int
 
 
-def started_at(task):
-    fields_after_name = (task / "stat").read_text().rsplit(")", 1)[1].split()
-    return int(fields_after_name[19])
+def started_at(task_path):
+    fields_after_name = (Path(task_path) / "stat").read_text().rsplit(")", 1)[1]
+    return int(fields_after_name.split()[19])
+
+
+def listed(directory):
+    try:
+        with os.scandir(directory) as entries:
+            return list(entries)
+    except OSError:
+        return []
 
 
 def live_threads():
-    for task in Path("/proc").glob("[0-9]*/task/[0-9]*"):
-        try:
-            started = started_at(task)
-        except OSError:
+    for process in listed("/proc"):
+        if not process.name.isdigit():
             continue
-        yield Thread(int(task.name), started)
+        for task in listed(os.path.join(process.path, "task")):
+            try:
+                started = started_at(task.path)
+            except OSError:
+                continue
+            yield Thread(int(task.name), started)
 
 
 def snapshot_masks():
