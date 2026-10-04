@@ -7,8 +7,8 @@ import os
 import shlex
 from pathlib import Path
 
-BIN_DIR = Path(__file__).resolve().parent.parent / "bin"
-PATH_EXPORT = f'export PATH={shlex.quote(str(BIN_DIR))}:"$PATH"\n'
+SHIMS_DIR = Path(__file__).resolve().parent.parent / "shims"
+PATH_EXPORT = f'export PATH={shlex.quote(str(SHIMS_DIR))}:"$PATH"\n'
 
 
 def main():
