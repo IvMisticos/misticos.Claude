@@ -111,11 +111,14 @@ def move_off_reserved_cores(plan, masks_before):
     return moved
 
 
+def was_moved(plan, mask_before):
+    return bool(plan.others and mask_before & plan.reserved)
+
+
 def restore_thread(plan, masks_before, thread):
     if thread in masks_before:
-        mask_before = masks_before[thread]
-        if mask_before & plan.reserved:
-            os.sched_setaffinity(thread.id, mask_before)
+        if was_moved(plan, masks_before[thread]):
+            os.sched_setaffinity(thread.id, masks_before[thread])
     elif os.sched_getaffinity(thread.id) in (plan.others, plan.benchmark):
         os.sched_setaffinity(thread.id, plan.everything)
 
@@ -176,7 +179,7 @@ def clear_reserved_cores(plan, masks_before, state_path):
 
 @contextlib.contextmanager
 def pinned(plan, state_path):
-    masks_before = snapshot_masks() if plan.others else {}
+    masks_before = snapshot_masks()
     save_pinning(state_path, plan, masks_before)
     try:
         if plan.others:
