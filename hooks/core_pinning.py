@@ -99,10 +99,16 @@ def threads_born_on_reserved_cores(plan, known_threads):
 
 
 def move_off_reserved_cores(plan, masks_before):
+    moved = 0
     for thread, mask in masks_before.items():
-        if mask & plan.reserved:
-            with contextlib.suppress(OSError):
-                os.sched_setaffinity(thread.id, (mask - plan.reserved) or plan.others)
+        if not mask & plan.reserved:
+            continue
+        try:
+            os.sched_setaffinity(thread.id, (mask - plan.reserved) or plan.others)
+        except OSError:
+            continue
+        moved += 1
+    return moved
 
 
 def restore_threads(plan, masks_before):
@@ -158,7 +164,8 @@ def clear_reserved_cores(plan, masks_before, state_path):
     while late := threads_born_on_reserved_cores(plan, masks_before):
         masks_before |= late
         save_pinning(state_path, plan, masks_before)
-        move_off_reserved_cores(plan, late)
+        if not move_off_reserved_cores(plan, late):
+            return
 
 
 @contextlib.contextmanager
