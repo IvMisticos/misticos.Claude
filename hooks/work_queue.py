@@ -45,15 +45,33 @@ QUEUED_RUN_TARGETS = {
     "bun": {"build", "test"},
     "uv": {"pytest"},
 }
-GLOBAL_OPTIONS_WITH_VALUE = {
+OPTIONS_WITH_VALUE = {
     "cargo": {"-C", "-Z", "--config", "--color"},
-    "uv": {"--directory", "--project", "--cache-dir", "--config-file", "--color"},
-    "bun": {"--cwd", "--config", "-c"},
+    "uv": {
+        "--directory",
+        "--project",
+        "--cache-dir",
+        "--config-file",
+        "--color",
+        "-w",
+        "--with",
+        "--with-editable",
+        "--with-requirements",
+        "-p",
+        "--python",
+        "--package",
+        "--extra",
+        "--group",
+        "--env-file",
+        "--index",
+    },
+    "bun": {"--cwd", "-c", "--config", "-F", "--filter", "--env-file", "--shell"},
 }
+WATCH_FLAGS = {"--watch", "--hot"}
 
 
 def positionals(tool, arguments):
-    options_with_value = GLOBAL_OPTIONS_WITH_VALUE.get(tool, set())
+    options_with_value = OPTIONS_WITH_VALUE.get(tool, set())
     words = iter(arguments)
     for word in words:
         if word in options_with_value:
@@ -63,13 +81,14 @@ def positionals(tool, arguments):
 
 
 def queues(tool, arguments):
-    words = list(positionals(tool, arguments))
-    if not words:
+    if WATCH_FLAGS & set(arguments):
         return False
-    subcommand, *rest = words
-    if subcommand in QUEUED_SUBCOMMANDS.get(tool, ()):
-        return True
-    return subcommand == "run" and bool(QUEUED_RUN_TARGETS.get(tool, set()) & set(rest))
+    match list(positionals(tool, arguments)):
+        case [subcommand, *_] if subcommand in QUEUED_SUBCOMMANDS.get(tool, ()):
+            return True
+        case ["run", target, *_]:
+            return target in QUEUED_RUN_TARGETS.get(tool, ())
+    return False
 
 
 def notice(message):
@@ -204,22 +223,18 @@ def positive_count(text):
     return count
 
 
-def parse_arguments():
+def parse_bench_arguments():
     parser = argparse.ArgumentParser(prog="queue")
     modes = parser.add_subparsers(dest="mode", required=True)
     bench = modes.add_parser("bench")
     bench.add_argument("--cores", type=positive_count, default=1)
     bench.add_argument("--alone", action="store_true")
     bench.add_argument("command", nargs=argparse.REMAINDER)
-    tool = modes.add_parser("tool")
-    tool.add_argument("executable")
-    tool.add_argument("arguments", nargs=argparse.REMAINDER)
     arguments = parser.parse_args()
-    if arguments.mode == "bench":
-        if arguments.command[:1] == ["--"]:
-            arguments.command = arguments.command[1:]
-        if not arguments.command:
-            bench.error("give the benchmark command after --")
+    if arguments.command[:1] == ["--"]:
+        arguments.command = arguments.command[1:]
+    if not arguments.command:
+        bench.error("give the benchmark command after --")
     return arguments
 
 
@@ -228,11 +243,11 @@ def exit_on_signal(signal_number, _frame):
 
 
 def main():
-    arguments = parse_arguments()
     for stop_signal in (signal.SIGTERM, signal.SIGHUP):
         signal.signal(stop_signal, exit_on_signal)
-    if arguments.mode == "tool":
-        return run_tool(arguments.executable, arguments.arguments)
+    if sys.argv[1:2] == ["tool"]:
+        return run_tool(sys.argv[2], sys.argv[3:])
+    arguments = parse_bench_arguments()
     return run_benchmark(arguments.command, arguments.cores, arguments.alone)
 
 
