@@ -38,6 +38,7 @@ QUEUED_SUBCOMMANDS = {
         "clippy",
         "doc",
         "rustc",
+        "nextest",
     },
     "bun": {"build", "test"},
     "uv": {"build"},
@@ -46,6 +47,7 @@ QUEUED_RUN_TARGETS = {
     "bun": {"build", "test"},
     "uv": {"pytest"},
 }
+PYTHON_LAUNCHERS = {"python", "python3"}
 OPTIONS_WITH_VALUE = {
     "cargo": {"-C", "-Z", "--config", "--color"},
     "uv": {
@@ -87,6 +89,8 @@ def queues(tool, arguments):
     match list(positionals(tool, arguments)):
         case [subcommand, *_] if subcommand in QUEUED_SUBCOMMANDS.get(tool, ()):
             return True
+        case ["run", launcher, target, *_] if launcher in PYTHON_LAUNCHERS:
+            return target in QUEUED_RUN_TARGETS.get(tool, ())
         case ["run", target, *_]:
             return target in QUEUED_RUN_TARGETS.get(tool, ())
     return False
