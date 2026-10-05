@@ -36,7 +36,7 @@ def project_files_under(root):
         )
     except (subprocess.CalledProcessError, FileNotFoundError):
         return ProjectFiles(unignored=list(files_under(root)), ignored=[])
-    ignored = [path for entry in ignored_entries for path in ignored_files(entry)]
+    ignored = [path for entry in ignored_entries for path in ignored_files(root, entry)]
     return ProjectFiles(unignored, ignored)
 
 
@@ -51,12 +51,20 @@ def git_listed(root, *options):
     ]
 
 
-def ignored_files(entry):
-    if not entry.endswith("/"):
-        return [entry]
-    if is_skipped_directory(os.path.basename(entry[:-1])) or is_virtualenv(entry):
+def ignored_files(root, entry):
+    directory = os.path.dirname(entry)
+    if inside_skipped_directory(root, directory) or is_virtualenv(directory):
         return []
-    return files_under(entry)
+    if entry.endswith("/"):
+        return files_under(directory)
+    return [entry]
+
+
+def inside_skipped_directory(root, directory):
+    relative_parts = os.path.relpath(directory, root).split(os.sep)
+    return any(
+        is_skipped_directory(part) for part in relative_parts if part != os.curdir
+    )
 
 
 def is_virtualenv(directory):
