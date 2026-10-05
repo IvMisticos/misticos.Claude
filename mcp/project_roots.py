@@ -1,10 +1,10 @@
-import os
 import subprocess
 from pathlib import Path
 
+from project_files import files_under
+
 SOLUTION_SUFFIXES = (".sln", ".slnx", ".slnf")
 PROJECT_SUFFIXES = (".csproj",)
-SKIPPED_DIRECTORIES = {"bin", "obj", "node_modules"}
 
 
 def git_root(path):
@@ -38,24 +38,10 @@ def nearest_directory_with(path, suffixes, repo):
     return None
 
 
-def solution_files_under(repo):
-    found = []
-    for directory, subdirectories, files in os.walk(repo):
-        subdirectories[:] = [
-            name
-            for name in subdirectories
-            if not name.startswith(".") and name not in SKIPPED_DIRECTORIES
-        ]
-        found.extend(
-            Path(directory) / name
-            for name in files
-            if Path(name).suffix in SOLUTION_SUFFIXES
-        )
-    return found
-
-
 def solution_mentioning(project_file, repo):
-    for solution in solution_files_under(repo):
+    for solution in map(Path, files_under(repo)):
+        if solution.suffix not in SOLUTION_SUFFIXES:
+            continue
         try:
             if project_file.name in solution.read_text(
                 encoding="utf-8", errors="replace"
@@ -85,8 +71,7 @@ def csharp_root(path, repo):
     return solution_mentioning(project_file, repo) or project_file.parent
 
 
-def project_root(name, path):
-    repo = git_root(path)
+def project_root(name, path, repo):
     if name != "csharp":
         return repo
     return csharp_root(path, repo)

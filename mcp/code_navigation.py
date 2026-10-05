@@ -8,7 +8,14 @@ import atexit
 from pathlib import Path
 
 from mcp.server.mcpserver import MCPServer
-from result_formatting import hover_text, locations_text, symbols_text
+from result_formatting import (
+    Call,
+    calls_text,
+    diagnostics_text,
+    hover_text,
+    locations_text,
+    symbols_text,
+)
 from server_registry import server_for, stop_all_servers
 from text_positions import to_uri
 from workspace_edits import apply_workspace_edit
@@ -90,6 +97,61 @@ async def workspace_symbols(query: str, file_in_project: str) -> str:
     path = resolved(file_in_project)
     server = await server_for(path)
     return symbols_text(await server.request("workspace/symbol", {"query": query}))
+
+
+@mcp.tool()
+async def diagnostics(file: str) -> str:
+    """Compile errors and warnings in a file, without building the project."""
+    path = resolved(file)
+    server = await server_for(path)
+    server.open_document(path)
+    report = await server.request(
+        "textDocument/diagnostic", {"textDocument": {"uri": to_uri(path)}}
+    )
+    return diagnostics_text(path, report["items"])
+
+
+async def functions_at(file, line, column):
+    path = resolved(file)
+    server = await server_for(path)
+    functions = await server.at_position(
+        "textDocument/prepareCallHierarchy", path, line, column
+    )
+    if not functions:
+        raise ValueError(f"no function at {file}:{line}:{column}")
+    return server, functions
+
+
+@mcp.tool()
+async def callers(file: str, line: int, column: int) -> str:
+    """Functions that call the function at file:line:column (1-based), each with the places it calls from."""
+    server, functions = await functions_at(file, line, column)
+    calls = []
+    for function in functions:
+        incoming = await server.request(
+            "callHierarchy/incomingCalls", {"item": function}
+        )
+        calls.extend(
+            Call(call["from"], call["from"]["uri"], call["fromRanges"])
+            for call in incoming or []
+        )
+    return calls_text(calls)
+
+
+@mcp.tool()
+async def callees(file: str, line: int, column: int) -> str:
+    """Functions that the function at file:line:column (1-based) calls, each with the places it is called."""
+    server, functions = await functions_at(file, line, column)
+    calls = []
+    for function in functions:
+        outgoing = await server.request(
+            "callHierarchy/outgoingCalls", {"item": function}
+        )
+        calls.extend(
+            Call(call["to"], function["uri"], call["fromRanges"])
+            for call in outgoing or []
+        )
+    return calls_text(calls)
 
 
 if __name__ == "__main__":

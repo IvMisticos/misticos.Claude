@@ -1,3 +1,5 @@
+from typing import NamedTuple
+
 from text_positions import from_uri, lines_of, utf16_offset_to_index
 
 
@@ -40,6 +42,73 @@ def hover_text(result):
     return "\n".join(
         part if isinstance(part, str) else part.get("value", "") for part in contents
     )
+
+
+SHOWN_SEVERITIES = {1: "error", 2: "warning", 3: "info"}
+
+
+def diagnostics_text(path, diagnostics):
+    shown = sorted(
+        (
+            diagnostic
+            for diagnostic in diagnostics
+            if diagnostic.get("severity", 1) in SHOWN_SEVERITIES
+        ),
+        key=lambda diagnostic: position_key(diagnostic["range"]["start"]),
+    )
+    lines = [diagnostic_line(path, diagnostic) for diagnostic in shown]
+    return "\n".join(lines) or "no errors or warnings"
+
+
+def diagnostic_line(path, diagnostic):
+    severity = SHOWN_SEVERITIES[diagnostic.get("severity", 1)]
+    code = f" {diagnostic['code']}" if diagnostic.get("code") is not None else ""
+    start = place(path, diagnostic["range"]["start"])
+    return f"{start} {severity}{code}: {diagnostic['message']}"
+
+
+class Call(NamedTuple):
+    function: dict
+    call_site_uri: str
+    call_site_ranges: list
+
+
+def calls_text(calls):
+    call_sites_by_function = {}
+    for call in calls:
+        call_sites = call_sites_by_function.setdefault(function_line(call.function), {})
+        call_sites.update(call_site_places(call))
+    blocks = [
+        call_block(function, call_sites)
+        for function, call_sites in call_sites_by_function.items()
+    ]
+    return "\n".join(blocks) or "no calls"
+
+
+def call_site_places(call):
+    path = from_uri(call.call_site_uri)
+    return {
+        (str(path), *position_key(range_["start"])): place(path, range_["start"])
+        for range_ in call.call_site_ranges
+    }
+
+
+def call_block(function, call_sites):
+    lines = [f"  called at {call_sites[site]}" for site in sorted(call_sites)]
+    return "\n".join([function, *lines])
+
+
+def function_line(function):
+    definition = place(from_uri(function["uri"]), function["selectionRange"]["start"])
+    return f"{function['name']} ({symbol_kind(function.get('kind'))}) {definition}"
+
+
+def place(path, position):
+    return f"{path}:{position_text(path, position)}"
+
+
+def position_key(position):
+    return position["line"], position["character"]
 
 
 def symbols_text(result):

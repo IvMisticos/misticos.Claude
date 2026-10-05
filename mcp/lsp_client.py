@@ -60,7 +60,9 @@ class LanguageServer:
                         "window": {"workDoneProgress": True},
                         "workspace": {"workspaceEdit": {"documentChanges": True}},
                         "textDocument": {
-                            "hover": {"contentFormat": ["markdown", "plaintext"]}
+                            "hover": {"contentFormat": ["markdown", "plaintext"]},
+                            "diagnostic": {},
+                            "callHierarchy": {},
                         },
                     },
                 },
@@ -207,6 +209,17 @@ class LanguageServer:
             },
         )
         return text
+
+    def close_document(self, uri):
+        if self.opened.pop(uri, None) is not None:
+            self.notify("textDocument/didClose", {"textDocument": {"uri": uri}})
+
+    def apply_file_changes(self, events):
+        if not events:
+            return
+        for event in events:
+            self.close_document(event["uri"])
+        self.notify("workspace/didChangeWatchedFiles", {"changes": events})
 
     async def at_position(self, method, path, line, column, extra=None):
         text = self.open_document(path)
