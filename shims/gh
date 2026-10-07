@@ -56,7 +56,7 @@ runs_a_pull_request_mutation() {
   local word names_graphql=false names_mutation=false
   for word in "$@"; do
     case $word in
-      graphql) names_graphql=true ;;
+      graphql | */graphql) names_graphql=true ;;
       *createPullRequest* | *mergePullRequest* | *enablePullRequestAutoMerge* | *enqueuePullRequest*) names_mutation=true ;;
     esac
   done

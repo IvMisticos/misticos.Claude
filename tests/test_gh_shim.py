@@ -49,6 +49,13 @@ def run_gh(tmp_path):
         ["pr", "new", "--fill"],
         ["api", "graphql", "-f", "query=mutation { mergePullRequest(input: {}) }"],
         ["api", "graphql", "-f", "query=mutation { enqueuePullRequest(input: {}) }"],
+        ["api", "/graphql", "-f", "query=mutation { createPullRequest(input: {}) }"],
+        [
+            "api",
+            "https://api.github.com/graphql",
+            "-f",
+            "query=mutation { mergePullRequest(input: {}) }",
+        ],
         [
             "api",
             "graphql",
