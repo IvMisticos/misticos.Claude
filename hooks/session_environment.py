@@ -9,7 +9,7 @@ from pathlib import Path
 
 SHIMS_DIR = Path(__file__).resolve().parent.parent / "shims"
 HARNESS_GIT_IDENTITY_EXPORT = (
-    "export MISTICOS_HARNESS_GIT_IDENTITY="
+    "export HARNESS_GIT_IDENTITY="
     '"${GIT_AUTHOR_NAME-}|${GIT_AUTHOR_EMAIL-}|${GIT_COMMITTER_NAME-}|${GIT_COMMITTER_EMAIL-}"\n'
 )
 
@@ -21,7 +21,7 @@ def project_dir():
 def session_exports():
     return [
         f'export PATH={shlex.quote(str(SHIMS_DIR))}:"$PATH"\n',
-        f"export MISTICOS_PROJECT_DIR={shlex.quote(project_dir())}\n",
+        f"export HARNESS_PROJECT_DIR={shlex.quote(project_dir())}\n",
         HARNESS_GIT_IDENTITY_EXPORT,
     ]
 

@@ -38,7 +38,7 @@ environment_identity() {
 
 environment_changes_identity() {
   local index name
-  [ "$(environment_identity)" != "${MISTICOS_HARNESS_GIT_IDENTITY-|||}" ] && return 0
+  [ "$(environment_identity)" != "${HARNESS_GIT_IDENTITY-|||}" ] && return 0
   [[ ${GIT_CONFIG_PARAMETERS-} == *"'user.name="* || ${GIT_CONFIG_PARAMETERS-} == *"'user.email="* ]] && return 0
   for ((index = 0; index < ${GIT_CONFIG_COUNT:-0}; index++)); do
     name="GIT_CONFIG_KEY_$index"
@@ -187,11 +187,11 @@ repository_directory() {
 
 targets_project_repository() {
   local target project
-  [ -n "${MISTICOS_PROJECT_DIR-}" ] || return 1
+  [ -n "${HARNESS_PROJECT_DIR-}" ] || return 1
   target=$(repository_directory ${location_options[@]+"${location_options[@]}"}) || return 1
   project=$(
     unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR
-    repository_directory -C "$MISTICOS_PROJECT_DIR"
+    repository_directory -C "$HARNESS_PROJECT_DIR"
   ) || return 1
   [ "$target" = "$project" ]
 }

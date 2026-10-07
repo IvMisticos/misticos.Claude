@@ -15,7 +15,7 @@ from pathlib import Path
 
 from core_pinning import CAN_PIN_CORES, pinned, plan_cores, restore_abandoned_pinning
 
-HELD_VARIABLE = "MISTICOS_QUEUE_HELD"
+HELD_VARIABLE = "HARNESS_QUEUE_HELD"
 LOCK_DIR = Path("/tmp") / f"misticos-queue-{os.getuid()}"
 MACHINE_LOCK = LOCK_DIR / "machine.lock"
 TURNSTILE_LOCK = LOCK_DIR / "turnstile.lock"
