@@ -41,6 +41,12 @@
       {
         "command": "uv run \"${CURSOR_PLUGIN_ROOT}/hooks/cursor_model_cap.py\""
       }
+    ],
+    "preToolUse": [
+      {
+        "matcher": "Shell",
+        "command": "uv run \"${CURSOR_PLUGIN_ROOT}/hooks/guard.py\" --output-shape cursor"
+      }
     ]
   }
 }

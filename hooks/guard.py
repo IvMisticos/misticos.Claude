@@ -3,6 +3,7 @@
 # requires-python = ">=3.11"
 # ///
 
+import argparse
 import json
 import os
 import re
@@ -153,28 +154,40 @@ def denial_reason(command):
     return None
 
 
-def deny(reason):
-    json.dump(
-        {
-            "hookSpecificOutput": {
-                "hookEventName": "PreToolUse",
-                "permissionDecision": "deny",
-                "permissionDecisionReason": reason,
-            }
-        },
-        sys.stdout,
-    )
+def claude_decision(reason):
+    if not reason:
+        return None
+    return {
+        "hookSpecificOutput": {
+            "hookEventName": "PreToolUse",
+            "permissionDecision": "deny",
+            "permissionDecisionReason": reason,
+        }
+    }
+
+
+def cursor_decision(reason):
+    if not reason:
+        return {"permission": "allow"}
+    return {"permission": "deny", "agent_message": reason}
 
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--output-shape", choices=("claude", "cursor"), default="claude"
+    )
+    options = parser.parse_args()
     try:
         payload = json.loads(sys.stdin.read() or "{}")
     except json.JSONDecodeError:
         return
     command = str((payload.get("tool_input") or {}).get("command") or "")
     reason = denial_reason(command)
-    if reason:
-        deny(reason)
+    decide = cursor_decision if options.output_shape == "cursor" else claude_decision
+    decision = decide(reason)
+    if decision:
+        json.dump(decision, sys.stdout)
 
 
 if __name__ == "__main__":
