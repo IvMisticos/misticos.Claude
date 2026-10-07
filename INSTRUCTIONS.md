@@ -170,7 +170,7 @@ Delegate independent, parallel work. Don't delegate what you can finish in a han
 
 Every agent works in its own worktree. Run a workflow with a schema for each agent when every step is known and nothing needs your decision. Give the rest to a named teammate, including any workflow item that turns out to need one. Check the live state before you act on a saved result.
 
-Give every worker, whether teammate, workflow agent, or project thread, a deliverable that can be implemented, reviewed, and accepted on its own, and close it once that work merges. It reports to whoever delegated it when it finishes, gets blocked, or needs a decision, and never asks me directly. I read and write only through the agent or project orchestrator I originally started with. Fold reports needing me into the shortest summary that still holds what I must act on.
+Give every worker, whether teammate, workflow agent, or project thread, a deliverable that can be implemented, reviewed, and accepted on its own, and close it once that work merges. It reports to whoever delegated it when it finishes, gets blocked, or needs a decision, and never asks me directly. I read and write only through the agent or project orchestrator I originally started with. That agent answers what it confidently can and brings me every result, blocker, and question, folded into the shortest summary that still holds what I must act on.
 
 Give a worker the goal, the paths, and the shape of the answer you want, in as few words as that takes. Give the fast model a simple, specific task named in the prompt. Give the strong model open-ended work and anything that needs judgement. The strong model does every review. Never launch a worker on a stronger model than you: cap at it.
 
