@@ -52,7 +52,7 @@ LATER_PART_PREAMBLE = (
     "{name} continues here, part {number} of {total}. It overrides your "
     "defaults. Follow it at all times."
 )
-MODEL_TIER = re.compile(r"\bthe (fast|strong|lead) model\b", re.IGNORECASE)
+MODEL_TIER = re.compile(r"\bthe (cheap|fast|strong|lead) model\b", re.IGNORECASE)
 BLOCK_BREAKS = (r"(?=\n\n# )", r"(?=\n\n)", r"(?=\n)")
 IDLE = ""
 POINTER = "pointer"
@@ -416,6 +416,7 @@ def session_start_reminder(rules, payload, options):
 
 def reminder_for(event, payload, options):
     model_names = {
+        "cheap": options.cheap_model,
         "fast": options.fast_model,
         "strong": options.strong_model,
         "lead": options.lead_model,
@@ -446,6 +447,7 @@ def parsed_options(argv):
     parser.add_argument("part", type=int, nargs="?", default=1)
     parser.add_argument("entries", type=int, nargs="?")
     parser.add_argument("--rules", required=True)
+    parser.add_argument("--cheap-model")
     parser.add_argument("--fast-model")
     parser.add_argument("--strong-model")
     parser.add_argument("--lead-model")
