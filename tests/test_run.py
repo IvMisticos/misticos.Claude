@@ -1,5 +1,6 @@
 import contextlib
 import os
+import shutil
 import signal
 import subprocess
 import time
@@ -8,6 +9,7 @@ from pathlib import Path
 import pytest
 
 RUN = Path(__file__).resolve().parent.parent / "hooks" / "run.sh"
+TOOLS = ["bash", "cat", "chmod", "mkdir", "rm", "sh", "sleep", "tail", "touch"]
 FAKE_CURL = """#!/usr/bin/env bash
 if [ -n "${HOLD_INSTALL-}" ]; then
   touch "$HOME/install-started"
@@ -32,23 +34,33 @@ def home(tmp_path):
 def environment(tmp_path, home):
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
+    for tool in TOOLS:
+        (bin_dir / tool).symlink_to(shutil.which(tool))
     curl = bin_dir / "curl"
     curl.write_text(FAKE_CURL)
     curl.chmod(0o755)
-    return {"HOME": str(home), "PATH": f"{bin_dir}:/usr/bin:/bin"}
+    return {"HOME": str(home), "PATH": str(bin_dir)}
 
 
 @pytest.fixture
 def held_install(environment, home):
-    hook = subprocess.Popen(
+    hook = start_hook({**environment, "HOLD_INSTALL": "1"})
+    wait_for(home / "install-started")
+    yield hook
+    kill_hook(hook)
+
+
+def start_hook(environment):
+    return subprocess.Popen(
         [RUN, "hook.py"],
-        env={**environment, "HOLD_INSTALL": "1"},
+        env=environment,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
         start_new_session=True,
     )
-    wait_for(home / "install-started")
-    yield hook
+
+
+def kill_hook(hook):
     with contextlib.suppress(ProcessLookupError):
         os.killpg(hook.pid, signal.SIGKILL)
     hook.wait()
@@ -83,13 +95,14 @@ def test_installs_uv_again_after_a_finished_install(environment, home):
 
 
 def test_waits_while_another_hook_installs_uv(environment, held_install):
+    waiting = start_hook(environment)
     with pytest.raises(subprocess.TimeoutExpired):
-        run_hook(environment, timeout=1)
+        waiting.wait(timeout=1)
+    kill_hook(waiting)
 
 
 def test_installs_uv_after_another_hook_was_killed_while_installing(
     environment, held_install
 ):
-    os.killpg(held_install.pid, signal.SIGKILL)
-    held_install.wait()
+    kill_hook(held_install)
     assert run_hook(environment).stdout == "uv run hook.py\n"
