@@ -22,8 +22,26 @@ deny() {
   exit 1
 }
 
+pr_subcommand() {
+  local word skip_next=false
+  for word in "$@"; do
+    if $skip_next; then
+      skip_next=false
+    elif [[ $word == -R || $word == --repo ]]; then
+      skip_next=true
+    elif [[ $word != -* ]]; then
+      printf '%s\n' "$word"
+      return
+    fi
+  done
+}
+
 creates_or_merges_a_pull_request() {
-  [ "${1-}" = pr ] && [[ ${2-} == create || ${2-} == merge ]]
+  local subcommand
+  [ "${1-}" = pr ] || return 1
+  shift
+  subcommand=$(pr_subcommand "$@")
+  [[ $subcommand == create || $subcommand == merge ]]
 }
 
 names_pull_requests() {
@@ -41,7 +59,7 @@ api_method() {
       -X | --method) method=${2-} ;;
       --method=*) method=${1#--method=} ;;
       -X?*) method=${1#-X} ;;
-      -f | -F | --field | --raw-field | --input | --field=* | --raw-field=* | --input=*) fields_given=true ;;
+      -f* | -F* | --field | --raw-field | --input | --field=* | --raw-field=* | --input=*) fields_given=true ;;
     esac
     shift
   done

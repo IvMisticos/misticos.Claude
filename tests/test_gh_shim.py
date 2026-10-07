@@ -43,6 +43,9 @@ def run_gh(tmp_path):
         ["api", "--method=PUT", "repos/o/r/pulls/1/merge"],
         ["api", "repos/o/r/pulls", "-f", "title=x"],
         ["api", "repos/o/r/pulls", "--input=body.json"],
+        ["api", "repos/o/r/pulls", "-ftitle=x"],
+        ["pr", "-R", "o/r", "merge", "1"],
+        ["pr", "--repo=o/r", "create"],
     ],
 )
 def test_denies_pull_request_writes(run_gh, arguments):
@@ -56,6 +59,7 @@ def test_denies_pull_request_writes(run_gh, arguments):
     [
         ["pr", "view", "1"],
         ["pr", "list"],
+        ["pr", "-R", "o/r", "view", "1"],
         ["api", "repos/o/r/pulls"],
         ["api", "-X", "PATCH", "repos/o/r/pulls/1", "-f", "title=x"],
         ["api", "repos/o/r/issues", "-f", "title=x"],
