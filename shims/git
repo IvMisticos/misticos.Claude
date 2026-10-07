@@ -23,7 +23,7 @@ real_git() {
 
 deny() {
   echo "git: keep the git identity the harness set. Read it with git config --get." \
-    "If a change is genuinely needed, run git with MISTICOS_ALLOW_IDENTITY_CHANGE=1." >&2
+    "If a change is genuinely needed, run git with ALLOW_GIT_IDENTITY_CHANGE=1." >&2
   exit 1
 }
 
@@ -198,7 +198,7 @@ targets_project_repository() {
 
 git=$(real_git)
 
-if [ -z "${MISTICOS_ALLOW_IDENTITY_CHANGE-}" ]; then
+if [ -z "${ALLOW_GIT_IDENTITY_CHANGE-}" ]; then
   read_global_options "$@"
   identity_changes=false
   creates_a_repository || ! environment_changes_identity || identity_changes=true

@@ -134,7 +134,7 @@ def test_runs_other_commands(run_git, arguments):
     [
         {"GIT_CONFIG_COUNT": "1", "GIT_CONFIG_KEY_0": "core.pager"},
         {"GIT_AUTHOR_NAME": "x", "MISTICOS_HARNESS_GIT_IDENTITY": "x|||"},
-        {"GIT_AUTHOR_NAME": "x", "MISTICOS_ALLOW_IDENTITY_CHANGE": "1"},
+        {"GIT_AUTHOR_NAME": "x", "ALLOW_GIT_IDENTITY_CHANGE": "1"},
     ],
 )
 def test_runs_with_harness_environment(run_git, environment):
@@ -142,7 +142,7 @@ def test_runs_with_harness_environment(run_git, environment):
 
 
 def test_allows_identity_change_on_request(run_git):
-    result = run_git("config", "user.name", "x", MISTICOS_ALLOW_IDENTITY_CHANGE="1")
+    result = run_git("config", "user.name", "x", ALLOW_GIT_IDENTITY_CHANGE="1")
     assert result.returncode == 0
 
 
