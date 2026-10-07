@@ -13,7 +13,7 @@ import traceback
 from pathlib import Path
 from typing import NamedTuple
 
-from disk_cleanup import clean_up
+from disk_cleanup import clean_up, device_of
 from reminder import QuietArgumentParser, hook_output
 
 LOW_SPACE_BYTES = 1 << 30
@@ -92,12 +92,12 @@ class Disk(NamedTuple):
 def disks(paths):
     seen_devices = set()
     for path in paths:
+        device = device_of(path)
+        if device is None or device in seen_devices:
+            continue
         try:
-            device = str(os.stat(path).st_dev)
             usage = shutil.disk_usage(path)
         except OSError:
-            continue
-        if device in seen_devices:
             continue
         seen_devices.add(device)
         yield Disk(path, device, usage.total, usage.free)
@@ -121,19 +121,35 @@ def read_free_at_last_cleanup():
     return {device: free for device, free in stored.items() if isinstance(free, int)}
 
 
-def remember_free_space(disks):
-    free = read_free_at_last_cleanup() | {disk.device: disk.free for disk in disks}
+def write_free_at_last_cleanup(free):
     with contextlib.suppress(OSError):
         FREE_AT_LAST_CLEANUP.parent.mkdir(parents=True, exist_ok=True)
         FREE_AT_LAST_CLEANUP.write_text(json.dumps(free))
+
+
+def remember_free_space(disks):
+    free = {disk.device: disk.free for disk in disks}
+    write_free_at_last_cleanup(read_free_at_last_cleanup() | free)
+
+
+def forget_recovered_disks(disks, free_at_last_cleanup):
+    recovered = {disk.device for disk in disks if not needs_space(disk)}
+    if recovered & free_at_last_cleanup.keys():
+        records = free_at_last_cleanup.items()
+        kept = {device: free for device, free in records if device not in recovered}
+        write_free_at_last_cleanup(kept)
 
 
 def cleanup_threshold(disk):
     return min(CLEAN_UP_BELOW_BYTES, disk.total * CLEAN_UP_BELOW_SHARE)
 
 
+def needs_space(disk):
+    return disk.free < cleanup_threshold(disk)
+
+
 def needs_cleanup(disk, free_at_last_cleanup):
-    if disk.free >= cleanup_threshold(disk):
+    if not needs_space(disk):
         return False
     last_free = free_at_last_cleanup.get(disk.device)
     return last_free is None or disk.free < last_free - CLEAN_UP_AGAIN_AFTER_BYTES
@@ -167,14 +183,17 @@ def cleanup_report(cleanup, freed, scratchpad):
 
 def disk_cleanup(payload):
     paths = watched_paths(payload)
-    before = list(disks(paths))
+    current = list(disks(paths))
     free_at_last_cleanup = read_free_at_last_cleanup()
-    if not any(needs_cleanup(disk, free_at_last_cleanup) for disk in before):
+    forget_recovered_disks(current, free_at_last_cleanup)
+    before = [disk for disk in current if needs_cleanup(disk, free_at_last_cleanup)]
+    if not before:
         return None
     remember_free_space(before)
+    devices = {disk.device for disk in before}
     scratchpad = scratchpad_of(payload)
-    cleanup = clean_up(scratchpad)
-    after = list(disks(paths))
+    cleanup = clean_up(scratchpad, devices)
+    after = [disk for disk in disks(paths) if disk.device in devices]
     remember_free_space(after)
     if not (cleanup.cleared_caches or cleanup.build_output):
         return None

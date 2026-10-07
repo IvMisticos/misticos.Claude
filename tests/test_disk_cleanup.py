@@ -5,7 +5,14 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
 
-from disk_cleanup import cleared_bun_cache, deleted_build_output
+import disk_cleanup
+from disk_cleanup import (
+    clean_up,
+    cleared_bun_cache,
+    cleared_caches,
+    deleted_build_output,
+    device_of,
+)
 
 BUILD_OUTPUT = [
     "dotnet/bin",
@@ -46,6 +53,19 @@ def test_keeps_folders_that_only_share_a_build_output_name(scratchpad):
 
 
 @pytest.fixture
+def without_tools(monkeypatch):
+    monkeypatch.setattr(disk_cleanup, "output_of", lambda command: None)
+
+
+def test_deletes_build_output_only_on_a_disk_that_needs_space(
+    scratchpad, without_tools
+):
+    assert clean_up(scratchpad, {"another disk"}).build_output == []
+    assert all((scratchpad / folder).exists() for folder in BUILD_OUTPUT)
+    assert clean_up(scratchpad, {device_of(scratchpad)}).build_output
+
+
+@pytest.fixture
 def bun_cache(tmp_path, monkeypatch):
     cache = tmp_path / "bun-cache"
     monkeypatch.setenv("BUN_INSTALL_CACHE_DIR", str(cache))
@@ -65,9 +85,16 @@ def test_clears_bun_packages_no_project_links_to(bun_cache, tmp_path):
     project = tmp_path / "project" / "node_modules" / "linked"
     project.mkdir(parents=True)
     (project / "index.js").hardlink_to(linked / "index.js")
-    assert cleared_bun_cache()
+    assert cleared_bun_cache(bun_cache)
     assert sorted(entry.name for entry in bun_cache.iterdir()) == ["linked@1.0.0@@@1"]
 
 
 def test_skips_a_missing_bun_cache(bun_cache):
-    assert not cleared_bun_cache()
+    assert not cleared_bun_cache(bun_cache)
+
+
+def test_keeps_the_bun_cache_on_macos(bun_cache, without_tools, monkeypatch):
+    monkeypatch.setattr(disk_cleanup.sys, "platform", "darwin")
+    unused = cache_package(bun_cache, "unused@1.0.0@@@1")
+    assert cleared_caches({device_of(bun_cache)}) == []
+    assert unused.exists()
