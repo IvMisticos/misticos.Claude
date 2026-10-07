@@ -32,7 +32,20 @@ IDENTITY_VARIABLES = (
     "GIT_CONFIG_PARAMETERS",
 )
 ASSIGNMENT = re.compile(r"(?P<name>[A-Za-z_]\w*)\+?=(?P<value>.*)", re.DOTALL)
-ASSIGNING_COMMANDS = {"export", "env", "declare", "typeset", "readonly", "local"}
+COMMAND_WRAPPERS = {
+    "export",
+    "env",
+    "declare",
+    "typeset",
+    "readonly",
+    "local",
+    "sudo",
+    "time",
+    "nice",
+    "nohup",
+    "command",
+    "exec",
+}
 CONFIG_READ_OPTIONS = {
     "--get",
     "--get-all",
@@ -60,21 +73,20 @@ def command_words(command):
         return command.split()
 
 
-def leading_assignments(words):
+def command_prefix_assignments(words):
+    previous_word = ""
     for word in words:
-        if word in ASSIGNING_COMMANDS or word.startswith("-"):
-            continue
         assignment = ASSIGNMENT.fullmatch(word)
-        if not assignment:
+        if assignment:
+            yield assignment
+        elif starts_the_command(word, previous_word):
             return
-        yield assignment
+        previous_word = word
 
 
-def assignments_before_program(words):
-    program_index = guarded_program_index(words)
-    if program_index is None:
-        return leading_assignments(words)
-    return filter(None, map(ASSIGNMENT.fullmatch, words[:program_index]))
+def starts_the_command(word, previous_word):
+    is_option_or_its_value = word.startswith("-") or previous_word.startswith("-")
+    return word not in COMMAND_WRAPPERS and not is_option_or_its_value
 
 
 def sets_identity_variable(assignment):
@@ -83,22 +95,11 @@ def sets_identity_variable(assignment):
     return assignment["name"] in IDENTITY_VARIABLES
 
 
-def guarded_program_index(words):
-    return next(
-        (
-            index
-            for index, word in enumerate(words)
-            if os.path.basename(word) in GUARDED_PROGRAMS
-        ),
-        None,
-    )
-
-
 def from_guarded_program(words):
-    program_index = guarded_program_index(words)
-    if program_index is None:
-        return []
-    return [os.path.basename(words[program_index]), *words[program_index + 1 :]]
+    for index, word in enumerate(words):
+        if os.path.basename(word) in GUARDED_PROGRAMS:
+            return [os.path.basename(word), *words[index + 1 :]]
+    return []
 
 
 def gh_api_method(words):
@@ -179,7 +180,7 @@ def sets_git_identity(words):
 
 def segment_denial(segment):
     raw_words = command_words(segment.strip())
-    if any(map(sets_identity_variable, assignments_before_program(raw_words))):
+    if any(map(sets_identity_variable, command_prefix_assignments(raw_words))):
         return IDENTITY_DENIAL
     words = from_guarded_program(raw_words)
     if not words:
