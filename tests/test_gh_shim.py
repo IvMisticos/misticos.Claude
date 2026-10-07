@@ -46,6 +46,8 @@ def run_gh(tmp_path):
         ["api", "repos/o/r/pulls", "-ftitle=x"],
         ["pr", "-R", "o/r", "merge", "1"],
         ["pr", "--repo=o/r", "create"],
+        ["pr", "new", "--fill"],
+        ["api", "graphql", "-f", "query=mutation { mergePullRequest(input: {}) }"],
     ],
 )
 def test_denies_pull_request_writes(run_gh, arguments):

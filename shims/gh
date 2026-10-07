@@ -41,13 +41,21 @@ creates_or_merges_a_pull_request() {
   [ "${1-}" = pr ] || return 1
   shift
   subcommand=$(pr_subcommand "$@")
-  [[ $subcommand == create || $subcommand == merge ]]
+  [[ $subcommand == create || $subcommand == new || $subcommand == merge ]]
 }
 
 names_pull_requests() {
   local word
   for word in "$@"; do
     [[ $word == */pulls* ]] && return 0
+  done
+  return 1
+}
+
+runs_a_pull_request_mutation() {
+  local word
+  for word in "$@"; do
+    [[ $word == *createPullRequest* || $word == *mergePullRequest* ]] && return 0
   done
   return 1
 }
@@ -76,6 +84,7 @@ api_writes_pull_requests() {
   local method
   [ "${1-}" = api ] || return 1
   shift
+  runs_a_pull_request_mutation "$@" && return 0
   names_pull_requests "$@" || return 1
   method=$(api_method "$@")
   [[ $method == POST || $method == PUT ]]
