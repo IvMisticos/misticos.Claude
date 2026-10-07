@@ -29,6 +29,10 @@ IDENTITY_VARIABLES = (
     "GIT_COMMITTER_NAME",
     "GIT_COMMITTER_EMAIL",
 )
+IDENTITY_DENIAL = (
+    "Keep the git identity the harness set. "
+    f"If a change is genuinely needed, end the command with {OVERRIDE_MARK}."
+)
 
 
 def command_words(command):
@@ -107,9 +111,7 @@ def writes_a_commit(words):
     return any(word in COMMIT_WRITING_SUBCOMMANDS for word in words)
 
 
-def sets_git_identity(raw_words, words):
-    if any(sets_identity_variable(word) for word in raw_words):
-        return True
+def sets_git_identity(words):
     if words[:1] != ["git"]:
         return False
     return git_config_writes_identity(words) or git_overrides_identity(words)
@@ -117,6 +119,8 @@ def sets_git_identity(raw_words, words):
 
 def segment_denial(segment):
     raw_words = command_words(segment.strip())
+    if any(sets_identity_variable(word) for word in raw_words):
+        return IDENTITY_DENIAL
     words = from_guarded_program(raw_words)
     if not words:
         return None
@@ -129,11 +133,8 @@ def segment_denial(segment):
             "Merge and create pull requests with the GitHub MCP tools, not gh. "
             f"If the MCP cannot do it, end the command with {OVERRIDE_MARK}."
         )
-    if sets_git_identity(raw_words, words):
-        return (
-            "Keep the git identity the harness set. "
-            f"If a change is genuinely needed, end the command with {OVERRIDE_MARK}."
-        )
+    if sets_git_identity(words):
+        return IDENTITY_DENIAL
     return None
 
 
