@@ -229,3 +229,24 @@ def test_runs_identity_changes_without_a_project(run_git):
 @pytest.mark.parametrize("subcommand", ["init", "clone"])
 def test_runs_repository_creation_with_an_identity(run_git, subcommand):
     assert run_git(subcommand, "/tmp/new", GIT_AUTHOR_NAME="t").returncode == 0
+
+
+def test_runs_identity_changes_in_a_repository_named_by_git_dir(tmp_path):
+    project_dir = tmp_path / "project"
+    fixture_dir = tmp_path / "fixture"
+    environment = without_session_variables(os.environ)
+    environment["PATH"] = "/usr/bin:/bin"
+    for repository in (project_dir, fixture_dir):
+        subprocess.run(["git", "init", "-q", repository], env=environment, check=True)
+    result = subprocess.run(
+        [SHIMS / "git", "config", "user.name", "fixture"],
+        cwd=project_dir,
+        env={
+            **environment,
+            "PATH": f"{SHIMS}:/usr/bin:/bin",
+            "MISTICOS_PROJECT_DIR": str(project_dir),
+            "GIT_DIR": str(fixture_dir / ".git"),
+        },
+        check=False,
+    )
+    assert result.returncode == 0
