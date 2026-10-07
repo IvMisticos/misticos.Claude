@@ -147,7 +147,7 @@ Drive this loop to green unprompted. Come back only when CI and the review are b
 1. Never review unfinished work. Run every check locally and fix failures before you push.
 2. Push the relevant changes and subscribe to the PR. No polling, no scheduled check-ins.
 3. Wait for remote CI. Fix failures, then repeat from step 1.
-4. With CI green, run the code-review skill in a teammate on the strong model and name the PR in its prompt. The reviewer fetches the base branch and `pull/N/head` into an existing clone of the repo instead of cloning it again.
+4. With CI green, run the code-review skill in a teammate on the strong model and name the PR in its prompt. The reviewer reuses a clone of the repo: it runs `git fetch origin <base> +pull/N/head:refs/remotes/origin/pr/N` and reviews `origin/<base>...origin/pr/N`.
 5. Findings reach you as notifications; never poll. Address every reasonable finding, then repeat from step 1 until the review returns nothing. No nitpicking.
 
 For a batch of PRs, run this loop as a workflow with one item per PR.
