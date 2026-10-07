@@ -1,0 +1,148 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+shopt -s nocasematch
+
+real_git() {
+  local dir
+  local -a dirs
+  IFS=: read -ra dirs <<< "$PATH"
+  for dir in "${dirs[@]}"; do
+    if [ -f "$dir/git" ] && [ -x "$dir/git" ] && [ ! -f "$dir/../hooks/work_queue.py" ]; then
+      printf '%s\n' "$dir/git"
+      return 0
+    fi
+  done
+  echo "git: git is not installed" >&2
+  return 127
+}
+
+deny() {
+  echo "git: keep the git identity the harness set. Read it with git config --get." \
+    "If a change is genuinely needed, run git with MISTICOS_ALLOW_IDENTITY_CHANGE=1." >&2
+  exit 1
+}
+
+is_identity_key() {
+  [[ $1 == user.name || $1 == user.email ]]
+}
+
+environment_identity() {
+  printf '%s|%s|%s|%s' "${GIT_AUTHOR_NAME-}" "${GIT_AUTHOR_EMAIL-}" \
+    "${GIT_COMMITTER_NAME-}" "${GIT_COMMITTER_EMAIL-}"
+}
+
+environment_changes_identity() {
+  local index name
+  [ "$(environment_identity)" != "${MISTICOS_HARNESS_GIT_IDENTITY-|||}" ] && return 0
+  [[ ${GIT_CONFIG_PARAMETERS-} == *"'user.name="* || ${GIT_CONFIG_PARAMETERS-} == *"'user.email="* ]] && return 0
+  for ((index = 0; index < ${GIT_CONFIG_COUNT:-0}; index++)); do
+    name="GIT_CONFIG_KEY_$index"
+    is_identity_key "${!name-}" && return 0
+  done
+  return 1
+}
+
+config_reads() {
+  local word
+  [[ ${1-} == get || ${1-} == list ]] && return 0
+  for word in "$@"; do
+    case $word in
+      --get | --get-all | --get-regexp | --get-urlmatch | --list | -l) return 0 ;;
+    esac
+  done
+  return 1
+}
+
+config_changes_user_section() {
+  local word changes_a_section=false names_user=false
+  for word in "$@"; do
+    case $word in
+      --remove-section | --rename-section | remove-section | rename-section) changes_a_section=true ;;
+      user) names_user=true ;;
+    esac
+  done
+  $changes_a_section && $names_user
+}
+
+config_unsets_identity_key() {
+  local word unsets=false names_key=false
+  for word in "$@"; do
+    case $word in
+      --unset | --unset-all | unset) unsets=true ;;
+    esac
+    is_identity_key "$word" && names_key=true
+  done
+  $unsets && $names_key
+}
+
+config_sets_identity_key() {
+  local word key_seen=false skip_next=false
+  for word in "$@"; do
+    if $skip_next; then
+      skip_next=false
+    elif is_identity_key "$word"; then
+      key_seen=true
+    else
+      case $word in
+        --type | --default | --file | -f | --blob | --comment | --value) skip_next=true ;;
+        -*) ;;
+        *) $key_seen && return 0 ;;
+      esac
+    fi
+  done
+  return 1
+}
+
+config_changes_identity() {
+  config_reads "$@" && return 1
+  config_changes_user_section "$@" || config_unsets_identity_key "$@" || config_sets_identity_key "$@"
+}
+
+commit_changes_author() {
+  local word
+  for word in "$@"; do
+    [[ $word == --author || $word == --author=* ]] && return 0
+  done
+  return 1
+}
+
+arguments_change_identity() {
+  local word
+  while [ $# -gt 0 ]; do
+    word=$1
+    shift
+    case $word in
+      -c | --config-env)
+        word=${1-}
+        is_identity_key "${word%%=*}" && return 0
+        shift
+        ;;
+      --config-env=*)
+        word=${word#--config-env=}
+        is_identity_key "${word%%=*}" && return 0
+        ;;
+      -C | --git-dir | --work-tree | --namespace) shift ;;
+      -*) ;;
+      config)
+        config_changes_identity "$@"
+        return
+        ;;
+      commit)
+        commit_changes_author "$@"
+        return
+        ;;
+      *) return 1 ;;
+    esac
+  done
+  return 1
+}
+
+git=$(real_git)
+
+if [ -z "${MISTICOS_ALLOW_IDENTITY_CHANGE-}" ]; then
+  environment_changes_identity && deny
+  arguments_change_identity "$@" && deny
+fi
+
+exec "$git" "$@"

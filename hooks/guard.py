@@ -14,67 +14,7 @@ OVERRIDE_MARK = "# misticos.Claude.ignore"
 PULL_REQUEST_WRITE_METHODS = {"POST", "PUT"}
 SEGMENT_SEPARATORS = re.compile(r"&&|\|\||\$?\(|[;&|\n(){}]")
 SHELL_RUNNERS = {"bash", "sh", "zsh", "eval"}
-GUARDED_PROGRAMS = {"gh", "git", *SHELL_RUNNERS}
-IDENTITY_KEYS = ("user.name", "user.email")
-COMMIT_WRITING_SUBCOMMANDS = {
-    "commit",
-    "am",
-    "cherry-pick",
-    "rebase",
-    "revert",
-    "merge",
-}
-IDENTITY_VARIABLES = (
-    "GIT_AUTHOR_NAME",
-    "GIT_AUTHOR_EMAIL",
-    "GIT_COMMITTER_NAME",
-    "GIT_COMMITTER_EMAIL",
-    "GIT_CONFIG_PARAMETERS",
-)
-ASSIGNMENT = re.compile(r"(?P<name>[A-Za-z_]\w*)\+?=(?P<value>.*)", re.DOTALL)
-COMMAND_PREFIX_WORDS = {
-    "if",
-    "then",
-    "else",
-    "elif",
-    "do",
-    "while",
-    "until",
-    "!",
-    "timeout",
-    "xargs",
-    "stdbuf",
-    "export",
-    "env",
-    "declare",
-    "typeset",
-    "readonly",
-    "local",
-    "sudo",
-    "time",
-    "nice",
-    "nohup",
-    "command",
-    "exec",
-}
-CONFIG_READ_OPTIONS = {
-    "--get",
-    "--get-all",
-    "--get-regexp",
-    "--get-urlmatch",
-    "--list",
-    "-l",
-}
-SECTION_COMMANDS = {
-    "--remove-section",
-    "--rename-section",
-    "remove-section",
-    "rename-section",
-}
-IDENTITY_DENIAL = (
-    "Keep the git identity the harness set. Read it with git config --get. "
-    f"If a change is genuinely needed, end the command with {OVERRIDE_MARK}."
-)
+GUARDED_PROGRAMS = {"gh", *SHELL_RUNNERS}
 
 
 def command_words(command):
@@ -82,29 +22,6 @@ def command_words(command):
         return shlex.split(command, comments=True)
     except ValueError:
         return command.split()
-
-
-def command_prefix_assignments(words):
-    previous_word = ""
-    for word in words:
-        assignment = ASSIGNMENT.fullmatch(word)
-        if assignment:
-            yield assignment
-        elif starts_the_command(word, previous_word):
-            return
-        previous_word = word
-
-
-def starts_the_command(word, previous_word):
-    is_option = word.startswith("-")
-    is_argument = previous_word.startswith("-") or previous_word == "timeout"
-    return word not in COMMAND_PREFIX_WORDS and not is_option and not is_argument
-
-
-def sets_identity_variable(assignment):
-    if assignment["name"].startswith("GIT_CONFIG_KEY_"):
-        return assignment["value"].lower() in IDENTITY_KEYS
-    return assignment["name"] in IDENTITY_VARIABLES
 
 
 def from_guarded_program(words):
@@ -146,54 +63,8 @@ def is_pull_request_write_through_gh(words):
     return touches_pull_requests and gh_api_method(words) in PULL_REQUEST_WRITE_METHODS
 
 
-def is_config_read(after_config):
-    if after_config[:1] in (["get"], ["list"]):
-        return True
-    return any(word in CONFIG_READ_OPTIONS for word in after_config)
-
-
-def changes_user_section(after_config):
-    changes_a_section = any(word in SECTION_COMMANDS for word in after_config)
-    return changes_a_section and any(word.lower() == "user" for word in after_config)
-
-
-def git_config_writes_identity(words):
-    if "config" not in words:
-        return False
-    after_config = words[words.index("config") + 1 :]
-    if is_config_read(after_config):
-        return False
-    if changes_user_section(after_config):
-        return True
-    return any(word.lower() in IDENTITY_KEYS for word in after_config)
-
-
-def git_overrides_identity(words):
-    for index, word in enumerate(words):
-        value = word[2:] if word.startswith("-c") and len(word) > 2 else None
-        if word == "-c" and index + 1 < len(words):
-            value = words[index + 1]
-        if value and value.split("=", 1)[0].lower() in IDENTITY_KEYS:
-            return True
-        if word == "--author" or word.startswith("--author="):
-            return writes_a_commit(words)
-    return False
-
-
-def writes_a_commit(words):
-    return any(word in COMMIT_WRITING_SUBCOMMANDS for word in words)
-
-
-def sets_git_identity(words):
-    if words[:1] != ["git"]:
-        return False
-    return git_config_writes_identity(words) or git_overrides_identity(words)
-
-
 def segment_denial(segment):
     raw_words = command_words(segment.strip())
-    if any(map(sets_identity_variable, command_prefix_assignments(raw_words))):
-        return IDENTITY_DENIAL
     words = from_guarded_program(raw_words)
     if not words:
         return None
@@ -206,8 +77,6 @@ def segment_denial(segment):
             "Merge and create pull requests with the GitHub MCP tools, not gh. "
             f"If the MCP cannot do it, end the command with {OVERRIDE_MARK}."
         )
-    if sets_git_identity(words):
-        return IDENTITY_DENIAL
     return None
 
 
