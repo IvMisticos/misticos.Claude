@@ -1,3 +1,4 @@
+import contextlib
 import os
 import shutil
 import subprocess
@@ -40,18 +41,47 @@ def bun_install_cache():
     return Path(bun_home) / "install" / "cache"
 
 
+def files_under(path):
+    if path.is_symlink() or not path.is_dir():
+        yield path
+        return
+    for parent, _, files in os.walk(path):
+        yield from (Path(parent) / name for name in files)
+
+
+def is_linked_from_a_project(file):
+    try:
+        return file.lstat().st_nlink > 1
+    except OSError:
+        return True
+
+
+def is_unused(cache_entry):
+    return not any(map(is_linked_from_a_project, files_under(cache_entry)))
+
+
+def delete(path):
+    if path.is_symlink() or not path.is_dir():
+        with contextlib.suppress(OSError):
+            path.unlink()
+    else:
+        shutil.rmtree(path, ignore_errors=True)
+
+
 def cleared_bun_cache():
     cache = bun_install_cache()
     if not cache.is_dir():
         return False
-    shutil.rmtree(cache, ignore_errors=True)
-    return True
+    unused = [entry for entry in cache.iterdir() if is_unused(entry)]
+    for entry in unused:
+        delete(entry)
+    return bool(unused)
 
 
 def cleared_caches():
     cleared = [name for name, command in CACHE_COMMANDS if ran(command)]
     if cleared_bun_cache():
-        cleared.append("the bun install cache")
+        cleared.append("unused packages in the bun install cache")
     return cleared
 
 

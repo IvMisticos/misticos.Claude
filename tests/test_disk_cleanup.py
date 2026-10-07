@@ -45,14 +45,29 @@ def test_keeps_folders_that_only_share_a_build_output_name(scratchpad):
     assert all((scratchpad / file).exists() for file in KEPT)
 
 
-def test_clears_the_bun_cache(tmp_path, monkeypatch):
+@pytest.fixture
+def bun_cache(tmp_path, monkeypatch):
     cache = tmp_path / "bun-cache"
-    (cache / "react@19").mkdir(parents=True)
     monkeypatch.setenv("BUN_INSTALL_CACHE_DIR", str(cache))
+    return cache
+
+
+def cache_package(cache, name):
+    package = cache / name
+    package.mkdir(parents=True)
+    (package / "index.js").write_text("x")
+    return package
+
+
+def test_clears_bun_packages_no_project_links_to(bun_cache, tmp_path):
+    cache_package(bun_cache, "unused@1.0.0@@@1")
+    linked = cache_package(bun_cache, "linked@1.0.0@@@1")
+    project = tmp_path / "project" / "node_modules" / "linked"
+    project.mkdir(parents=True)
+    (project / "index.js").hardlink_to(linked / "index.js")
     assert cleared_bun_cache()
-    assert not cache.exists()
+    assert sorted(entry.name for entry in bun_cache.iterdir()) == ["linked@1.0.0@@@1"]
 
 
-def test_skips_a_missing_bun_cache(tmp_path, monkeypatch):
-    monkeypatch.setenv("BUN_INSTALL_CACHE_DIR", str(tmp_path / "missing"))
+def test_skips_a_missing_bun_cache(bun_cache):
     assert not cleared_bun_cache()
