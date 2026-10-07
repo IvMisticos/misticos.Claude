@@ -1,0 +1,103 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+real_gh() {
+  local dir
+  local -a dirs
+  IFS=: read -ra dirs <<< "$PATH"
+  for dir in "${dirs[@]}"; do
+    if [ -f "$dir/gh" ] && [ -x "$dir/gh" ] && [ ! -f "$dir/../hooks/work_queue.py" ]; then
+      printf '%s\n' "$dir/gh"
+      return 0
+    fi
+  done
+  echo "gh: gh is not installed" >&2
+  return 127
+}
+
+deny() {
+  echo "gh: create and merge pull requests with the GitHub MCP tools." \
+    "If they cannot do it, run gh with ALLOW_GH_PULL_REQUEST_WRITE=1." >&2
+  exit 1
+}
+
+pr_subcommand() {
+  local word skip_next=false
+  for word in "$@"; do
+    if $skip_next; then
+      skip_next=false
+    elif [[ $word == -R || $word == --repo ]]; then
+      skip_next=true
+    elif [[ $word != -* ]]; then
+      printf '%s\n' "$word"
+      return
+    fi
+  done
+}
+
+creates_or_merges_a_pull_request() {
+  local subcommand
+  [ "${1-}" = pr ] || return 1
+  shift
+  subcommand=$(pr_subcommand "$@")
+  [[ $subcommand == create || $subcommand == new || $subcommand == merge ]]
+}
+
+names_pull_requests() {
+  local word
+  for word in "$@"; do
+    [[ $word == */pulls* ]] && return 0
+  done
+  return 1
+}
+
+runs_a_pull_request_mutation() {
+  local word names_graphql=false names_mutation=false
+  for word in "$@"; do
+    case $word in
+      graphql | */graphql) names_graphql=true ;;
+      *createPullRequest* | *mergePullRequest* | *enablePullRequestAutoMerge* | *enqueuePullRequest*) names_mutation=true ;;
+    esac
+  done
+  $names_graphql && $names_mutation
+}
+
+api_method() {
+  local method="" fields_given=false
+  while [ $# -gt 0 ]; do
+    case $1 in
+      -X | --method) method=${2-} ;;
+      --method=*) method=${1#--method=} ;;
+      -X?*) method=${1#-X} ;;
+      -f* | -F* | --field | --raw-field | --input | --field=* | --raw-field=* | --input=*) fields_given=true ;;
+    esac
+    shift
+  done
+  if [ -n "$method" ]; then
+    printf '%s\n' "$method" | tr '[:lower:]' '[:upper:]'
+  elif $fields_given; then
+    echo POST
+  else
+    echo GET
+  fi
+}
+
+api_writes_pull_requests() {
+  local method
+  [ "${1-}" = api ] || return 1
+  shift
+  runs_a_pull_request_mutation "$@" && return 0
+  names_pull_requests "$@" || return 1
+  method=$(api_method "$@")
+  [[ $method == POST || $method == PUT ]]
+}
+
+gh=$(real_gh)
+
+if [ -z "${ALLOW_GH_PULL_REQUEST_WRITE-}" ]; then
+  creates_or_merges_a_pull_request "$@" && deny
+  api_writes_pull_requests "$@" && deny
+fi
+
+exec "$gh" "$@"

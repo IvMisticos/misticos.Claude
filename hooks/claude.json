@@ -152,15 +152,6 @@
     ],
     "PreToolUse": [
       {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/run.sh \"${CLAUDE_PLUGIN_ROOT}\"/hooks/guard.py"
-          }
-        ]
-      },
-      {
         "matcher": "Agent|Task|mcp__Claude_Code_Remote__create_session|mcp__claude-code-remote__create_session",
         "hooks": [
           {
