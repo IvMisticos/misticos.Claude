@@ -30,18 +30,24 @@ IDENTITY_VARIABLES = (
     "GIT_COMMITTER_EMAIL",
     "GIT_CONFIG_PARAMETERS",
 )
-ASSIGNMENT = re.compile(r"[A-Za-z_]\w*=.*", re.DOTALL)
+ASSIGNMENT = re.compile(r"(?P<name>[A-Za-z_]\w*)\+?=(?P<value>.*)", re.DOTALL)
 ASSIGNING_COMMANDS = {"export", "env", "declare", "typeset", "readonly", "local"}
-CONFIG_READ_OPTIONS = {"--get", "--get-all", "--get-regexp", "--list", "-l"}
+CONFIG_READ_OPTIONS = {
+    "--get",
+    "--get-all",
+    "--get-regexp",
+    "--get-urlmatch",
+    "--list",
+    "-l",
+}
 SECTION_COMMANDS = {
     "--remove-section",
     "--rename-section",
     "remove-section",
     "rename-section",
 }
-UNSET_COMMANDS = {"--unset", "--unset-all", "unset"}
 IDENTITY_DENIAL = (
-    "Keep the git identity the harness set. "
+    "Keep the git identity the harness set. Read it with git config --get. "
     f"If a change is genuinely needed, end the command with {OVERRIDE_MARK}."
 )
 
@@ -53,25 +59,45 @@ def command_words(command):
         return command.split()
 
 
-def assignments(words):
+def leading_assignments(words):
     for word in words:
         if word in ASSIGNING_COMMANDS or word.startswith("-"):
             continue
-        if not ASSIGNMENT.fullmatch(word):
+        assignment = ASSIGNMENT.fullmatch(word)
+        if not assignment:
             return
-        yield word
+        yield assignment
+
+
+def assignments_before_program(words):
+    program_index = guarded_program_index(words)
+    if program_index is None:
+        return leading_assignments(words)
+    return filter(None, map(ASSIGNMENT.fullmatch, words[:program_index]))
 
 
 def sets_identity_variable(assignment):
-    name = assignment.split("=", 1)[0]
-    return name in IDENTITY_VARIABLES or name.startswith("GIT_CONFIG_KEY_")
+    if assignment["name"].startswith("GIT_CONFIG_KEY_"):
+        return assignment["value"].lower() in IDENTITY_KEYS
+    return assignment["name"] in IDENTITY_VARIABLES
+
+
+def guarded_program_index(words):
+    return next(
+        (
+            index
+            for index, word in enumerate(words)
+            if os.path.basename(word) in GUARDED_PROGRAMS
+        ),
+        None,
+    )
 
 
 def from_guarded_program(words):
-    for index, word in enumerate(words):
-        if os.path.basename(word) in GUARDED_PROGRAMS:
-            return [os.path.basename(word), *words[index + 1 :]]
-    return []
+    program_index = guarded_program_index(words)
+    if program_index is None:
+        return []
+    return [os.path.basename(words[program_index]), *words[program_index + 1 :]]
 
 
 def gh_api_method(words):
@@ -117,23 +143,15 @@ def changes_user_section(after_config):
     return changes_a_section and any(word.lower() == "user" for word in after_config)
 
 
-def changes_identity_key(after_config):
-    keys = [i for i, word in enumerate(after_config) if word.lower() in IDENTITY_KEYS]
-    if not keys:
-        return False
-    if any(word in UNSET_COMMANDS for word in after_config):
-        return True
-    after_key = after_config[keys[-1] + 1 :]
-    return any(not word.startswith("-") for word in after_key)
-
-
 def git_config_writes_identity(words):
     if "config" not in words:
         return False
     after_config = words[words.index("config") + 1 :]
     if is_config_read(after_config):
         return False
-    return changes_user_section(after_config) or changes_identity_key(after_config)
+    if changes_user_section(after_config):
+        return True
+    return any(word.lower() in IDENTITY_KEYS for word in after_config)
 
 
 def git_overrides_identity(words):
@@ -160,7 +178,7 @@ def sets_git_identity(words):
 
 def segment_denial(segment):
     raw_words = command_words(segment.strip())
-    if any(map(sets_identity_variable, assignments(raw_words))):
+    if any(map(sets_identity_variable, assignments_before_program(raw_words))):
         return IDENTITY_DENIAL
     words = from_guarded_program(raw_words)
     if not words:
