@@ -8,9 +8,9 @@ import shlex
 from pathlib import Path
 
 SHIMS_DIR = Path(__file__).resolve().parent.parent / "shims"
-HARNESS_GIT_IDENTITY_EXPORT = (
-    "export HARNESS_GIT_IDENTITY="
-    '"${GIT_AUTHOR_NAME-}|${GIT_AUTHOR_EMAIL-}|${GIT_COMMITTER_NAME-}|${GIT_COMMITTER_EMAIL-}"\n'
+HARNESS_GIT_IDENTITY_ASSIGNMENT = (
+    "HARNESS_GIT_IDENTITY="
+    '"${GIT_AUTHOR_NAME-}|${GIT_AUTHOR_EMAIL-}|${GIT_COMMITTER_NAME-}|${GIT_COMMITTER_EMAIL-}"'
 )
 
 
@@ -18,12 +18,16 @@ def project_dir():
     return os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd()
 
 
-def session_exports():
+def session_assignments():
     return [
-        f'export PATH={shlex.quote(str(SHIMS_DIR))}:"$PATH"\n',
-        f"export HARNESS_PROJECT_DIR={shlex.quote(project_dir())}\n",
-        HARNESS_GIT_IDENTITY_EXPORT,
+        f'PATH={shlex.quote(str(SHIMS_DIR))}:"$PATH"',
+        f"HARNESS_PROJECT_DIR={shlex.quote(project_dir())}",
+        HARNESS_GIT_IDENTITY_ASSIGNMENT,
     ]
+
+
+def session_exports():
+    return [f"export {assignment}\n" for assignment in session_assignments()]
 
 
 def main():

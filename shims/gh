@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+real_gh() {
+  local dir
+  local -a dirs
+  IFS=: read -ra dirs <<< "$PATH"
+  for dir in "${dirs[@]}"; do
+    if [ -f "$dir/gh" ] && [ -x "$dir/gh" ] && [ ! -f "$dir/../hooks/work_queue.py" ]; then
+      printf '%s\n' "$dir/gh"
+      return 0
+    fi
+  done
+  echo "gh: gh is not installed" >&2
+  return 127
+}
+
+deny() {
+  echo "gh: create and merge pull requests with the GitHub MCP tools." \
+    "If they cannot do it, run gh with ALLOW_GH_PULL_REQUEST_WRITE=1." >&2
+  exit 1
+}
+
+creates_or_merges_a_pull_request() {
+  [ "${1-}" = pr ] && [[ ${2-} == create || ${2-} == merge ]]
+}
+
+names_pull_requests() {
+  local word
+  for word in "$@"; do
+    [[ $word == */pulls* ]] && return 0
+  done
+  return 1
+}
+
+api_method() {
+  local method="" fields_given=false
+  while [ $# -gt 0 ]; do
+    case $1 in
+      -X | --method) method=${2-} ;;
+      --method=*) method=${1#--method=} ;;
+      -X?*) method=${1#-X} ;;
+      -f | -F | --field | --raw-field | --input | --field=* | --raw-field=* | --input=*) fields_given=true ;;
+    esac
+    shift
+  done
+  if [ -n "$method" ]; then
+    printf '%s\n' "$method" | tr '[:lower:]' '[:upper:]'
+  elif $fields_given; then
+    echo POST
+  else
+    echo GET
+  fi
+}
+
+api_writes_pull_requests() {
+  local method
+  [ "${1-}" = api ] || return 1
+  shift
+  names_pull_requests "$@" || return 1
+  method=$(api_method "$@")
+  [[ $method == POST || $method == PUT ]]
+}
+
+gh=$(real_gh)
+
+if [ -z "${ALLOW_GH_PULL_REQUEST_WRITE-}" ]; then
+  creates_or_merges_a_pull_request "$@" && deny
+  api_writes_pull_requests "$@" && deny
+fi
+
+exec "$gh" "$@"

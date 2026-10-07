@@ -45,7 +45,7 @@
     "preToolUse": [
       {
         "matcher": "Shell",
-        "command": "\"${CURSOR_PLUGIN_ROOT}\"/hooks/run.sh \"${CURSOR_PLUGIN_ROOT}/hooks/guard.py\" --output-shape cursor"
+        "command": "\"${CURSOR_PLUGIN_ROOT}\"/hooks/run.sh \"${CURSOR_PLUGIN_ROOT}/hooks/command_prefix.py\" --output-shape cursor"
       }
     ]
   }
