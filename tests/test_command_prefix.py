@@ -8,6 +8,7 @@ import pytest
 from test_git_shim import ROOT, SHIMS, without_session_variables
 
 COMMAND_PREFIX = ROOT / "hooks" / "command_prefix.py"
+SESSION_ENVIRONMENT_SCRIPT = ROOT / "hooks" / "session_environment.sh"
 FAKE_GH = """#!/usr/bin/env bash
 echo "ran $*"
 """
@@ -136,3 +137,14 @@ def test_keeps_the_first_identity_in_a_persistent_shell(run_rewritten):
 def test_adds_the_shims_to_the_path_once_in_a_persistent_shell(run_rewritten):
     result = run_rewritten("true", "true", 'printf %s "$PATH"')
     assert result.stdout.split(":").count(str(SHIMS)) == 1
+
+
+def test_leaves_the_path_alone_when_the_shell_drops_the_arguments():
+    result = subprocess.run(
+        ["bash", "-c", f'. "{SESSION_ENVIRONMENT_SCRIPT}"; printf %s "$PATH"'],
+        env={"PATH": "/usr/bin:/bin"},
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert result.stdout == "/usr/bin:/bin"

@@ -1,3 +1,4 @@
+[ -n "${1-}" ] || return 0
 case $PATH in
   "$1" | "$1":*) ;;
   *) export PATH="$1:$PATH" ;;
