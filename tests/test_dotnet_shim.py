@@ -17,6 +17,8 @@ def test_runs_dotnet_without_shared_build_nodes(tmp_path):
     environment = without_session_variables(os.environ)
     environment["PATH"] = f"{SHIMS}:{real_bin}:/usr/bin:/bin"
     environment["HARNESS_QUEUE_HELD"] = "1"
+    environment["MSBUILDDISABLENODEREUSE"] = "0"
+    environment["DOTNET_CLI_USE_MSBUILD_SERVER"] = "1"
     result = subprocess.run(
         [SHIMS / "dotnet", "build"],
         env=environment,
