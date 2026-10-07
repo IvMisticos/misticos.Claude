@@ -8,7 +8,6 @@ import pytest
 ROOT = Path(__file__).resolve().parent.parent
 SHIMS = ROOT / "shims"
 SESSION_ENVIRONMENT = ROOT / "hooks" / "session_environment.py"
-PROJECT = "/work/project"
 FAKE_GIT = """#!/usr/bin/env bash
 for word in "$@"; do
   if [ "$word" = rev-parse ]; then
@@ -30,7 +29,14 @@ def without_session_variables(environment):
 
 
 @pytest.fixture
-def run_git(tmp_path):
+def project(tmp_path):
+    project_dir = tmp_path / "project"
+    project_dir.mkdir()
+    return project_dir.resolve()
+
+
+@pytest.fixture
+def run_git(tmp_path, project):
     real_bin = tmp_path / "bin"
     real_bin.mkdir()
     fake_git = real_bin / "git"
@@ -38,8 +44,8 @@ def run_git(tmp_path):
     fake_git.chmod(0o755)
     base_environment = without_session_variables(os.environ)
     base_environment["PATH"] = f"{SHIMS}:{real_bin}:/usr/bin:/bin"
-    base_environment["MISTICOS_PROJECT_DIR"] = PROJECT
-    base_environment["FAKE_TOP_LEVEL"] = PROJECT
+    base_environment["MISTICOS_PROJECT_DIR"] = str(project)
+    base_environment["FAKE_TOP_LEVEL"] = str(project)
 
     def run(*arguments, **environment):
         return subprocess.run(
@@ -152,13 +158,13 @@ def test_denies_global_identity_changes_outside_the_project(run_git):
     assert result.returncode == 1
 
 
-def test_denies_identity_changes_in_project_subdirectories(run_git):
-    result = run_git("config", "user.name", "x", FAKE_TOP_LEVEL=f"{PROJECT}/nested")
+def test_denies_identity_changes_in_project_subdirectories(run_git, project):
+    result = run_git("config", "user.name", "x", FAKE_TOP_LEVEL=f"{project}/nested")
     assert result.returncode == 1
 
 
-def test_runs_identity_changes_in_sibling_directories(run_git):
-    result = run_git("config", "user.name", "x", FAKE_TOP_LEVEL=f"{PROJECT}-other")
+def test_runs_identity_changes_in_sibling_directories(run_git, project):
+    result = run_git("config", "user.name", "x", FAKE_TOP_LEVEL=f"{project}-other")
     assert result.returncode == 0
 
 
@@ -178,3 +184,22 @@ def test_records_the_shell_identity_as_the_harness_identity(tmp_path):
         check=True,
     )
     assert recorded.stdout == "|shell@example.com||\n"
+
+
+def test_denies_identity_changes_through_a_symlinked_project(
+    run_git, project, tmp_path
+):
+    link = tmp_path / "link"
+    link.symlink_to(project)
+    result = run_git("config", "user.name", "x", MISTICOS_PROJECT_DIR=f"{link}/")
+    assert result.returncode == 1
+
+
+def test_runs_identity_changes_without_a_project(run_git):
+    result = run_git("commit", "-m", "a", GIT_AUTHOR_NAME="t", MISTICOS_PROJECT_DIR="")
+    assert result.returncode == 0
+
+
+@pytest.mark.parametrize("subcommand", ["init", "clone"])
+def test_runs_repository_creation_with_an_identity(run_git, subcommand):
+    assert run_git(subcommand, "/tmp/new", GIT_AUTHOR_NAME="t").returncode == 0

@@ -4,6 +4,7 @@ set -euo pipefail
 shopt -s nocasematch
 
 location_options=()
+subcommand=""
 changes_global_identity=false
 
 real_git() {
@@ -153,7 +154,7 @@ arguments_change_identity() {
   return 1
 }
 
-collect_location_options() {
+read_global_options() {
   local word
   while [ $# -gt 0 ]; do
     word=$1
@@ -166,14 +167,21 @@ collect_location_options() {
       --git-dir=* | --work-tree=*) location_options+=("$word") ;;
       -c | --config-env | --namespace) shift ;;
       -*) ;;
-      *) return ;;
+      *)
+        subcommand=$word
+        return
+        ;;
     esac
   done
 }
 
+creates_a_repository() {
+  [[ $subcommand == init || $subcommand == clone ]]
+}
+
 is_inside_project() {
-  local path=$1 project=${MISTICOS_PROJECT_DIR-}
-  [ -z "$project" ] && return 0
+  local path=$1 project
+  project=$(cd "${MISTICOS_PROJECT_DIR:-/nonexistent}" 2>/dev/null && pwd -P) || return 1
   [ "$path" = "$project" ] || [ "${path:0:${#project}+1}" = "$project/" ]
 }
 
@@ -186,12 +194,12 @@ targets_project_repository() {
 git=$(real_git)
 
 if [ -z "${MISTICOS_ALLOW_IDENTITY_CHANGE-}" ]; then
+  read_global_options "$@"
   identity_changes=false
-  environment_changes_identity && identity_changes=true
+  creates_a_repository || ! environment_changes_identity || identity_changes=true
   arguments_change_identity "$@" && identity_changes=true
   if $identity_changes; then
     $changes_global_identity && deny
-    collect_location_options "$@"
     targets_project_repository && deny
   fi
 fi
