@@ -53,11 +53,14 @@ names_pull_requests() {
 }
 
 runs_a_pull_request_mutation() {
-  local word
+  local word names_graphql=false names_mutation=false
   for word in "$@"; do
-    [[ $word == *createPullRequest* || $word == *mergePullRequest* ]] && return 0
+    case $word in
+      graphql) names_graphql=true ;;
+      *createPullRequest* | *mergePullRequest* | *enablePullRequestAutoMerge* | *enqueuePullRequest*) names_mutation=true ;;
+    esac
   done
-  return 1
+  $names_graphql && $names_mutation
 }
 
 api_method() {

@@ -48,6 +48,13 @@ def run_gh(tmp_path):
         ["pr", "--repo=o/r", "create"],
         ["pr", "new", "--fill"],
         ["api", "graphql", "-f", "query=mutation { mergePullRequest(input: {}) }"],
+        ["api", "graphql", "-f", "query=mutation { enqueuePullRequest(input: {}) }"],
+        [
+            "api",
+            "graphql",
+            "-f",
+            "query=mutation { enablePullRequestAutoMerge(input: {}) }",
+        ],
     ],
 )
 def test_denies_pull_request_writes(run_gh, arguments):
@@ -65,6 +72,9 @@ def test_denies_pull_request_writes(run_gh, arguments):
         ["api", "repos/o/r/pulls"],
         ["api", "-X", "PATCH", "repos/o/r/pulls/1", "-f", "title=x"],
         ["api", "repos/o/r/issues", "-f", "title=x"],
+        ["api", "search/code?q=mergePullRequest"],
+        ["api", "repos/o/r/issues/1/comments", "-f", "body=createPullRequest fails"],
+        ["api", "graphql", "-f", "query=query { viewer { login } }"],
         ["issue", "create", "--title", "pr merge"],
     ],
 )
