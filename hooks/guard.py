@@ -89,10 +89,15 @@ def git_config_writes_identity(words):
     if "config" not in words:
         return False
     after_config = words[words.index("config") + 1 :]
-    reads = {"--get", "--get-all", "--get-regexp", "--list", "-l", "--show-origin"}
+    reads = {"--get", "--get-all", "--get-regexp", "--list", "-l", "get", "list"}
     if any(word in reads for word in after_config):
         return False
-    return any(word.lower() in IDENTITY_KEYS for word in after_config)
+    keys = [i for i, word in enumerate(after_config) if word.lower() in IDENTITY_KEYS]
+    if not keys:
+        return False
+    unsets = {"--unset", "--unset-all", "unset"}
+    has_value = keys[-1] + 1 < len(after_config)
+    return has_value or any(word in unsets for word in after_config)
 
 
 def git_overrides_identity(words):

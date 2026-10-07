@@ -27,6 +27,8 @@ def decision(command):
     [
         "git config user.name x",
         "git config --global user.email x@example.com",
+        "git config --unset user.name",
+        "git config set user.email x@example.com",
         "git -c user.name=x commit -m a",
         "git commit --author='x <x@example.com>' -m a",
         "GIT_AUTHOR_NAME=x git commit -m a",
@@ -50,6 +52,8 @@ def test_denies(command):
         "git status",
         "git commit -m 'set user.name docs'",
         "git config --get user.name",
+        "git config user.name",
+        "git config get user.email",
         "git log --author=x",
         "gh pr view 1",
         "gh api repos/o/r/pulls",
