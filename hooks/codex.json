@@ -88,6 +88,15 @@
     ],
     "PreToolUse": [
       {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/run.sh \"${CLAUDE_PLUGIN_ROOT}\"/hooks/guard.py"
+          }
+        ]
+      },
+      {
         "matcher": "spawn_agent|collaborationspawn_agent",
         "hooks": [
           {
