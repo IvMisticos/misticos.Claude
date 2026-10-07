@@ -3,8 +3,8 @@ import os
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
-from typing import NamedTuple
 
 COMMAND_TIMEOUT_SECONDS = 120
 LIST_NUGET_HTTP_CACHE = ("dotnet", "nuget", "locals", "http-cache", "--list")
@@ -15,11 +15,7 @@ DOCKER_PRUNES = (
     ("dangling Docker images", ("docker", "image", "prune", "-f")),
 )
 DOTNET_PROJECT_SUFFIXES = {".csproj", ".fsproj", ".vbproj"}
-
-
-class Cleanup(NamedTuple):
-    cleared_caches: list[str]
-    build_output: list[Path]
+RECENTLY_WRITTEN_SECONDS = 15 * 60
 
 
 def output_of(command):
@@ -90,6 +86,13 @@ def is_linked_from_a_project(file):
         return True
 
 
+def was_written_recently(path):
+    try:
+        return time.time() - path.lstat().st_mtime < RECENTLY_WRITTEN_SECONDS
+    except OSError:
+        return True
+
+
 def is_unused(cache_entry):
     return not any(map(is_linked_from_a_project, files_under(cache_entry)))
 
@@ -105,7 +108,11 @@ def delete(path):
 def cleared_bun_cache(cache):
     if not cache.is_dir():
         return False
-    unused = [entry for entry in cache.iterdir() if is_unused(entry)]
+    unused = [
+        entry
+        for entry in cache.iterdir()
+        if not was_written_recently(entry) and is_unused(entry)
+    ]
     for entry in unused:
         delete(entry)
     return bool(unused)
@@ -151,9 +158,3 @@ def deleted_build_output(root):
     for folder in folders:
         shutil.rmtree(folder, ignore_errors=True)
     return folders
-
-
-def clean_up(scratchpad, devices):
-    on_low_disk = is_on(scratchpad, devices)
-    build_output = deleted_build_output(scratchpad) if on_low_disk else []
-    return Cleanup(cleared_caches(devices), build_output)

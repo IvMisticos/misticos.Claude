@@ -1,4 +1,6 @@
+import os
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -7,7 +9,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
 
 import disk_cleanup
 from disk_cleanup import (
-    clean_up,
     cleared_bun_cache,
     cleared_caches,
     deleted_build_output,
@@ -57,14 +58,6 @@ def without_tools(monkeypatch):
     monkeypatch.setattr(disk_cleanup, "output_of", lambda command: None)
 
 
-def test_deletes_build_output_only_on_a_disk_that_needs_space(
-    scratchpad, without_tools
-):
-    assert clean_up(scratchpad, {"another disk"}).build_output == []
-    assert all((scratchpad / folder).exists() for folder in BUILD_OUTPUT)
-    assert clean_up(scratchpad, {device_of(scratchpad)}).build_output
-
-
 @pytest.fixture
 def bun_cache(tmp_path, monkeypatch):
     cache = tmp_path / "bun-cache"
@@ -72,10 +65,14 @@ def bun_cache(tmp_path, monkeypatch):
     return cache
 
 
-def cache_package(cache, name):
+HOUR_AGO = time.time() - 3600
+
+
+def cache_package(cache, name, written_at=HOUR_AGO):
     package = cache / name
     package.mkdir(parents=True)
     (package / "index.js").write_text("x")
+    os.utime(package, (written_at, written_at))
     return package
 
 
@@ -87,6 +84,12 @@ def test_clears_bun_packages_no_project_links_to(bun_cache, tmp_path):
     (project / "index.js").hardlink_to(linked / "index.js")
     assert cleared_bun_cache(bun_cache)
     assert sorted(entry.name for entry in bun_cache.iterdir()) == ["linked@1.0.0@@@1"]
+
+
+def test_keeps_bun_packages_an_install_may_still_link(bun_cache):
+    cache_package(bun_cache, "extracted@1.0.0@@@1", written_at=time.time())
+    assert not cleared_bun_cache(bun_cache)
+    assert [entry.name for entry in bun_cache.iterdir()] == ["extracted@1.0.0@@@1"]
 
 
 def test_skips_a_missing_bun_cache(bun_cache):

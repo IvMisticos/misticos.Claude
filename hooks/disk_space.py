@@ -13,7 +13,7 @@ import traceback
 from pathlib import Path
 from typing import NamedTuple
 
-from disk_cleanup import clean_up, device_of
+from disk_cleanup import cleared_caches, deleted_build_output, device_of, is_on
 from reminder import QuietArgumentParser, hook_output
 
 LOW_SPACE_BYTES = 1 << 30
@@ -107,6 +107,11 @@ def low_disks(paths):
     return ((disk.path, disk.free) for disk in disks(paths) if is_low(disk))
 
 
+class Cleanup(NamedTuple):
+    cleared_caches: list[str]
+    build_output: list[Path]
+
+
 def total_free(disks):
     return sum(disk.free for disk in disks)
 
@@ -155,6 +160,22 @@ def needs_cleanup(disk, free_at_last_cleanup):
     return last_free is None or disk.free < last_free - CLEAN_UP_AGAIN_AFTER_BYTES
 
 
+def devices_needing_space(paths, devices):
+    return {
+        disk.device
+        for disk in disks(paths)
+        if disk.device in devices and needs_space(disk)
+    }
+
+
+def clean_up(paths, devices, scratchpad):
+    cleared = cleared_caches(devices)
+    still_short = devices_needing_space(paths, devices)
+    on_short_disk = is_on(scratchpad, still_short)
+    build_output = deleted_build_output(scratchpad) if on_short_disk else []
+    return Cleanup(cleared, build_output)
+
+
 def scratchpad_of(payload):
     scratchpad = payload.get("scratchpad_dir")
     if isinstance(scratchpad, str) and os.path.isabs(scratchpad):
@@ -192,7 +213,7 @@ def disk_cleanup(payload):
     remember_free_space(before)
     devices = {disk.device for disk in before}
     scratchpad = scratchpad_of(payload)
-    cleanup = clean_up(scratchpad, devices)
+    cleanup = clean_up(paths, devices, scratchpad)
     after = [disk for disk in disks(paths) if disk.device in devices]
     remember_free_space(after)
     if not (cleanup.cleared_caches or cleanup.build_output):
