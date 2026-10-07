@@ -72,7 +72,7 @@ Use verifiable goals. For a bug, write a failing test first.
 
 Tests verify correctness, they don't define it. Solve the general case. Never hard-code values or special-case test inputs. If a test is wrong or the task is infeasible, say so instead of working around it.
 
-Shared test resources leak state: isolate, clean up, never rely on order.
+Shared test resources leak state: isolate, clean up, never rely on order. When other agents share the machine, run one test project at a time.
 
 Run all checks: typecheck, lint, test, build, coverage, drift. Use the project's exact tooling unprompted. Say so if you can't run one. Verify in the real system when feasible.
 
