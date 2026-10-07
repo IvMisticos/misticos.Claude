@@ -205,7 +205,7 @@ def claude_decision(reason):
 def cursor_decision(reason):
     if not reason:
         return {"permission": "allow"}
-    return {"permission": "deny", "agent_message": reason}
+    return {"permission": "deny", "user_message": reason, "agent_message": reason}
 
 
 def main():
