@@ -1,6 +1,7 @@
 import json
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -81,10 +82,27 @@ def test_session_stop_keeps_agent_folders_while_work_runs(scratchpad, tasks):
     assert contents(scratchpad / "agents") == ["a1", "a2"]
 
 
-@pytest.mark.parametrize("tasks", [[SHELL_TASK], None])
-def test_session_end_deletes_every_agent_folder(scratchpad, tasks):
-    run_hook("SessionEnd", scratchpad_dir=str(scratchpad), background_tasks=tasks)
-    assert contents(scratchpad) == ["notes.md"]
+def is_emptied_soon(folder):
+    deadline = time.monotonic() + 10
+    while contents(folder) != ["notes.md"] and time.monotonic() < deadline:
+        time.sleep(0.01)
+    return contents(folder) == ["notes.md"]
+
+
+@pytest.mark.parametrize("reason", ["prompt_input_exit", "logout", "other"])
+def test_session_end_deletes_every_agent_folder(scratchpad, reason):
+    run_hook("SessionEnd", scratchpad_dir=str(scratchpad), reason=reason)
+    assert "agents" not in contents(scratchpad)
+    assert is_emptied_soon(scratchpad)
+
+
+@pytest.mark.parametrize("reason", ["clear", "resume"])
+def test_session_end_keeps_agent_folders_that_background_tasks_outlive(
+    scratchpad, reason
+):
+    run_hook("SessionEnd", scratchpad_dir=str(scratchpad), reason=reason)
+    assert contents(scratchpad) == ["agents", "notes.md"]
+    assert contents(scratchpad / "agents") == ["a1", "a2"]
 
 
 @pytest.mark.parametrize("agent_id", ["", "..", "../a1", "a/b", None])

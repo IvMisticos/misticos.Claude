@@ -7,6 +7,7 @@ import json
 import os
 import re
 import shutil
+import subprocess
 import sys
 import traceback
 from pathlib import Path
@@ -14,6 +15,8 @@ from pathlib import Path
 from reminder import hook_output
 
 AGENT_ID = re.compile(r"[A-Za-z0-9_-]+")
+ENDS_WITH_TASKS_RUNNING = {"clear", "resume"}
+DELETE_FOLDER = "import shutil, sys; shutil.rmtree(sys.argv[1], ignore_errors=True)"
 SCRATCH_FOLDER_NOTE = (
     "Put clones, downloads and other temporary files in {folder}. It can be "
     "deleted as soon as you finish responding, before your caller reads your "
@@ -74,11 +77,33 @@ def delete_every_idle_agent_folder(payload):
         delete_every_agent_folder(payload)
 
 
+def delete_in_background(folder):
+    subprocess.Popen(
+        [sys.executable, "-c", DELETE_FOLDER, str(folder)],
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=True,
+    )
+
+
+def delete_agent_folders_after_session(payload):
+    root = agent_folders_root(payload)
+    if not root or payload.get("reason") in ENDS_WITH_TASKS_RUNNING:
+        return
+    trash = root.with_name(f"{root.name}-deleted-{os.getpid()}")
+    try:
+        root.rename(trash)
+    except OSError:
+        return
+    delete_in_background(trash)
+
+
 HANDLERS = {
     "SubagentStart": offer_agent_folder,
     "SubagentStop": delete_agent_folder,
     "Stop": delete_every_idle_agent_folder,
-    "SessionEnd": delete_every_agent_folder,
+    "SessionEnd": delete_agent_folders_after_session,
 }
 
 
