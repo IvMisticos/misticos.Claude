@@ -9,10 +9,14 @@ ROOT = Path(__file__).resolve().parent.parent
 SHIMS = ROOT / "shims"
 SESSION_ENVIRONMENT = ROOT / "hooks" / "session_environment.py"
 FAKE_GIT = """#!/usr/bin/env bash
+if [ "$1 $2" = "-C $MISTICOS_PROJECT_DIR" ] && [ "$3" = rev-parse ]; then
+  echo "$FAKE_PROJECT_GIT_DIR"
+  exit
+fi
 for word in "$@"; do
   if [ "$word" = rev-parse ]; then
-    [ -n "$FAKE_TOP_LEVEL" ] || exit 128
-    echo "$FAKE_TOP_LEVEL"
+    [ -n "$FAKE_TARGET_GIT_DIR" ] || exit 128
+    echo "$FAKE_TARGET_GIT_DIR"
     exit
   fi
 done
@@ -31,8 +35,15 @@ def without_session_variables(environment):
 @pytest.fixture
 def project(tmp_path):
     project_dir = tmp_path / "project"
-    project_dir.mkdir()
+    (project_dir / ".git").mkdir(parents=True)
     return project_dir.resolve()
+
+
+@pytest.fixture
+def fixture_git_dir(tmp_path):
+    git_dir = tmp_path / "fixture" / ".git"
+    git_dir.mkdir(parents=True)
+    return str(git_dir)
 
 
 @pytest.fixture
@@ -45,7 +56,8 @@ def run_git(tmp_path, project):
     base_environment = without_session_variables(os.environ)
     base_environment["PATH"] = f"{SHIMS}:{real_bin}:/usr/bin:/bin"
     base_environment["MISTICOS_PROJECT_DIR"] = str(project)
-    base_environment["FAKE_TOP_LEVEL"] = str(project)
+    base_environment["FAKE_PROJECT_GIT_DIR"] = str(project / ".git")
+    base_environment["FAKE_TARGET_GIT_DIR"] = str(project / ".git")
 
     def run(*arguments, **environment):
         return subprocess.run(
@@ -142,29 +154,30 @@ def test_allows_identity_change_on_request(run_git):
         (["-C", "/tmp/fixture", "config", "user.name", "test"], {}),
     ],
 )
-def test_runs_identity_changes_outside_the_project(run_git, arguments, environment):
-    result = run_git(*arguments, FAKE_TOP_LEVEL="/tmp/fixture", **environment)
+def test_runs_identity_changes_outside_the_project(
+    run_git, fixture_git_dir, arguments, environment
+):
+    result = run_git(*arguments, FAKE_TARGET_GIT_DIR=fixture_git_dir, **environment)
     assert result.returncode == 0
 
 
 def test_runs_identity_changes_outside_any_repository(run_git):
-    assert run_git("config", "user.name", "x", FAKE_TOP_LEVEL="").returncode == 0
+    assert run_git("config", "user.name", "x", FAKE_TARGET_GIT_DIR="").returncode == 0
 
 
-def test_denies_global_identity_changes_outside_the_project(run_git):
+def test_denies_global_identity_changes_outside_the_project(run_git, fixture_git_dir):
     result = run_git(
-        "config", "--global", "user.name", "x", FAKE_TOP_LEVEL="/tmp/fixture"
+        "config", "--global", "user.name", "x", FAKE_TARGET_GIT_DIR=fixture_git_dir
     )
     assert result.returncode == 1
 
 
-def test_denies_identity_changes_in_project_subdirectories(run_git, project):
-    result = run_git("config", "user.name", "x", FAKE_TOP_LEVEL=f"{project}/nested")
-    assert result.returncode == 1
-
-
-def test_runs_identity_changes_in_sibling_directories(run_git, project):
-    result = run_git("config", "user.name", "x", FAKE_TOP_LEVEL=f"{project}-other")
+def test_runs_identity_changes_in_repositories_nested_in_the_project(run_git, project):
+    nested_git_dir = project / "nested" / ".git"
+    nested_git_dir.mkdir(parents=True)
+    result = run_git(
+        "config", "user.name", "x", FAKE_TARGET_GIT_DIR=str(nested_git_dir)
+    )
     assert result.returncode == 0
 
 
@@ -191,7 +204,20 @@ def test_denies_identity_changes_through_a_symlinked_project(
 ):
     link = tmp_path / "link"
     link.symlink_to(project)
-    result = run_git("config", "user.name", "x", MISTICOS_PROJECT_DIR=f"{link}/")
+    result = run_git(
+        "config",
+        "user.name",
+        "x",
+        MISTICOS_PROJECT_DIR=f"{link}/",
+        FAKE_PROJECT_GIT_DIR=f"{link}/.git",
+    )
+    assert result.returncode == 1
+
+
+def test_denies_identity_changes_in_project_worktrees(run_git, project, tmp_path):
+    worktree = tmp_path / "worktree"
+    worktree.mkdir()
+    result = run_git("-C", str(worktree), "config", "user.name", "x")
     assert result.returncode == 1
 
 

@@ -179,16 +179,18 @@ creates_a_repository() {
   [[ $subcommand == init || $subcommand == clone ]]
 }
 
-is_inside_project() {
-  local path=$1 project
-  project=$(cd "${MISTICOS_PROJECT_DIR:-/nonexistent}" 2>/dev/null && pwd -P) || return 1
-  [ "$path" = "$project" ] || [ "${path:0:${#project}+1}" = "$project/" ]
+repository_directory() {
+  local directory
+  directory=$("$git" "$@" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || return 1
+  [ -n "$directory" ] && cd "$directory" 2>/dev/null && pwd -P
 }
 
 targets_project_repository() {
-  local top_level
-  top_level=$("$git" ${location_options[@]+"${location_options[@]}"} rev-parse --show-toplevel 2>/dev/null) || return 1
-  is_inside_project "$top_level"
+  local target project
+  [ -n "${MISTICOS_PROJECT_DIR-}" ] || return 1
+  target=$(repository_directory ${location_options[@]+"${location_options[@]}"}) || return 1
+  project=$(repository_directory -C "$MISTICOS_PROJECT_DIR") || return 1
+  [ "$target" = "$project" ]
 }
 
 git=$(real_git)
