@@ -7,27 +7,18 @@ import os
 import shlex
 from pathlib import Path
 
-SHIMS_DIR = Path(__file__).resolve().parent.parent / "shims"
-HARNESS_GIT_IDENTITY_ASSIGNMENT = (
-    "HARNESS_GIT_IDENTITY="
-    '"${GIT_AUTHOR_NAME-}|${GIT_AUTHOR_EMAIL-}|${GIT_COMMITTER_NAME-}|${GIT_COMMITTER_EMAIL-}"'
-)
+HOOKS_DIR = Path(__file__).resolve().parent
+SHIMS_DIR = HOOKS_DIR.parent / "shims"
+SESSION_ENVIRONMENT_SCRIPT = HOOKS_DIR / "session_environment.sh"
 
 
 def project_dir():
     return os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd()
 
 
-def session_assignments():
-    return [
-        f'PATH={shlex.quote(str(SHIMS_DIR))}:"$PATH"',
-        f"HARNESS_PROJECT_DIR={shlex.quote(project_dir())}",
-        HARNESS_GIT_IDENTITY_ASSIGNMENT,
-    ]
-
-
-def session_exports():
-    return [f"export {assignment}\n" for assignment in session_assignments()]
+def session_environment_command():
+    script = str(SESSION_ENVIRONMENT_SCRIPT)
+    return shlex.join([".", script, str(SHIMS_DIR), project_dir()])
 
 
 def main():
@@ -36,9 +27,10 @@ def main():
         return
     env_path = Path(env_file)
     written = env_path.read_text() if env_path.exists() else ""
-    missing = [line for line in session_exports() if line not in written]
-    with env_path.open("a") as env:
-        env.writelines(missing)
+    line = session_environment_command() + "\n"
+    if line not in written:
+        with env_path.open("a") as env:
+            env.write(line)
 
 
 if __name__ == "__main__":

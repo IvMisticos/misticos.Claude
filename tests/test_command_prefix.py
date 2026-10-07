@@ -56,9 +56,11 @@ def run_rewritten(tmp_path, hook_environment):
     shell_environment["PATH"] = f"{real_bin}:/usr/bin:/bin"
     shell_environment.pop("ALLOW_GH_PULL_REQUEST_WRITE", None)
 
-    def run(command, **environment):
+    def run(*commands, **environment):
+        rewritten = [codex_command(hook_environment, command) for command in commands]
         return subprocess.run(
-            ["bash", "-c", codex_command(hook_environment, command)],
+            ["bash"],
+            input="\n".join(rewritten) + "\n",
             env={**shell_environment, **environment},
             capture_output=True,
             text=True,
@@ -120,3 +122,17 @@ def test_records_the_identity_from_before_the_command(run_rewritten):
         GIT_AUTHOR_EMAIL="shell@example.com",
     )
     assert result.stdout == "|shell@example.com||\n"
+
+
+def test_keeps_the_first_identity_in_a_persistent_shell(run_rewritten):
+    result = run_rewritten(
+        "export GIT_AUTHOR_NAME=x",
+        "printenv HARNESS_GIT_IDENTITY",
+        GIT_AUTHOR_EMAIL="shell@example.com",
+    )
+    assert result.stdout == "|shell@example.com||\n"
+
+
+def test_adds_the_shims_to_the_path_once_in_a_persistent_shell(run_rewritten):
+    result = run_rewritten("true", "true", 'printf %s "$PATH"')
+    assert result.stdout.split(":").count(str(SHIMS)) == 1

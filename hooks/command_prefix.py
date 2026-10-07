@@ -8,7 +8,7 @@ import json
 import os
 import sys
 
-from session_environment import session_assignments
+from session_environment import session_environment_command
 
 
 def shell_tool_input(payload):
@@ -19,7 +19,7 @@ def shell_tool_input(payload):
 
 
 def with_session_environment(command):
-    return f"export {' '.join(session_assignments())}; {command}"
+    return f"{session_environment_command()}; {command}"
 
 
 def rewritten_tool_call(tool_input, shape):
