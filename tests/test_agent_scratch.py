@@ -8,6 +8,8 @@ import pytest
 AGENT_SCRATCH = Path(__file__).resolve().parent.parent / "hooks" / "agent_scratch.py"
 SHELL_TASK = {"id": "b1", "type": "shell", "status": "running", "command": "make"}
 SUBAGENT_TASK = {"id": "a2", "type": "subagent", "status": "running"}
+WORKFLOW_TASK = {"id": "w1", "type": "workflow", "status": "running"}
+OWN_TASK = {"id": "a1", "type": "subagent", "status": "running"}
 
 
 @pytest.fixture
@@ -44,7 +46,7 @@ def test_start_creates_the_folder_and_names_it(scratchpad):
     assert (scratchpad / "agents" / "a3").is_dir()
 
 
-@pytest.mark.parametrize("tasks", [[], [SUBAGENT_TASK]])
+@pytest.mark.parametrize("tasks", [[], [OWN_TASK]])
 def test_stop_deletes_only_the_agents_folder(scratchpad, tasks):
     run_hook(
         "SubagentStop",
@@ -55,8 +57,10 @@ def test_stop_deletes_only_the_agents_folder(scratchpad, tasks):
     assert contents(scratchpad / "agents") == ["a2"]
 
 
-@pytest.mark.parametrize("tasks", [[SHELL_TASK], None])
-def test_stop_keeps_the_folder_while_a_command_may_use_it(scratchpad, tasks):
+@pytest.mark.parametrize(
+    "tasks", [[SHELL_TASK], [OWN_TASK, SUBAGENT_TASK], [WORKFLOW_TASK], None]
+)
+def test_stop_keeps_the_folder_while_other_work_may_use_it(scratchpad, tasks):
     run_hook(
         "SubagentStop",
         scratchpad_dir=str(scratchpad),
@@ -75,6 +79,12 @@ def test_session_stop_deletes_every_agent_folder_when_nothing_runs(scratchpad):
 def test_session_stop_keeps_agent_folders_while_work_runs(scratchpad, tasks):
     run_hook("Stop", scratchpad_dir=str(scratchpad), background_tasks=tasks)
     assert contents(scratchpad / "agents") == ["a1", "a2"]
+
+
+@pytest.mark.parametrize("tasks", [[SHELL_TASK], None])
+def test_session_end_deletes_every_agent_folder(scratchpad, tasks):
+    run_hook("SessionEnd", scratchpad_dir=str(scratchpad), background_tasks=tasks)
+    assert contents(scratchpad) == ["notes.md"]
 
 
 @pytest.mark.parametrize("agent_id", ["", "..", "../a1", "a/b", None])
