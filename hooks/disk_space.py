@@ -9,9 +9,9 @@ import os
 import re
 import shutil
 import sys
-import time
 import traceback
 from pathlib import Path
+from typing import NamedTuple
 
 from disk_cleanup import clean_up
 from reminder import QuietArgumentParser, hook_output
@@ -20,9 +20,10 @@ LOW_SPACE_BYTES = 1 << 30
 LOW_SPACE_SHARE = 0.1
 BYTES_PER_MIB = 1 << 20
 CLEAN_UP_BELOW_BYTES = 5 << 30
-CLEAN_UP_AT_MOST_EVERY_SECONDS = 5 * 60
-CLEANUP_STAMP = (
-    Path.home() / ".claude" / "hooks" / "data" / "misticos.Claude" / "disk-cleanup"
+CLEAN_UP_BELOW_SHARE = 0.25
+CLEAN_UP_AGAIN_AFTER_BYTES = 1 << 30
+FREE_AT_LAST_CLEANUP = (
+    Path.home() / ".claude" / "hooks" / "data" / "misticos.Claude" / "disk-cleanup.json"
 )
 OUT_OF_SPACE_ERROR = re.compile(
     r"no space left on device|disk quota exceeded|not enough space on the disk"
@@ -39,11 +40,11 @@ RAN_OUT = (
     "failed, free space now. If you only read text that quotes such an "
     "error, ignore this."
 )
-CLEANED_UP = "Free disk space fell under 5 GiB, so the hooks freed {freed} MiB."
+CLEANED_UP = "Disk space ran low, so the hooks freed {freed} MiB."
 CLEARED_CACHES = "They cleared {caches}."
 DELETED_BUILD_OUTPUT = (
-    "They deleted {count} build output folders named {names} under "
-    "{scratchpad}. Rebuild or reinstall before you use them."
+    "They deleted the {names} build output under {scratchpad}. Rebuild or "
+    "reinstall before you use it."
 )
 HOW_TO_CLEAN_UP = (
     "Delete build output, package caches and clones you no longer need. Keep "
@@ -77,48 +78,65 @@ def watched_paths(payload):
     return (cwd, os.path.expanduser("~"), *temp_dirs, "/tmp")
 
 
-def is_low(usage):
-    return usage.free < min(LOW_SPACE_BYTES, usage.total * LOW_SPACE_SHARE)
+def is_low(disk):
+    return disk.free < min(LOW_SPACE_BYTES, disk.total * LOW_SPACE_SHARE)
 
 
-def disk_usages(paths):
+class Disk(NamedTuple):
+    path: str
+    device: str
+    total: int
+    free: int
+
+
+def disks(paths):
     seen_devices = set()
     for path in paths:
         try:
-            device = os.stat(path).st_dev
+            device = str(os.stat(path).st_dev)
             usage = shutil.disk_usage(path)
         except OSError:
             continue
         if device in seen_devices:
             continue
         seen_devices.add(device)
-        yield path, usage
+        yield Disk(path, device, usage.total, usage.free)
 
 
 def low_disks(paths):
-    return ((path, usage.free) for path, usage in disk_usages(paths) if is_low(usage))
+    return ((disk.path, disk.free) for disk in disks(paths) if is_low(disk))
 
 
-def free_bytes(paths):
-    return sum(usage.free for _, usage in disk_usages(paths))
+def total_free(disks):
+    return sum(disk.free for disk in disks)
 
 
-def needs_cleanup(paths):
-    return any(usage.free < CLEAN_UP_BELOW_BYTES for _, usage in disk_usages(paths))
-
-
-def cleanup_is_due():
+def read_free_at_last_cleanup():
     try:
-        cleaned_at = CLEANUP_STAMP.stat().st_mtime
-    except OSError:
-        return True
-    return time.time() - cleaned_at >= CLEAN_UP_AT_MOST_EVERY_SECONDS
+        stored = json.loads(FREE_AT_LAST_CLEANUP.read_text())
+    except (OSError, ValueError):
+        return {}
+    if not isinstance(stored, dict):
+        return {}
+    return {device: free for device, free in stored.items() if isinstance(free, int)}
 
 
-def mark_cleanup_started():
+def remember_free_space(disks):
+    free = read_free_at_last_cleanup() | {disk.device: disk.free for disk in disks}
     with contextlib.suppress(OSError):
-        CLEANUP_STAMP.parent.mkdir(parents=True, exist_ok=True)
-        CLEANUP_STAMP.touch()
+        FREE_AT_LAST_CLEANUP.parent.mkdir(parents=True, exist_ok=True)
+        FREE_AT_LAST_CLEANUP.write_text(json.dumps(free))
+
+
+def cleanup_threshold(disk):
+    return min(CLEAN_UP_BELOW_BYTES, disk.total * CLEAN_UP_BELOW_SHARE)
+
+
+def needs_cleanup(disk, free_at_last_cleanup):
+    if disk.free >= cleanup_threshold(disk):
+        return False
+    last_free = free_at_last_cleanup.get(disk.device)
+    return last_free is None or disk.free < last_free - CLEAN_UP_AGAIN_AFTER_BYTES
 
 
 def scratchpad_of(payload):
@@ -135,8 +153,7 @@ def listed(items):
 
 def deleted_build_output_note(folders, scratchpad):
     names = listed(sorted({folder.name for folder in folders}))
-    count = len(folders)
-    return DELETED_BUILD_OUTPUT.format(count=count, names=names, scratchpad=scratchpad)
+    return DELETED_BUILD_OUTPUT.format(names=names, scratchpad=scratchpad)
 
 
 def cleanup_report(cleanup, freed, scratchpad):
@@ -150,15 +167,18 @@ def cleanup_report(cleanup, freed, scratchpad):
 
 def disk_cleanup(payload):
     paths = watched_paths(payload)
-    if not (needs_cleanup(paths) and cleanup_is_due()):
+    before = list(disks(paths))
+    free_at_last_cleanup = read_free_at_last_cleanup()
+    if not any(needs_cleanup(disk, free_at_last_cleanup) for disk in before):
         return None
-    mark_cleanup_started()
+    remember_free_space(before)
     scratchpad = scratchpad_of(payload)
-    free_before = free_bytes(paths)
     cleanup = clean_up(scratchpad)
+    after = list(disks(paths))
+    remember_free_space(after)
     if not (cleanup.cleared_caches or cleanup.build_output):
         return None
-    freed = max(0, free_bytes(paths) - free_before)
+    freed = max(0, total_free(after) - total_free(before))
     return cleanup_report(cleanup, freed, scratchpad)
 
 
