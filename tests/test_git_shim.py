@@ -1,10 +1,32 @@
 import os
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
 
-SHIMS = Path(__file__).resolve().parent.parent / "shims"
+ROOT = Path(__file__).resolve().parent.parent
+SHIMS = ROOT / "shims"
+SESSION_ENVIRONMENT = ROOT / "hooks" / "session_environment.py"
+PROJECT = "/work/project"
+FAKE_GIT = """#!/usr/bin/env bash
+for word in "$@"; do
+  if [ "$word" = rev-parse ]; then
+    [ -n "$FAKE_TOP_LEVEL" ] || exit 128
+    echo "$FAKE_TOP_LEVEL"
+    exit
+  fi
+done
+echo "ran $*"
+"""
+
+
+def without_session_variables(environment):
+    return {
+        name: value
+        for name, value in environment.items()
+        if not name.startswith(("GIT_", "MISTICOS_", "CLAUDE_"))
+    }
 
 
 @pytest.fixture
@@ -12,13 +34,12 @@ def run_git(tmp_path):
     real_bin = tmp_path / "bin"
     real_bin.mkdir()
     fake_git = real_bin / "git"
-    fake_git.write_text('#!/usr/bin/env bash\necho "ran $*"\n')
+    fake_git.write_text(FAKE_GIT)
     fake_git.chmod(0o755)
-    base_environment = {
-        name: value for name, value in os.environ.items() if not name.startswith("GIT_")
-    }
-    base_environment.pop("MISTICOS_HARNESS_GIT_IDENTITY", None)
+    base_environment = without_session_variables(os.environ)
     base_environment["PATH"] = f"{SHIMS}:{real_bin}:/usr/bin:/bin"
+    base_environment["MISTICOS_PROJECT_DIR"] = PROJECT
+    base_environment["FAKE_TOP_LEVEL"] = PROJECT
 
     def run(*arguments, **environment):
         return subprocess.run(
@@ -105,3 +126,55 @@ def test_runs_with_harness_environment(run_git, environment):
 def test_allows_identity_change_on_request(run_git):
     result = run_git("config", "user.name", "x", MISTICOS_ALLOW_IDENTITY_CHANGE="1")
     assert result.returncode == 0
+
+
+@pytest.mark.parametrize(
+    ("arguments", "environment"),
+    [
+        (["config", "user.email", "test@example.com"], {}),
+        (["commit", "-m", "a"], {"GIT_AUTHOR_NAME": "test"}),
+        (["-C", "/tmp/fixture", "config", "user.name", "test"], {}),
+    ],
+)
+def test_runs_identity_changes_outside_the_project(run_git, arguments, environment):
+    result = run_git(*arguments, FAKE_TOP_LEVEL="/tmp/fixture", **environment)
+    assert result.returncode == 0
+
+
+def test_runs_identity_changes_outside_any_repository(run_git):
+    assert run_git("config", "user.name", "x", FAKE_TOP_LEVEL="").returncode == 0
+
+
+def test_denies_global_identity_changes_outside_the_project(run_git):
+    result = run_git(
+        "config", "--global", "user.name", "x", FAKE_TOP_LEVEL="/tmp/fixture"
+    )
+    assert result.returncode == 1
+
+
+def test_denies_identity_changes_in_project_subdirectories(run_git):
+    result = run_git("config", "user.name", "x", FAKE_TOP_LEVEL=f"{PROJECT}/nested")
+    assert result.returncode == 1
+
+
+def test_runs_identity_changes_in_sibling_directories(run_git):
+    result = run_git("config", "user.name", "x", FAKE_TOP_LEVEL=f"{PROJECT}-other")
+    assert result.returncode == 0
+
+
+def test_records_the_shell_identity_as_the_harness_identity(tmp_path):
+    env_file = tmp_path / "session.sh"
+    environment = without_session_variables(os.environ)
+    subprocess.run(
+        [sys.executable, SESSION_ENVIRONMENT],
+        env={**environment, "CLAUDE_ENV_FILE": str(env_file)},
+        check=True,
+    )
+    recorded = subprocess.run(
+        ["bash", "-c", f"source {env_file}; echo $MISTICOS_HARNESS_GIT_IDENTITY"],
+        env={**environment, "GIT_AUTHOR_EMAIL": "shell@example.com"},
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert recorded.stdout == "|shell@example.com||\n"

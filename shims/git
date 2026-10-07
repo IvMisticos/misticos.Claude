@@ -3,6 +3,9 @@
 set -euo pipefail
 shopt -s nocasematch
 
+location_options=()
+changes_global_identity=false
+
 real_git() {
   local dir
   local -a dirs
@@ -54,6 +57,16 @@ config_reads() {
   return 1
 }
 
+config_writes_globally() {
+  local word
+  for word in "$@"; do
+    case $word in
+      --global | --system) return 0 ;;
+    esac
+  done
+  return 1
+}
+
 config_changes_user_section() {
   local word changes_a_section=false names_user=false
   for word in "$@"; do
@@ -96,7 +109,9 @@ config_sets_identity_key() {
 
 config_changes_identity() {
   config_reads "$@" && return 1
-  config_changes_user_section "$@" || config_unsets_identity_key "$@" || config_sets_identity_key "$@"
+  config_changes_user_section "$@" || config_unsets_identity_key "$@" || config_sets_identity_key "$@" || return 1
+  config_writes_globally "$@" && changes_global_identity=true
+  return 0
 }
 
 commit_changes_author() {
@@ -138,11 +153,47 @@ arguments_change_identity() {
   return 1
 }
 
+collect_location_options() {
+  local word
+  while [ $# -gt 0 ]; do
+    word=$1
+    shift
+    case $word in
+      -C | --git-dir | --work-tree)
+        location_options+=("$word" "${1-}")
+        shift
+        ;;
+      --git-dir=* | --work-tree=*) location_options+=("$word") ;;
+      -c | --config-env | --namespace) shift ;;
+      -*) ;;
+      *) return ;;
+    esac
+  done
+}
+
+is_inside_project() {
+  local path=$1 project=${MISTICOS_PROJECT_DIR-}
+  [ -z "$project" ] && return 0
+  [ "$path" = "$project" ] || [ "${path:0:${#project}+1}" = "$project/" ]
+}
+
+targets_project_repository() {
+  local top_level
+  top_level=$("$git" ${location_options[@]+"${location_options[@]}"} rev-parse --show-toplevel 2>/dev/null) || return 1
+  is_inside_project "$top_level"
+}
+
 git=$(real_git)
 
 if [ -z "${MISTICOS_ALLOW_IDENTITY_CHANGE-}" ]; then
-  environment_changes_identity && deny
-  arguments_change_identity "$@" && deny
+  identity_changes=false
+  environment_changes_identity && identity_changes=true
+  arguments_change_identity "$@" && identity_changes=true
+  if $identity_changes; then
+    $changes_global_identity && deny
+    collect_location_options "$@"
+    targets_project_repository && deny
+  fi
 fi
 
 exec "$git" "$@"
