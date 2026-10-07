@@ -31,7 +31,18 @@ IDENTITY_VARIABLES = (
     "GIT_CONFIG_PARAMETERS",
 )
 ASSIGNMENT = re.compile(r"(?P<name>[A-Za-z_]\w*)\+?=(?P<value>.*)", re.DOTALL)
-COMMAND_WRAPPERS = {
+COMMAND_PREFIX_WORDS = {
+    "if",
+    "then",
+    "else",
+    "elif",
+    "do",
+    "while",
+    "until",
+    "!",
+    "timeout",
+    "xargs",
+    "stdbuf",
     "export",
     "env",
     "declare",
@@ -84,8 +95,9 @@ def command_prefix_assignments(words):
 
 
 def starts_the_command(word, previous_word):
-    is_option_or_its_value = word.startswith("-") or previous_word.startswith("-")
-    return word not in COMMAND_WRAPPERS and not is_option_or_its_value
+    is_option = word.startswith("-")
+    is_argument = previous_word.startswith("-") or previous_word == "timeout"
+    return word not in COMMAND_PREFIX_WORDS and not is_option and not is_argument
 
 
 def sets_identity_variable(assignment):
