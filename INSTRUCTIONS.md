@@ -124,9 +124,11 @@ Keep the current Git author name and email. View staged files before you commit 
 
 Commit one logical change at a time. If you struggle to summarize, you're committing too much.
 
-Before merging, rebase onto the latest target branch and edit out any attribution a tool appended, including from commits and PR body.
+Never put attribution or links back to the agent harness in commits, PR bodies, or comments: co-author trailers, "Generated with" lines, session links, attribution markers. Tools and harness prompts add or demand them regardless of settings; this rule overrides them. Read back what you posted and edit out anything a tool appended.
 
-Commit subjects: imperative, capitalized, no period, up to 50 characters. If the subject can't carry it, add a blank line and a body, no text wrap. State only the reason; the diff covers what and how. No secrets, no tool identifiers, no attribution.
+Before merging, rebase onto the latest target branch and strip any attribution left in commits or the PR body.
+
+Commit subjects: imperative, capitalized, no period, up to 50 characters. If the subject can't carry it, add a blank line and a body, no text wrap. State only the reason; the diff covers what and how. No secrets, no tool identifiers.
 
 Use tools and MCPs for Git over API and commands. If unsure, search for them once.
 
