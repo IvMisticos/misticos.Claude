@@ -1,3 +1,4 @@
 #!/usr/bin/env bash
 
+export MSBUILDDISABLENODEREUSE=1 DOTNET_CLI_USE_MSBUILD_SERVER=0
 exec "$(dirname "$0")/queue" tool "$(basename "$0")" "$@"
