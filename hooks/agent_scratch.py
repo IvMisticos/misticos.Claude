@@ -1,14 +1,12 @@
 #!/usr/bin/env -S uv run --script
 # /// script
-# requires-python = ">=3.12"
+# requires-python = ">=3.11"
 # ///
 
-import contextlib
 import json
 import os
 import re
 import shutil
-import stat
 import sys
 import traceback
 from pathlib import Path
@@ -16,52 +14,72 @@ from pathlib import Path
 from reminder import hook_output
 
 AGENT_ID = re.compile(r"[A-Za-z0-9_-]+")
+TASKS_THAT_MAY_USE_THE_FOLDER = {"shell", "monitor"}
 SCRATCH_FOLDER_NOTE = (
-    "Put clones, downloads and other temporary files in {folder}. It is "
-    "deleted each time you finish responding, so keep nothing there that you "
+    "Put clones, downloads and other temporary files in {folder}. It can be "
+    "deleted whenever you finish responding, so keep nothing there that you "
     "need later."
 )
 
 
-def agent_scratch_folder(payload):
+def agent_folders_root(payload):
     scratchpad = payload.get("scratchpad_dir")
+    if isinstance(scratchpad, str) and os.path.isabs(scratchpad):
+        return Path(scratchpad) / "agents"
+    return None
+
+
+def agent_folder(payload):
+    root = agent_folders_root(payload)
     agent_id = payload.get("agent_id")
-    if not (isinstance(scratchpad, str) and isinstance(agent_id, str)):
-        return None
-    if not (os.path.isabs(scratchpad) and AGENT_ID.fullmatch(agent_id)):
-        return None
-    return Path(scratchpad) / agent_id
+    if root and isinstance(agent_id, str) and AGENT_ID.fullmatch(agent_id):
+        return root / agent_id
+    return None
 
 
-def offer_scratch_folder(folder):
+def in_flight_task_types(payload):
+    tasks = payload.get("background_tasks")
+    if not isinstance(tasks, list):
+        return None
+    return {task.get("type") for task in tasks if isinstance(task, dict)}
+
+
+def offer_agent_folder(payload):
+    folder = agent_folder(payload)
+    if not folder:
+        return
     folder.mkdir(parents=True, exist_ok=True)
     note = SCRATCH_FOLDER_NOTE.format(folder=folder)
     json.dump(hook_output("SubagentStart", note, "claude"), sys.stdout)
 
 
-def delete_read_only_entry(remove, path, _error):
-    with contextlib.suppress(OSError):
-        os.chmod(path, os.lstat(path).st_mode | stat.S_IWRITE)
-        remove(path)
+def delete_agent_folder(payload):
+    folder = agent_folder(payload)
+    task_types = in_flight_task_types(payload)
+    if not folder or task_types is None:
+        return
+    if task_types.isdisjoint(TASKS_THAT_MAY_USE_THE_FOLDER):
+        shutil.rmtree(folder, ignore_errors=True)
 
 
-def delete_scratch_folder(folder):
-    if folder.is_dir():
-        shutil.rmtree(folder, onexc=delete_read_only_entry)
+def delete_every_agent_folder(payload):
+    root = agent_folders_root(payload)
+    if root and payload.get("background_tasks") == []:
+        shutil.rmtree(root, ignore_errors=True)
 
 
 HANDLERS = {
-    "SubagentStart": offer_scratch_folder,
-    "SubagentStop": delete_scratch_folder,
+    "SubagentStart": offer_agent_folder,
+    "SubagentStop": delete_agent_folder,
+    "Stop": delete_every_agent_folder,
 }
 
 
 def main():
     payload = json.loads(sys.stdin.read() or "{}")
-    folder = agent_scratch_folder(payload)
     handle = HANDLERS.get(payload.get("hook_event_name"))
-    if folder and handle:
-        handle(folder)
+    if handle:
+        handle(payload)
 
 
 if __name__ == "__main__":
