@@ -232,9 +232,9 @@ def disk_cleanup(payload):
     cleanup = clean_up(paths, devices, scratchpad)
     after = [disk for disk in disks(paths) if disk.device in devices]
     remember_free_space(record, after)
-    if not (cleanup.cleared_caches or cleanup.build_output):
-        return None
     freed = max(0, total_free(after) - total_free(before))
+    if freed < BYTES_PER_MIB and not cleanup.build_output:
+        return None
     return cleanup_report(cleanup, freed, scratchpad)
 
 
