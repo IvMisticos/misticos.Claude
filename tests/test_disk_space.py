@@ -12,7 +12,6 @@ from disk_space import (
     disk_cleanup,
     most_free_since_cleanup,
     needs_cleanup,
-    read_most_free_since_cleanup,
     write_most_free_since_cleanup,
 )
 
@@ -51,19 +50,17 @@ def record(tmp_path):
     return record
 
 
-def test_measures_use_from_the_most_free_space_since_cleanup(record):
+@pytest.mark.parametrize(
+    ("free_gib", "cleans_up"), [(5.3, False), (4.8, False), (4.2, True)]
+)
+def test_measures_use_from_the_most_free_space_since_cleanup(
+    record, free_gib, cleans_up
+):
     still_low = Disk("/tmp", "2", 250 * GIB, 2 * GIB)
-    most_free_since_cleanup(record, [disk(250, 4.8), still_low])
-    most_free = read_most_free_since_cleanup(record)
-    assert most_free == {"1": int(4.8 * GIB), "2": 3 * GIB}
-    assert needs_cleanup(disk(250, 3.7), most_free)
-
-
-def test_cleans_up_from_scratch_after_the_disk_recovers(record):
-    most_free_since_cleanup(record, [disk(250, 100)])
-    most_free = read_most_free_since_cleanup(record)
-    assert most_free == {"2": 3 * GIB}
-    assert needs_cleanup(disk(250, 4), most_free)
+    most_free_since_cleanup(record, [disk(250, 5.3), still_low])
+    most_free = most_free_since_cleanup(record, [disk(250, free_gib), still_low])
+    assert most_free == {"1": int(5.3 * GIB), "2": 3 * GIB}
+    assert needs_cleanup(disk(250, free_gib), most_free) == cleans_up
 
 
 def add_build_output(scratchpad):

@@ -146,14 +146,11 @@ def remember_free_space(record, disks):
 
 def most_free_since_cleanup(record, disks):
     stored = read_most_free_since_cleanup(record)
-    current = {disk.device: disk for disk in disks}
-    updated = {}
-    for device, most_free in stored.items():
-        disk = current.get(device)
-        if disk is None:
-            updated[device] = most_free
-        elif needs_space(disk):
-            updated[device] = max(most_free, disk.free)
+    free = {disk.device: disk.free for disk in disks}
+    updated = {
+        device: max(most_free, free.get(device, most_free))
+        for device, most_free in stored.items()
+    }
     if updated != stored:
         write_most_free_since_cleanup(record, updated)
     return updated
