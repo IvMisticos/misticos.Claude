@@ -7,6 +7,7 @@ import json
 import os
 import re
 import shutil
+import subprocess
 import sys
 import traceback
 from pathlib import Path
@@ -14,11 +15,12 @@ from pathlib import Path
 from reminder import hook_output
 
 AGENT_ID = re.compile(r"[A-Za-z0-9_-]+")
-TASKS_THAT_MAY_USE_THE_FOLDER = {"shell", "monitor"}
+ENDS_WITH_TASKS_RUNNING = {"clear", "resume"}
+DELETE_FOLDER = "import shutil, sys; shutil.rmtree(sys.argv[1], ignore_errors=True)"
 SCRATCH_FOLDER_NOTE = (
     "Put clones, downloads and other temporary files in {folder}. It can be "
-    "deleted whenever you finish responding, so keep nothing there that you "
-    "need later."
+    "deleted as soon as you finish responding, before your caller reads your "
+    "answer, so put anything you hand back somewhere else."
 )
 
 
@@ -37,11 +39,16 @@ def agent_folder(payload):
     return None
 
 
-def in_flight_task_types(payload):
+def other_tasks_in_flight(payload):
     tasks = payload.get("background_tasks")
     if not isinstance(tasks, list):
         return None
-    return {task.get("type") for task in tasks if isinstance(task, dict)}
+    agent_id = payload.get("agent_id")
+    return [task for task in tasks if not is_task(task, agent_id)]
+
+
+def is_task(task, task_id):
+    return isinstance(task, dict) and task.get("id") == task_id
 
 
 def offer_agent_folder(payload):
@@ -55,23 +62,48 @@ def offer_agent_folder(payload):
 
 def delete_agent_folder(payload):
     folder = agent_folder(payload)
-    task_types = in_flight_task_types(payload)
-    if not folder or task_types is None:
-        return
-    if task_types.isdisjoint(TASKS_THAT_MAY_USE_THE_FOLDER):
+    if folder and other_tasks_in_flight(payload) == []:
         shutil.rmtree(folder, ignore_errors=True)
 
 
 def delete_every_agent_folder(payload):
     root = agent_folders_root(payload)
-    if root and payload.get("background_tasks") == []:
+    if root:
         shutil.rmtree(root, ignore_errors=True)
+
+
+def delete_every_idle_agent_folder(payload):
+    if payload.get("background_tasks") == []:
+        delete_every_agent_folder(payload)
+
+
+def delete_in_background(folder):
+    subprocess.Popen(
+        [sys.executable, "-c", DELETE_FOLDER, str(folder)],
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=True,
+    )
+
+
+def delete_agent_folders_after_session(payload):
+    root = agent_folders_root(payload)
+    if not root or payload.get("reason") in ENDS_WITH_TASKS_RUNNING:
+        return
+    trash = root.with_name(f"{root.name}-deleted-{os.getpid()}")
+    try:
+        root.rename(trash)
+    except OSError:
+        return
+    delete_in_background(trash)
 
 
 HANDLERS = {
     "SubagentStart": offer_agent_folder,
     "SubagentStop": delete_agent_folder,
-    "Stop": delete_every_agent_folder,
+    "Stop": delete_every_idle_agent_folder,
+    "SessionEnd": delete_agent_folders_after_session,
 }
 
 
