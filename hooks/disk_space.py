@@ -25,6 +25,7 @@ CLEAN_UP_AGAIN_AFTER_BYTES = 1 << 30
 FREE_AT_LAST_CLEANUP = (
     Path.home() / ".claude" / "hooks" / "data" / "misticos.Claude" / "disk-cleanup.json"
 )
+SCRATCHPAD_CLEANUP_RECORD = ".disk-cleanup.json"
 OUT_OF_SPACE_ERROR = re.compile(
     r"no space left on device|disk quota exceeded|not enough space on the disk"
     r"|database or disk is full",
@@ -116,9 +117,15 @@ def total_free(disks):
     return sum(disk.free for disk in disks)
 
 
-def read_free_at_last_cleanup():
+def cleanup_record(scratchpad):
+    if scratchpad:
+        return Path(scratchpad) / SCRATCHPAD_CLEANUP_RECORD
+    return FREE_AT_LAST_CLEANUP
+
+
+def read_free_at_last_cleanup(record):
     try:
-        stored = json.loads(FREE_AT_LAST_CLEANUP.read_text())
+        stored = json.loads(record.read_text())
     except (OSError, ValueError):
         return {}
     if not isinstance(stored, dict):
@@ -126,23 +133,23 @@ def read_free_at_last_cleanup():
     return {device: free for device, free in stored.items() if isinstance(free, int)}
 
 
-def write_free_at_last_cleanup(free):
+def write_free_at_last_cleanup(record, free):
     with contextlib.suppress(OSError):
-        FREE_AT_LAST_CLEANUP.parent.mkdir(parents=True, exist_ok=True)
-        FREE_AT_LAST_CLEANUP.write_text(json.dumps(free))
+        record.parent.mkdir(parents=True, exist_ok=True)
+        record.write_text(json.dumps(free))
 
 
-def remember_free_space(disks):
+def remember_free_space(record, disks):
     free = {disk.device: disk.free for disk in disks}
-    write_free_at_last_cleanup(read_free_at_last_cleanup() | free)
+    write_free_at_last_cleanup(record, read_free_at_last_cleanup(record) | free)
 
 
-def forget_recovered_disks(disks, free_at_last_cleanup):
+def forget_recovered_disks(record, disks, free_at_last_cleanup):
     recovered = {disk.device for disk in disks if not needs_space(disk)}
     if recovered & free_at_last_cleanup.keys():
         records = free_at_last_cleanup.items()
         kept = {device: free for device, free in records if device not in recovered}
-        write_free_at_last_cleanup(kept)
+        write_free_at_last_cleanup(record, kept)
 
 
 def cleanup_threshold(disk):
@@ -205,17 +212,18 @@ def cleanup_report(cleanup, freed, scratchpad):
 def disk_cleanup(payload):
     paths = watched_paths(payload)
     current = list(disks(paths))
-    free_at_last_cleanup = read_free_at_last_cleanup()
-    forget_recovered_disks(current, free_at_last_cleanup)
+    scratchpad = scratchpad_of(payload)
+    record = cleanup_record(scratchpad)
+    free_at_last_cleanup = read_free_at_last_cleanup(record)
+    forget_recovered_disks(record, current, free_at_last_cleanup)
     before = [disk for disk in current if needs_cleanup(disk, free_at_last_cleanup)]
     if not before:
         return None
-    remember_free_space(before)
+    remember_free_space(record, before)
     devices = {disk.device for disk in before}
-    scratchpad = scratchpad_of(payload)
     cleanup = clean_up(paths, devices, scratchpad)
     after = [disk for disk in disks(paths) if disk.device in devices]
-    remember_free_space(after)
+    remember_free_space(record, after)
     if not (cleanup.cleared_caches or cleanup.build_output):
         return None
     freed = max(0, total_free(after) - total_free(before))
