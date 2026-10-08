@@ -1,6 +1,6 @@
 ---
 name: benchmark
-description: Where the `queue` command exists, run every benchmark, profiler run, load test or other timing measurement as `queue bench -- <command>` in the background, never directly. Run builds and tests through dotnet, cargo, bun and uv in the background too, because they wait for a free build slot. A slot holds a whole command, so when other agents share the machine, run one test project per command. The queue gives each measurement its own CPU cores, so builds from other agents don't skew the numbers.
+description: Where the `queue` command exists, run every benchmark, profiler run, load test or other timing measurement as `queue bench -- <command>` in the background, never directly. Run builds and tests through dotnet, cargo, bun and uv in the background too, because they wait for a free build slot. A slot holds a whole command, so when other agents share the machine, run test projects one at a time, one per command. The queue gives each measurement its own CPU cores, so builds from other agents don't skew the numbers.
 ---
 
 `queue bench -- <command>` waits until no other benchmark runs, then runs the command on its own core. Other work moves to the remaining cores and keeps running.
