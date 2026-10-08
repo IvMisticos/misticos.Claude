@@ -5,11 +5,8 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
 
-import disk_space
 from disk_space import (
     Disk,
-    clean_up,
-    disk_cleanup,
     most_free_since_cleanup,
     needs_cleanup,
     write_most_free_since_cleanup,
@@ -61,45 +58,3 @@ def test_measures_use_from_the_most_free_space_since_cleanup(
     most_free = most_free_since_cleanup(record, [disk(250, free_gib), still_low])
     assert most_free == {"1": int(5.3 * GIB), "2": 3 * GIB}
     assert needs_cleanup(disk(250, free_gib), most_free) == cleans_up
-
-
-def add_build_output(scratchpad):
-    (scratchpad / "app" / "bin").mkdir(parents=True)
-    (scratchpad / "app" / "App.csproj").write_text("x")
-
-
-@pytest.fixture
-def scratchpad(tmp_path, monkeypatch):
-    monkeypatch.setattr(disk_space, "cleared_caches", lambda devices: [])
-    add_build_output(tmp_path)
-    return tmp_path
-
-
-@pytest.fixture
-def full_disks(monkeypatch):
-    monkeypatch.setattr(disk_space, "CLEAN_UP_BELOW_BYTES", 1 << 62)
-    monkeypatch.setattr(disk_space, "CLEAN_UP_BELOW_SHARE", 2)
-
-
-def clean_up_scratchpad(scratchpad):
-    device = disk_space.device_of(scratchpad)
-    return clean_up([str(scratchpad)], {device}, str(scratchpad))
-
-
-def test_keeps_build_output_when_clearing_caches_freed_enough(scratchpad, monkeypatch):
-    monkeypatch.setattr(disk_space, "CLEAN_UP_BELOW_BYTES", 0)
-    assert clean_up_scratchpad(scratchpad).build_output == []
-    assert (scratchpad / "app" / "bin").exists()
-
-
-def test_deletes_build_output_when_the_disk_still_needs_space(scratchpad, full_disks):
-    assert clean_up_scratchpad(scratchpad).build_output == [scratchpad / "app" / "bin"]
-
-
-def test_each_session_cleans_up_its_own_scratchpad(scratchpad, full_disks):
-    sessions = [scratchpad / "a", scratchpad / "b"]
-    for session in sessions:
-        add_build_output(session)
-    for session in sessions:
-        disk_cleanup({"cwd": str(session), "scratchpad_dir": str(session)})
-    assert not any((session / "app" / "bin").exists() for session in sessions)

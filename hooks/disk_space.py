@@ -13,7 +13,7 @@ import traceback
 from pathlib import Path
 from typing import NamedTuple
 
-from disk_cleanup import cleared_caches, deleted_build_output, device_of, is_on
+from disk_cleanup import cleared_caches, device_of
 from reminder import QuietArgumentParser, hook_output
 
 LOW_SPACE_BYTES = 1 << 30
@@ -22,10 +22,9 @@ BYTES_PER_MIB = 1 << 20
 CLEAN_UP_BELOW_BYTES = 5 << 30
 CLEAN_UP_BELOW_SHARE = 0.25
 CLEAN_UP_AGAIN_AFTER_BYTES = 1 << 30
-SHARED_CLEANUP_RECORD = (
+CLEANUP_RECORD = (
     Path.home() / ".claude" / "hooks" / "data" / "misticos.Claude" / "disk-cleanup.json"
 )
-SCRATCHPAD_CLEANUP_RECORD = ".disk-cleanup.json"
 OUT_OF_SPACE_ERROR = re.compile(
     r"no space left on device|disk quota exceeded|not enough space on the disk"
     r"|database or disk is full",
@@ -43,10 +42,6 @@ RAN_OUT = (
 )
 CLEANED_UP = "Disk space ran low, so the hooks freed {freed} MiB."
 CLEARED_CACHES = "They cleared {caches}."
-DELETED_BUILD_OUTPUT = (
-    "They deleted the {names} build output under {scratchpad}. Rebuild or "
-    "reinstall before you use it."
-)
 HOW_TO_CLEAN_UP = (
     "Delete build output, package caches and clones you no longer need. Keep "
     "the uv cache: the hooks run from it. Delete only what you created or can "
@@ -109,19 +104,8 @@ def low_disks(paths):
     return ((disk.path, disk.free) for disk in disks(paths) if is_low(disk))
 
 
-class Cleanup(NamedTuple):
-    cleared_caches: list[str]
-    build_output: list[Path]
-
-
 def total_free(disks):
     return sum(disk.free for disk in disks)
-
-
-def cleanup_record(scratchpad):
-    if scratchpad:
-        return Path(scratchpad) / SCRATCHPAD_CLEANUP_RECORD
-    return SHARED_CLEANUP_RECORD
 
 
 def read_most_free_since_cleanup(record):
@@ -176,22 +160,6 @@ def needs_cleanup(disk, most_free_since_cleanup):
     return most_free is None or disk.free < most_free - cleanup_step(most_free)
 
 
-def devices_needing_space(paths, devices):
-    return {
-        disk.device
-        for disk in disks(paths)
-        if disk.device in devices and needs_space(disk)
-    }
-
-
-def clean_up(paths, devices, scratchpad):
-    cleared = cleared_caches(devices)
-    still_short = devices_needing_space(paths, devices)
-    on_short_disk = is_on(scratchpad, still_short)
-    build_output = deleted_build_output(scratchpad) if on_short_disk else []
-    return Cleanup(cleared, build_output)
-
-
 def scratchpad_of(payload):
     scratchpad = payload.get("scratchpad_dir")
     if isinstance(scratchpad, str) and os.path.isabs(scratchpad):
@@ -204,38 +172,27 @@ def listed(items):
     return f"{', '.join(rest)} and {last}" if rest else last
 
 
-def deleted_build_output_note(folders, scratchpad):
-    names = listed(sorted({folder.name for folder in folders}))
-    return DELETED_BUILD_OUTPUT.format(names=names, scratchpad=scratchpad)
-
-
-def cleanup_report(cleanup, freed, scratchpad):
-    report = [CLEANED_UP.format(freed=freed // BYTES_PER_MIB)]
-    if cleanup.cleared_caches:
-        report.append(CLEARED_CACHES.format(caches=listed(cleanup.cleared_caches)))
-    if cleanup.build_output:
-        report.append(deleted_build_output_note(cleanup.build_output, scratchpad))
-    return " ".join(report)
+def cleanup_report(cleared, freed):
+    freed_mib = CLEANED_UP.format(freed=freed // BYTES_PER_MIB)
+    return f"{freed_mib} {CLEARED_CACHES.format(caches=listed(cleared))}"
 
 
 def disk_cleanup(payload):
     paths = watched_paths(payload)
     current = list(disks(paths))
-    scratchpad = scratchpad_of(payload)
-    record = cleanup_record(scratchpad)
-    most_free = most_free_since_cleanup(record, current)
+    most_free = most_free_since_cleanup(CLEANUP_RECORD, current)
     before = [disk for disk in current if needs_cleanup(disk, most_free)]
     if not before:
         return None
-    remember_free_space(record, before)
+    remember_free_space(CLEANUP_RECORD, before)
     devices = {disk.device for disk in before}
-    cleanup = clean_up(paths, devices, scratchpad)
+    cleared = cleared_caches(devices)
     after = [disk for disk in disks(paths) if disk.device in devices]
-    remember_free_space(record, after)
+    remember_free_space(CLEANUP_RECORD, after)
     freed = max(0, total_free(after) - total_free(before))
-    if freed < BYTES_PER_MIB and not cleanup.build_output:
+    if freed < BYTES_PER_MIB or not cleared:
         return None
-    return cleanup_report(cleanup, freed, scratchpad)
+    return cleanup_report(cleared, freed)
 
 
 def disk_warning(payload):

@@ -1,7 +1,5 @@
 import os
-import shutil
 import subprocess
-from pathlib import Path
 
 COMMAND_TIMEOUT_SECONDS = 120
 LIST_NUGET_HTTP_CACHE = ("dotnet", "nuget", "locals", "http-cache", "--list")
@@ -11,7 +9,6 @@ DOCKER_PRUNES = (
     ("the Docker build cache", ("docker", "builder", "prune", "-f")),
     ("dangling Docker images", ("docker", "image", "prune", "-f")),
 )
-DOTNET_PROJECT_SUFFIXES = {".csproj", ".fsproj", ".vbproj"}
 
 
 def output_of(command):
@@ -63,29 +60,3 @@ def cleared_caches(devices):
     if is_on(docker_root(), devices):
         cleared += [name for name, command in DOCKER_PRUNES if ran(command)]
     return cleared
-
-
-def is_build_output(folder, sibling_files):
-    match folder:
-        case "node_modules" | ".venv":
-            return True
-        case "bin" | "obj":
-            suffixes = {Path(name).suffix for name in sibling_files}
-            return bool(suffixes & DOTNET_PROJECT_SUFFIXES)
-        case "target":
-            return "Cargo.toml" in sibling_files
-    return False
-
-
-def build_output_folders(root):
-    for parent, folders, files in os.walk(root):
-        found = [folder for folder in folders if is_build_output(folder, files)]
-        folders[:] = [folder for folder in folders if folder not in (*found, ".git")]
-        yield from (Path(parent) / folder for folder in found)
-
-
-def deleted_build_output(root):
-    folders = list(build_output_folders(root))
-    for folder in folders:
-        shutil.rmtree(folder, ignore_errors=True)
-    return [folder for folder in folders if not folder.exists()]
