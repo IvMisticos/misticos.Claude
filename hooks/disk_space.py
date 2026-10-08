@@ -3,18 +3,28 @@
 # requires-python = ">=3.11"
 # ///
 
+import contextlib
 import json
 import os
 import re
 import shutil
 import sys
 import traceback
+from pathlib import Path
+from typing import NamedTuple
 
+from disk_cleanup import cleared_caches, device_of
 from reminder import QuietArgumentParser, hook_output
 
 LOW_SPACE_BYTES = 1 << 30
 LOW_SPACE_SHARE = 0.1
 BYTES_PER_MIB = 1 << 20
+CLEAN_UP_BELOW_BYTES = 5 << 30
+CLEAN_UP_BELOW_SHARE = 0.25
+CLEAN_UP_AGAIN_AFTER_BYTES = 1 << 30
+CLEANUP_RECORD = (
+    Path.home() / ".claude" / "hooks" / "data" / "misticos.Claude" / "disk-cleanup.json"
+)
 OUT_OF_SPACE_ERROR = re.compile(
     r"no space left on device|disk quota exceeded|not enough space on the disk"
     r"|database or disk is full",
@@ -30,6 +40,8 @@ RAN_OUT = (
     "failed, free space now. If you only read text that quotes such an "
     "error, ignore this."
 )
+CLEANED_UP = "Disk space ran low, so the hooks freed {freed} MiB."
+CLEARED_CACHES = "They cleared {caches}."
 HOW_TO_CLEAN_UP = (
     "Delete build output, package caches and clones you no longer need. Keep "
     "the uv cache: the hooks run from it. Delete only what you created or can "
@@ -59,26 +71,128 @@ def ran_out_of_space(payload):
 def watched_paths(payload):
     cwd = payload.get("cwd") or os.getcwd()
     temp_dirs = filter(None, map(os.environ.get, TEMP_DIR_VARIABLES))
-    return (cwd, os.path.expanduser("~"), *temp_dirs, "/tmp")
+    scratchpad = filter(None, [scratchpad_of(payload)])
+    return (cwd, os.path.expanduser("~"), *temp_dirs, "/tmp", *scratchpad)
 
 
-def is_low(usage):
-    return usage.free < min(LOW_SPACE_BYTES, usage.total * LOW_SPACE_SHARE)
+def is_low(disk):
+    return disk.free < min(LOW_SPACE_BYTES, disk.total * LOW_SPACE_SHARE)
 
 
-def low_disks(paths):
+class Disk(NamedTuple):
+    path: str
+    device: str
+    total: int
+    free: int
+
+
+def disks(paths):
     seen_devices = set()
     for path in paths:
+        device = device_of(path)
+        if device is None or device in seen_devices:
+            continue
         try:
-            device = os.stat(path).st_dev
             usage = shutil.disk_usage(path)
         except OSError:
             continue
-        if device in seen_devices:
-            continue
         seen_devices.add(device)
-        if is_low(usage):
-            yield path, usage.free
+        yield Disk(path, device, usage.total, usage.free)
+
+
+def low_disks(paths):
+    return ((disk.path, disk.free) for disk in disks(paths) if is_low(disk))
+
+
+def total_free(disks):
+    return sum(disk.free for disk in disks)
+
+
+def read_most_free_since_cleanup(record):
+    try:
+        stored = json.loads(record.read_text())
+    except (OSError, ValueError):
+        return {}
+    if not isinstance(stored, dict):
+        return {}
+    return {device: free for device, free in stored.items() if isinstance(free, int)}
+
+
+def write_most_free_since_cleanup(record, most_free):
+    with contextlib.suppress(OSError):
+        record.parent.mkdir(parents=True, exist_ok=True)
+        record.write_text(json.dumps(most_free))
+
+
+def remember_free_space(record, disks):
+    free = {disk.device: disk.free for disk in disks}
+    write_most_free_since_cleanup(record, read_most_free_since_cleanup(record) | free)
+
+
+def most_free_since_cleanup(record, disks):
+    stored = read_most_free_since_cleanup(record)
+    free = {disk.device: disk.free for disk in disks}
+    updated = {
+        device: max(most_free, free.get(device, most_free))
+        for device, most_free in stored.items()
+    }
+    if updated != stored:
+        write_most_free_since_cleanup(record, updated)
+    return updated
+
+
+def cleanup_threshold(disk):
+    return min(CLEAN_UP_BELOW_BYTES, disk.total * CLEAN_UP_BELOW_SHARE)
+
+
+def needs_space(disk):
+    return disk.free < cleanup_threshold(disk)
+
+
+def cleanup_step(most_free):
+    return min(CLEAN_UP_AGAIN_AFTER_BYTES, most_free / 2)
+
+
+def needs_cleanup(disk, most_free_since_cleanup):
+    if not needs_space(disk):
+        return False
+    most_free = most_free_since_cleanup.get(disk.device)
+    return most_free is None or disk.free < most_free - cleanup_step(most_free)
+
+
+def scratchpad_of(payload):
+    scratchpad = payload.get("scratchpad_dir")
+    if isinstance(scratchpad, str) and os.path.isabs(scratchpad):
+        return scratchpad
+    return None
+
+
+def listed(items):
+    *rest, last = items
+    return f"{', '.join(rest)} and {last}" if rest else last
+
+
+def cleanup_report(cleared, freed):
+    freed_mib = CLEANED_UP.format(freed=freed // BYTES_PER_MIB)
+    return f"{freed_mib} {CLEARED_CACHES.format(caches=listed(cleared))}"
+
+
+def disk_cleanup(payload):
+    paths = watched_paths(payload)
+    current = list(disks(paths))
+    most_free = most_free_since_cleanup(CLEANUP_RECORD, current)
+    before = [disk for disk in current if needs_cleanup(disk, most_free)]
+    if not before:
+        return None
+    remember_free_space(CLEANUP_RECORD, before)
+    devices = {disk.device for disk in before}
+    cleared = cleared_caches(devices)
+    after = [disk for disk in disks(paths) if disk.device in devices]
+    remember_free_space(CLEANUP_RECORD, after)
+    freed = max(0, total_free(after) - total_free(before))
+    if freed < BYTES_PER_MIB or not cleared:
+        return None
+    return cleanup_report(cleared, freed)
 
 
 def disk_warning(payload):
@@ -101,13 +215,18 @@ def parsed_options(argv):
     return parser.parse_args(argv)
 
 
+def disk_notes(payload):
+    notes = filter(None, [disk_cleanup(payload), disk_warning(payload)])
+    return " ".join(notes)
+
+
 def main():
     options = parsed_options(sys.argv[1:])
     payload = json.loads(sys.stdin.read() or "{}")
-    warning = disk_warning(payload)
-    if warning:
+    notes = disk_notes(payload)
+    if notes:
         event = payload.get("hook_event_name")
-        json.dump(hook_output(event, warning, options.output_shape), sys.stdout)
+        json.dump(hook_output(event, notes, options.output_shape), sys.stdout)
 
 
 if __name__ == "__main__":
