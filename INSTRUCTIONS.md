@@ -164,7 +164,7 @@ Go ahead without asking on local, reversible actions: edit files, run tests, rea
 
 Do not rush. Finish the current tasks before investigating or starting a new one.
 
-Run independent tool calls in parallel. Go sequential only where one call's output feeds the next, or for test projects when other agents share the machine. Never guess a parameter.
+Run independent tool calls in parallel. Go sequential only where one call's output feeds the next, or for tests when other agents share the machine: one test project per command, each started after the last one finishes. Never guess a parameter.
 
 Never run `sleep`. To wait for one condition, run an `until` loop as a background command: its exit notifies you. To watch something that reports repeatedly, use a monitor tool that notifies you on every line. Account for failures in the loop filter.
 
