@@ -10,10 +10,10 @@ from disk_space import (
     Disk,
     clean_up,
     disk_cleanup,
-    forget_recovered_disks,
+    most_free_since_cleanup,
     needs_cleanup,
-    read_free_at_last_cleanup,
-    write_free_at_last_cleanup,
+    read_most_free_since_cleanup,
+    write_most_free_since_cleanup,
 )
 
 GIB = 1 << 30
@@ -33,21 +33,37 @@ def test_cleans_up_below_5_gib_or_a_quarter_of_a_small_disk(
     assert needs_cleanup(disk(total_gib, free_gib), {}) == cleans_up
 
 
-@pytest.mark.parametrize(("free_gib", "cleans_up"), [(3.6, False), (3.4, True)])
-def test_cleans_up_again_after_another_gib_is_used(free_gib, cleans_up):
-    free_at_last_cleanup = {"1": int(4.5 * GIB)}
-    assert needs_cleanup(disk(250, free_gib), free_at_last_cleanup) == cleans_up
+@pytest.mark.parametrize(
+    ("most_free_gib", "free_gib", "cleans_up"),
+    [(4.5, 3.6, False), (4.5, 3.4, True), (0.8, 0.5, False), (0.8, 0.3, True)],
+)
+def test_cleans_up_again_after_another_gib_or_half_the_free_space_is_used(
+    most_free_gib, free_gib, cleans_up
+):
+    most_free = {"1": int(most_free_gib * GIB)}
+    assert needs_cleanup(disk(250, free_gib), most_free) == cleans_up
 
 
-def test_cleans_up_from_scratch_after_the_disk_recovers(tmp_path):
+@pytest.fixture
+def record(tmp_path):
     record = tmp_path / "free.json"
-    write_free_at_last_cleanup(record, {"1": GIB // 2, "2": 3 * GIB})
+    write_most_free_since_cleanup(record, {"1": int(1.5 * GIB), "2": 3 * GIB})
+    return record
+
+
+def test_measures_use_from_the_most_free_space_since_cleanup(record):
     still_low = Disk("/tmp", "2", 250 * GIB, 2 * GIB)
-    disks = [disk(250, 100), still_low]
-    forget_recovered_disks(record, disks, read_free_at_last_cleanup(record))
-    free_at_last_cleanup = read_free_at_last_cleanup(record)
-    assert free_at_last_cleanup == {"2": 3 * GIB}
-    assert needs_cleanup(disk(250, 4), free_at_last_cleanup)
+    most_free_since_cleanup(record, [disk(250, 4.8), still_low])
+    most_free = read_most_free_since_cleanup(record)
+    assert most_free == {"1": int(4.8 * GIB), "2": 3 * GIB}
+    assert needs_cleanup(disk(250, 3.7), most_free)
+
+
+def test_cleans_up_from_scratch_after_the_disk_recovers(record):
+    most_free_since_cleanup(record, [disk(250, 100)])
+    most_free = read_most_free_since_cleanup(record)
+    assert most_free == {"2": 3 * GIB}
+    assert needs_cleanup(disk(250, 4), most_free)
 
 
 def add_build_output(scratchpad):

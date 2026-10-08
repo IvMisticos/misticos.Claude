@@ -22,7 +22,7 @@ BYTES_PER_MIB = 1 << 20
 CLEAN_UP_BELOW_BYTES = 5 << 30
 CLEAN_UP_BELOW_SHARE = 0.25
 CLEAN_UP_AGAIN_AFTER_BYTES = 1 << 30
-FREE_AT_LAST_CLEANUP = (
+SHARED_CLEANUP_RECORD = (
     Path.home() / ".claude" / "hooks" / "data" / "misticos.Claude" / "disk-cleanup.json"
 )
 SCRATCHPAD_CLEANUP_RECORD = ".disk-cleanup.json"
@@ -120,10 +120,10 @@ def total_free(disks):
 def cleanup_record(scratchpad):
     if scratchpad:
         return Path(scratchpad) / SCRATCHPAD_CLEANUP_RECORD
-    return FREE_AT_LAST_CLEANUP
+    return SHARED_CLEANUP_RECORD
 
 
-def read_free_at_last_cleanup(record):
+def read_most_free_since_cleanup(record):
     try:
         stored = json.loads(record.read_text())
     except (OSError, ValueError):
@@ -133,23 +133,30 @@ def read_free_at_last_cleanup(record):
     return {device: free for device, free in stored.items() if isinstance(free, int)}
 
 
-def write_free_at_last_cleanup(record, free):
+def write_most_free_since_cleanup(record, most_free):
     with contextlib.suppress(OSError):
         record.parent.mkdir(parents=True, exist_ok=True)
-        record.write_text(json.dumps(free))
+        record.write_text(json.dumps(most_free))
 
 
 def remember_free_space(record, disks):
     free = {disk.device: disk.free for disk in disks}
-    write_free_at_last_cleanup(record, read_free_at_last_cleanup(record) | free)
+    write_most_free_since_cleanup(record, read_most_free_since_cleanup(record) | free)
 
 
-def forget_recovered_disks(record, disks, free_at_last_cleanup):
-    recovered = {disk.device for disk in disks if not needs_space(disk)}
-    if recovered & free_at_last_cleanup.keys():
-        records = free_at_last_cleanup.items()
-        kept = {device: free for device, free in records if device not in recovered}
-        write_free_at_last_cleanup(record, kept)
+def most_free_since_cleanup(record, disks):
+    stored = read_most_free_since_cleanup(record)
+    current = {disk.device: disk for disk in disks}
+    updated = {}
+    for device, most_free in stored.items():
+        disk = current.get(device)
+        if disk is None:
+            updated[device] = most_free
+        elif needs_space(disk):
+            updated[device] = max(most_free, disk.free)
+    if updated != stored:
+        write_most_free_since_cleanup(record, updated)
+    return updated
 
 
 def cleanup_threshold(disk):
@@ -160,11 +167,15 @@ def needs_space(disk):
     return disk.free < cleanup_threshold(disk)
 
 
-def needs_cleanup(disk, free_at_last_cleanup):
+def cleanup_step(most_free):
+    return min(CLEAN_UP_AGAIN_AFTER_BYTES, most_free / 2)
+
+
+def needs_cleanup(disk, most_free_since_cleanup):
     if not needs_space(disk):
         return False
-    last_free = free_at_last_cleanup.get(disk.device)
-    return last_free is None or disk.free < last_free - CLEAN_UP_AGAIN_AFTER_BYTES
+    most_free = most_free_since_cleanup.get(disk.device)
+    return most_free is None or disk.free < most_free - cleanup_step(most_free)
 
 
 def devices_needing_space(paths, devices):
@@ -214,9 +225,8 @@ def disk_cleanup(payload):
     current = list(disks(paths))
     scratchpad = scratchpad_of(payload)
     record = cleanup_record(scratchpad)
-    free_at_last_cleanup = read_free_at_last_cleanup(record)
-    forget_recovered_disks(record, current, free_at_last_cleanup)
-    before = [disk for disk in current if needs_cleanup(disk, free_at_last_cleanup)]
+    most_free = most_free_since_cleanup(record, current)
+    before = [disk for disk in current if needs_cleanup(disk, most_free)]
     if not before:
         return None
     remember_free_space(record, before)
