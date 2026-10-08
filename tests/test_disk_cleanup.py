@@ -43,3 +43,10 @@ def test_deletes_build_output(scratchpad):
 def test_keeps_folders_that_only_share_a_build_output_name(scratchpad):
     deleted_build_output(scratchpad)
     assert all((scratchpad / file).exists() for file in KEPT)
+
+
+def test_reports_only_folders_it_deleted(tmp_path):
+    (tmp_path / "shared").mkdir()
+    (tmp_path / "project").mkdir()
+    (tmp_path / "project" / "node_modules").symlink_to(tmp_path / "shared")
+    assert deleted_build_output(tmp_path / "project") == []

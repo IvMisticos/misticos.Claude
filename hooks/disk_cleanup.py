@@ -88,4 +88,4 @@ def deleted_build_output(root):
     folders = list(build_output_folders(root))
     for folder in folders:
         shutil.rmtree(folder, ignore_errors=True)
-    return folders
+    return [folder for folder in folders if not folder.exists()]
