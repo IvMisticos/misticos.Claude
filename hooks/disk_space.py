@@ -76,7 +76,8 @@ def ran_out_of_space(payload):
 def watched_paths(payload):
     cwd = payload.get("cwd") or os.getcwd()
     temp_dirs = filter(None, map(os.environ.get, TEMP_DIR_VARIABLES))
-    return (cwd, os.path.expanduser("~"), *temp_dirs, "/tmp")
+    scratchpad = filter(None, [scratchpad_of(payload)])
+    return (cwd, os.path.expanduser("~"), *temp_dirs, "/tmp", *scratchpad)
 
 
 def is_low(disk):
