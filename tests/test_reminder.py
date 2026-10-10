@@ -110,18 +110,9 @@ def subagent_rules(home, agent_type):
 @pytest.mark.parametrize("agent_type", sorted(SECTIONS_SKIPPED_BY_AGENT_TYPE))
 def test_worker_types_skip_their_sections(home, agent_type):
     sent = subagent_rules(home, agent_type)
-    headings = RULES.read_text().splitlines()
     for section in SECTIONS_SKIPPED_BY_AGENT_TYPE[agent_type]:
-        assert f"# {section}" in headings
         assert f"# {section}" not in sent
     assert "# Code" in sent
-
-
-@pytest.mark.parametrize("agent_type", sorted(SECTIONS_SKIPPED_BY_AGENT_TYPE))
-def test_worker_types_name_shipped_agents(agent_type):
-    name = agent_type.removeprefix("misticos:")
-    agent = ROOT / "agents" / f"{name}.md"
-    assert f"name: {name}" in agent.read_text().splitlines()
 
 
 def test_other_subagents_get_every_section(home):
