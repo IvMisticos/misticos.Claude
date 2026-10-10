@@ -29,6 +29,19 @@ def utf16_offset_to_index(line_text, utf16_offset):
     return len(line_text)
 
 
+def lsp_position(text, line, column):
+    lines = LINE_BREAK.split(text)
+    line_text = lines[line - 1] if 0 < line <= len(lines) else ""
+    return {
+        "line": line - 1,
+        "character": utf16_length(line_text[: column - 1]),
+    }
+
+
+def position_key(position):
+    return position["line"], position["character"]
+
+
 def read_text(path):
     with open(path, encoding="utf-8", newline="") as file:
         return file.read()

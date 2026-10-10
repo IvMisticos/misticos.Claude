@@ -1,4 +1,10 @@
-from text_positions import LINE_BREAK, from_uri, read_text, utf16_offset_to_index
+from text_positions import (
+    LINE_BREAK,
+    from_uri,
+    position_key,
+    read_text,
+    utf16_offset_to_index,
+)
 
 
 def apply_workspace_edit(edit):
@@ -24,7 +30,7 @@ def apply_text_edits(path, edits):
     offsets = line_offsets(text)
     for edit in sorted(
         edits,
-        key=lambda e: (e["range"]["start"]["line"], e["range"]["start"]["character"]),
+        key=lambda e: position_key(e["range"]["start"]),
         reverse=True,
     ):
         start = text_offset(lines, offsets, edit["range"]["start"])

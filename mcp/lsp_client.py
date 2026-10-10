@@ -4,7 +4,7 @@ import os
 import subprocess
 import sys
 
-from text_positions import LINE_BREAK, read_text, to_uri, utf16_length
+from text_positions import lsp_position, read_text, to_uri
 
 QUIET_SECONDS_BEFORE_READY = 2.0
 MAX_STARTUP_SECONDS = 90.0
@@ -78,7 +78,10 @@ class LanguageServer:
             self.process.kill()
         if self.reader_task is not None:
             self.reader_task.cancel()
-        self.fail_pending(LanguageServerExited(f"{self.name} language server exited"))
+        self.fail_pending(self.exited())
+
+    def exited(self):
+        return LanguageServerExited(f"{self.name} language server exited")
 
     async def wait_until_quiet(self):
         started = asyncio.get_event_loop().time()
@@ -94,19 +97,20 @@ class LanguageServer:
         body = json.dumps(message).encode()
         self.process.stdin.write(b"Content-Length: %d\r\n\r\n" % len(body) + body)
 
+    def reply(self, request_id, **fields):
+        self.send({"jsonrpc": "2.0", "id": request_id, **fields})
+
     def notify(self, method, params):
         self.send({"jsonrpc": "2.0", "method": method, "params": params})
 
     async def request(self, method, params):
         if not self.alive:
-            raise LanguageServerExited(f"{self.name} language server exited")
+            raise self.exited()
         request_id = self.next_id
         self.next_id += 1
         future = asyncio.get_event_loop().create_future()
         self.pending[request_id] = future
-        self.send(
-            {"jsonrpc": "2.0", "id": request_id, "method": method, "params": params}
-        )
+        self.reply(request_id, method=method, params=params)
         try:
             return await asyncio.wait_for(future, REQUEST_TIMEOUT_SECONDS)
         finally:
@@ -121,9 +125,7 @@ class LanguageServer:
         except (asyncio.IncompleteReadError, ValueError, TypeError, ConnectionError):
             pass
         finally:
-            self.fail_pending(
-                LanguageServerExited(f"{self.name} language server exited")
-            )
+            self.fail_pending(self.exited())
 
     async def read_message(self):
         length = None
@@ -144,21 +146,22 @@ class LanguageServer:
         self.pending.clear()
 
     def dispatch(self, message):
-        if "id" in message and "method" not in message:
-            future = self.pending.pop(message["id"], None)
-            if future is None or future.done():
-                return
-            if "error" in message:
-                future.set_exception(
-                    RuntimeError(
-                        message["error"].get("message", "language server error")
-                    )
-                )
-            else:
-                future.set_result(message.get("result"))
+        if "id" not in message:
             return
-        if "id" in message:
+        if "method" in message:
             self.answer_server_request(message)
+            return
+        self.resolve_response(message)
+
+    def resolve_response(self, message):
+        future = self.pending.pop(message["id"], None)
+        if future is None or future.done():
+            return
+        if "error" in message:
+            error = message["error"].get("message", "language server error")
+            future.set_exception(RuntimeError(error))
+            return
+        future.set_result(message.get("result"))
 
     def answer_server_request(self, message):
         method = message["method"]
@@ -169,46 +172,47 @@ class LanguageServer:
         elif method.startswith(("window/workDoneProgress", "client/")):
             result = None
         else:
-            self.send(
-                {
-                    "jsonrpc": "2.0",
-                    "id": message["id"],
-                    "error": {"code": -32601, "message": f"{method} is not supported"},
-                }
+            self.reply(
+                message["id"],
+                error={"code": -32601, "message": f"{method} is not supported"},
             )
             return
-        self.send({"jsonrpc": "2.0", "id": message["id"], "result": result})
+        self.reply(message["id"], result=result)
 
     def open_document(self, path):
         text = read_text(path)
         uri = to_uri(path)
-        language_id = self.language_ids[path.suffix]
         if uri not in self.opened:
-            self.opened[uri] = (1, text)
-            self.notify(
-                "textDocument/didOpen",
-                {
-                    "textDocument": {
-                        "uri": uri,
-                        "languageId": language_id,
-                        "version": 1,
-                        "text": text,
-                    }
-                },
-            )
+            self.did_open(uri, self.language_ids[path.suffix], text)
             return text
-        version, known_text = self.opened[uri]
-        if text == known_text:
-            return text
-        self.opened[uri] = (version + 1, text)
+        if text != self.opened[uri][1]:
+            self.did_change(uri, text)
+        return text
+
+    def did_open(self, uri, language_id, text):
+        self.opened[uri] = (1, text)
+        self.notify(
+            "textDocument/didOpen",
+            {
+                "textDocument": {
+                    "uri": uri,
+                    "languageId": language_id,
+                    "version": 1,
+                    "text": text,
+                }
+            },
+        )
+
+    def did_change(self, uri, text):
+        version = self.opened[uri][0] + 1
+        self.opened[uri] = (version, text)
         self.notify(
             "textDocument/didChange",
             {
-                "textDocument": {"uri": uri, "version": version + 1},
+                "textDocument": {"uri": uri, "version": version},
                 "contentChanges": [{"text": text}],
             },
         )
-        return text
 
     def close_document(self, uri):
         if self.opened.pop(uri, None) is not None:
@@ -223,12 +227,7 @@ class LanguageServer:
 
     async def at_position(self, method, path, line, column, extra=None):
         text = self.open_document(path)
-        lines = LINE_BREAK.split(text)
-        line_text = lines[line - 1] if 0 < line <= len(lines) else ""
-        position = {
-            "line": line - 1,
-            "character": utf16_length(line_text[: column - 1]),
-        }
+        position = lsp_position(text, line, column)
         params = {"textDocument": {"uri": to_uri(path)}, "position": position}
         params.update(extra or {})
         return await self.request(method, params)
