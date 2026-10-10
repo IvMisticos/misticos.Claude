@@ -9,10 +9,9 @@ import re
 import shutil
 import subprocess
 import sys
-import traceback
 from pathlib import Path
 
-from reminder import hook_output
+from hook_io import hook_output, read_payload, run_hook
 
 AGENT_ID = re.compile(r"[A-Za-z0-9_-]+")
 ENDS_WITH_TASKS_RUNNING = {"clear", "resume"}
@@ -108,15 +107,11 @@ HANDLERS = {
 
 
 def main():
-    payload = json.loads(sys.stdin.read() or "{}")
+    payload = read_payload()
     handle = HANDLERS.get(payload.get("hook_event_name"))
     if handle:
         handle(payload)
 
 
 if __name__ == "__main__":
-    try:
-        main()
-    except Exception:
-        traceback.print_exc()
-        sys.exit(0)
+    run_hook(main)

@@ -10,6 +10,8 @@ from model_cap import outranks
 
 ALLOW = {"permission": "allow"}
 
+from hook_io import read_payload
+
 
 def spawn_decision(payload):
     caller = payload.get("model")
@@ -27,7 +29,7 @@ def spawn_decision(payload):
 
 def main():
     try:
-        payload = json.loads(sys.stdin.read() or "{}")
+        payload = read_payload()
         decision = spawn_decision(payload)
     except Exception:
         decision = ALLOW

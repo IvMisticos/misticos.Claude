@@ -9,8 +9,9 @@ import os
 import re
 from pathlib import Path
 
-from model_cap import outranks, project_folders, run_pre_tool_use, tier_rank
-from reminder import transcript_tail_lines
+from hook_io import run_pre_tool_use
+from model_cap import outranks, project_folders, tier_rank
+from transcript import transcript_tail_lines
 
 INHERIT = "inherit"
 TRUTHY_FLAGS = ("1", "true", "yes", "on")

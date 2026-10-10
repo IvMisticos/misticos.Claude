@@ -8,6 +8,7 @@ import json
 import os
 import sys
 
+from hook_io import read_payload
 from session_environment import session_environment_command
 
 
@@ -44,11 +45,7 @@ def main():
     options = parser.parse_args()
     if os.name != "posix":
         return
-    try:
-        payload = json.loads(sys.stdin.read() or "{}")
-    except json.JSONDecodeError:
-        return
-    tool_input = shell_tool_input(payload)
+    tool_input = shell_tool_input(read_payload())
     if tool_input:
         json.dump(rewritten_tool_call(tool_input, options.output_shape), sys.stdout)
 

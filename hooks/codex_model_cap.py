@@ -8,7 +8,8 @@ import os
 import tomllib
 from pathlib import Path
 
-from model_cap import outranks, project_folders, run_pre_tool_use
+from hook_io import run_pre_tool_use
+from model_cap import outranks, project_folders
 
 DEFAULT_ROLE = "default"
 

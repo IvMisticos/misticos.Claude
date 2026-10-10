@@ -9,12 +9,11 @@ import os
 import re
 import shutil
 import sys
-import traceback
 from pathlib import Path
 from typing import NamedTuple
 
 from disk_cleanup import cleared_caches, device_of
-from reminder import QuietArgumentParser, hook_output
+from hook_io import QuietArgumentParser, hook_output, read_payload, run_hook
 
 LOW_SPACE_BYTES = 1 << 30
 LOW_SPACE_SHARE = 0.1
@@ -222,7 +221,7 @@ def disk_notes(payload):
 
 def main():
     options = parsed_options(sys.argv[1:])
-    payload = json.loads(sys.stdin.read() or "{}")
+    payload = read_payload()
     notes = disk_notes(payload)
     if notes:
         event = payload.get("hook_event_name")
@@ -230,8 +229,4 @@ def main():
 
 
 if __name__ == "__main__":
-    try:
-        main()
-    except Exception:
-        traceback.print_exc()
-        sys.exit(0)
+    run_hook(main)

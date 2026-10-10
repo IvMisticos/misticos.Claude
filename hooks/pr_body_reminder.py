@@ -6,7 +6,7 @@
 import json
 import sys
 
-from reminder import hook_output
+from hook_io import hook_output, read_payload
 
 READ_BACK_REMINDER = (
     "The tool may have appended harness text to the pull request body, such "
@@ -16,7 +16,7 @@ READ_BACK_REMINDER = (
 
 
 def main():
-    payload = json.loads(sys.stdin.read() or "{}")
+    payload = read_payload()
     event = payload.get("hook_event_name")
     if event:
         json.dump(hook_output(event, READ_BACK_REMINDER, "claude"), sys.stdout)

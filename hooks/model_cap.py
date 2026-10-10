@@ -1,6 +1,4 @@
-import json
 import re
-import sys
 
 TIER_LEVELS = (
     {"haiku"},
@@ -48,14 +46,3 @@ def project_folders(cwd):
         yield folder
         if (folder / ".git").exists():
             return
-
-
-def run_pre_tool_use(decide):
-    try:
-        payload = json.loads(sys.stdin.read() or "{}")
-    except json.JSONDecodeError:
-        return
-    decision = decide(payload)
-    if decision:
-        output = {"hookEventName": "PreToolUse", **decision}
-        json.dump({"hookSpecificOutput": output}, sys.stdout)
