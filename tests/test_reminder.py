@@ -94,6 +94,21 @@ def test_start_sends_the_file(home, payload):
     assert context(reminder(home, 1, payload))
 
 
+def test_subagents_get_the_file_without_orchestrator_sections(home):
+    payload = {"hook_event_name": "SubagentStart", "agent_id": "a1", "agent_type": "x"}
+    sent = "".join(part for part in all_parts(home, payload) if part)
+    assert "# Code" in sent and "# Your behaviour" in sent
+    assert not any(
+        heading in sent
+        for heading in (
+            "# Issue tracking",
+            "# Pull requests",
+            "# Reviews",
+            "# Delegation",
+        )
+    )
+
+
 def test_skipped_agent_types_get_nothing(home):
     payload = {
         "hook_event_name": "SubagentStart",

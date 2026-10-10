@@ -99,13 +99,24 @@ def part_messages(text, budget, name, first_preamble):
     )
 
 
-def full_copy_messages(rules, first_preamble):
+def without_sections(text, headings):
+    sections = re.split(r"(?m)^(?=# )", text)
+    kept = [
+        section
+        for section in sections
+        if section.partition("\n")[0].removeprefix("# ").strip() not in headings
+    ]
+    return "".join(kept).strip()
+
+
+def full_copy_messages(rules, first_preamble, skipped_sections=frozenset()):
     try:
         with open(rules.path, encoding="utf-8", errors="replace") as rules_file:
             text = with_model_names(rules_file.read().strip(), rules.model_names)
     except OSError as error:
         print(f"reminder: cannot read rules: {error}", file=sys.stderr)
         return ()
+    text = without_sections(text, skipped_sections)
     if not text:
         return ()
     budget = MAX_INJECTED_CHARS
