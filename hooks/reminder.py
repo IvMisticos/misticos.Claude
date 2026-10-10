@@ -25,9 +25,12 @@ from rules_copy import (
 from transcript import context_tokens, payload_tokens, transcript_fits_in_tail
 
 RULES_PATH = str(Path(__file__).resolve().parent.parent / "INSTRUCTIONS.md")
-SECTIONS_ONLY_FOR_ORCHESTRATORS = frozenset(
-    {"Issue tracking", "Pull requests", "Delegation"}
-)
+ORCHESTRATOR_SECTIONS = frozenset({"Issue tracking", "Pull requests", "Delegation"})
+SECTIONS_SKIPPED_BY_AGENT_TYPE = {
+    "misticos:coder": ORCHESTRATOR_SECTIONS | {"Reviews"},
+    "misticos:engineer": ORCHESTRATOR_SECTIONS | {"Reviews"},
+    "misticos:reviewer": ORCHESTRATOR_SECTIONS,
+}
 
 
 def message_for_part(action, part, messages, rules):
@@ -75,7 +78,11 @@ def session_start_reminder(rules, payload, options):
     is_subagent = payload.get("agent_id") or payload.get("subagent_id")
     if options.part == 1 and payload.get("session_id") and not is_subagent:
         forget_baseline(payload["session_id"])
-    skipped = SECTIONS_ONLY_FOR_ORCHESTRATORS if is_subagent else frozenset()
+    skipped = (
+        SECTIONS_SKIPPED_BY_AGENT_TYPE.get(payload.get("agent_type"), frozenset())
+        if is_subagent
+        else frozenset()
+    )
     messages = full_copy_messages(rules, SESSION_START_PREAMBLE, skipped)
     if len(messages) > options.entries:
         return pointer_reminder(rules) if options.part == 1 else None
