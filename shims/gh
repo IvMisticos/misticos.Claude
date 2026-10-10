@@ -2,19 +2,7 @@
 
 set -euo pipefail
 
-real_gh() {
-  local dir
-  local -a dirs
-  IFS=: read -ra dirs <<< "$PATH"
-  for dir in "${dirs[@]}"; do
-    if [ -f "$dir/gh" ] && [ -x "$dir/gh" ] && [ ! -f "$dir/../hooks/work_queue.py" ]; then
-      printf '%s\n' "$dir/gh"
-      return 0
-    fi
-  done
-  echo "gh: gh is not installed" >&2
-  return 127
-}
+. "$(dirname "$0")/lib/real_tool.sh"
 
 deny() {
   echo "gh: create, edit, and merge pull requests with the GitHub MCP tools." \
@@ -93,7 +81,7 @@ api_writes_pull_requests() {
   [[ $method == POST || $method == PUT || $method == PATCH ]]
 }
 
-gh=$(real_gh)
+gh=$(real_tool gh)
 
 if [ -z "${ALLOW_GH_PULL_REQUEST_WRITE-}" ]; then
   writes_a_pull_request "$@" && deny
