@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import NamedTuple
 
 from disk_cleanup import cleared_caches, device_of
+from harnesses import add_harness_argument
 from hook_io import QuietArgumentParser, hook_output, read_payload, run_hook
 
 LOW_SPACE_BYTES = 1 << 30
@@ -208,9 +209,7 @@ def disk_warning(payload):
 
 def parsed_options(argv):
     parser = QuietArgumentParser(add_help=False)
-    parser.add_argument(
-        "--output-shape", choices=("claude", "cursor"), default="claude"
-    )
+    add_harness_argument(parser)
     return parser.parse_args(argv)
 
 
@@ -225,7 +224,10 @@ def main():
     notes = disk_notes(payload)
     if notes:
         event = payload.get("hook_event_name")
-        json.dump(hook_output(event, notes, options.output_shape), sys.stdout)
+        json.dump(
+            hook_output(event, notes, options.harness.output_shape),
+            sys.stdout,
+        )
 
 
 if __name__ == "__main__":

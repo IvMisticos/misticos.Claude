@@ -5,20 +5,8 @@ from pathlib import Path
 
 import pytest
 
-ROOT = Path(__file__).resolve().parent.parent
-REMINDER = ROOT / "hooks" / "reminder.py"
-CLAUDE_ARGUMENTS = [
-    "--rules",
-    str(ROOT / "INSTRUCTIONS.md"),
-    "--cheap-model",
-    "Haiku",
-    "--fast-model",
-    "Sonnet",
-    "--strong-model",
-    "Opus",
-    "--lead-model",
-    "Fable",
-]
+REMINDER = Path(__file__).resolve().parent.parent / "hooks" / "reminder.py"
+CLAUDE_ARGUMENTS = ["--harness", "claude"]
 PARTS = 4
 
 
@@ -100,8 +88,7 @@ def test_skipped_agent_types_get_nothing(home):
         "agent_id": "a1",
         "agent_type": "misticos:scout",
     }
-    skipping = [*CLAUDE_ARGUMENTS, "--skip-agent-type", "misticos:scout"]
-    assert all_parts(home, payload, skipping) == [None] * PARTS
+    assert all_parts(home, payload) == [None] * PARTS
 
 
 def test_growth_sends_a_pointer_then_a_full_copy(home, tmp_path):
@@ -126,7 +113,7 @@ def test_subagent_growth_gets_nothing(home, tmp_path):
 
 
 def test_cursor_shape(home):
-    cursor = [*CLAUDE_ARGUMENTS, "--output-shape", "cursor"]
+    cursor = ["--harness", "cursor"]
     payload = {"hook_event_name": "sessionStart", "conversation_id": "c1"}
     output = reminder(home, 1, payload, cursor)
     assert output["additional_context"].startswith("INSTRUCTIONS.md holds")

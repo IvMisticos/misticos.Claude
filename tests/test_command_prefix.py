@@ -4,7 +4,6 @@ import subprocess
 import sys
 
 import pytest
-
 from test_git_shim import ROOT, SHIMS, without_session_variables
 
 COMMAND_PREFIX = ROOT / "hooks" / "command_prefix.py"
@@ -82,7 +81,7 @@ def test_allows_the_rewritten_command_in_codex(hook_environment):
 
 def test_allows_the_rewritten_command_in_cursor(hook_environment):
     tool_input = {"command": "ls", "working_directory": "/w"}
-    output = hook_output(hook_environment, tool_input, "--output-shape", "cursor")
+    output = hook_output(hook_environment, tool_input, "--harness", "cursor")
     assert output["permission"] == "allow"
     assert output["updated_input"]["working_directory"] == "/w"
     assert output["updated_input"]["command"].endswith("; ls")

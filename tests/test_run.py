@@ -9,7 +9,18 @@ from pathlib import Path
 import pytest
 
 RUN = Path(__file__).resolve().parent.parent / "hooks" / "run.sh"
-TOOLS = ["bash", "cat", "chmod", "mkdir", "rm", "sh", "sleep", "tail", "touch"]
+TOOLS = [
+    "bash",
+    "cat",
+    "chmod",
+    "dirname",
+    "mkdir",
+    "rm",
+    "sh",
+    "sleep",
+    "tail",
+    "touch",
+]
 FAKE_CURL = """#!/usr/bin/env bash
 if [ -n "${HOLD_INSTALL-}" ]; then
   touch "$HOME/install-started"
@@ -73,9 +84,9 @@ def wait_for(path):
         time.sleep(0.05)
 
 
-def run_hook(environment, timeout=10):
+def run_hook(environment, script="hook.py", timeout=10):
     return subprocess.run(
-        [RUN, "hook.py"],
+        [RUN, script],
         env=environment,
         capture_output=True,
         text=True,
@@ -106,3 +117,13 @@ def test_installs_uv_after_another_hook_was_killed_while_installing(
 ):
     kill_hook(held_install)
     assert run_hook(environment).stdout == "uv run hook.py\n"
+
+
+def test_finds_scripts_next_to_itself(environment):
+    script = RUN.parent / "reminder.py"
+    assert run_hook(environment, "reminder.py").stdout == f"uv run {script}\n"
+
+
+def test_finds_the_setup_script_beside_the_hooks(environment):
+    script = RUN.parent / ".." / "setup.py"
+    assert run_hook(environment, "../setup.py").stdout == f"uv run {script}\n"

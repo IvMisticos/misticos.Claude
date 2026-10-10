@@ -34,4 +34,9 @@ install_uv_once() {
 
 command -v uv >/dev/null || install_uv_once
 
+hooks_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+if [ $# -gt 0 ] && [ -f "$hooks_dir/$1" ]; then
+  set -- "$hooks_dir/$1" "${@:2}"
+fi
+
 exec uv run "$@"

@@ -3,49 +3,49 @@
   "hooks": {
     "sessionStart": [
       {
-        "command": "\"${CURSOR_PLUGIN_ROOT}\"/hooks/run.sh \"${CURSOR_PLUGIN_ROOT}/hooks/reminder.py\" 1 4 --rules \"${CURSOR_PLUGIN_ROOT}/INSTRUCTIONS.md\" --fast-model \"Sonnet or Luna\" --strong-model \"Opus or Sol\" --lead-model \"Fable or Astra\" --context-from payload --output-shape cursor"
+        "command": "\"${CURSOR_PLUGIN_ROOT}/hooks/run.sh\" reminder.py 1 4 --harness cursor"
       },
       {
-        "command": "\"${CURSOR_PLUGIN_ROOT}\"/hooks/run.sh \"${CURSOR_PLUGIN_ROOT}/hooks/reminder.py\" 2 4 --rules \"${CURSOR_PLUGIN_ROOT}/INSTRUCTIONS.md\" --fast-model \"Sonnet or Luna\" --strong-model \"Opus or Sol\" --lead-model \"Fable or Astra\" --context-from payload --output-shape cursor"
+        "command": "\"${CURSOR_PLUGIN_ROOT}/hooks/run.sh\" reminder.py 2 4 --harness cursor"
       },
       {
-        "command": "\"${CURSOR_PLUGIN_ROOT}\"/hooks/run.sh \"${CURSOR_PLUGIN_ROOT}/hooks/reminder.py\" 3 4 --rules \"${CURSOR_PLUGIN_ROOT}/INSTRUCTIONS.md\" --fast-model \"Sonnet or Luna\" --strong-model \"Opus or Sol\" --lead-model \"Fable or Astra\" --context-from payload --output-shape cursor"
+        "command": "\"${CURSOR_PLUGIN_ROOT}/hooks/run.sh\" reminder.py 3 4 --harness cursor"
       },
       {
-        "command": "\"${CURSOR_PLUGIN_ROOT}\"/hooks/run.sh \"${CURSOR_PLUGIN_ROOT}/hooks/reminder.py\" 4 4 --rules \"${CURSOR_PLUGIN_ROOT}/INSTRUCTIONS.md\" --fast-model \"Sonnet or Luna\" --strong-model \"Opus or Sol\" --lead-model \"Fable or Astra\" --context-from payload --output-shape cursor"
+        "command": "\"${CURSOR_PLUGIN_ROOT}/hooks/run.sh\" reminder.py 4 4 --harness cursor"
       }
     ],
     "postToolUse": [
       {
-        "command": "\"${CURSOR_PLUGIN_ROOT}\"/hooks/run.sh \"${CURSOR_PLUGIN_ROOT}/hooks/reminder.py\" 1 4 --rules \"${CURSOR_PLUGIN_ROOT}/INSTRUCTIONS.md\" --fast-model \"Sonnet or Luna\" --strong-model \"Opus or Sol\" --lead-model \"Fable or Astra\" --context-from payload --output-shape cursor"
+        "command": "\"${CURSOR_PLUGIN_ROOT}/hooks/run.sh\" reminder.py 1 4 --harness cursor"
       },
       {
-        "command": "\"${CURSOR_PLUGIN_ROOT}\"/hooks/run.sh \"${CURSOR_PLUGIN_ROOT}/hooks/reminder.py\" 2 4 --rules \"${CURSOR_PLUGIN_ROOT}/INSTRUCTIONS.md\" --fast-model \"Sonnet or Luna\" --strong-model \"Opus or Sol\" --lead-model \"Fable or Astra\" --context-from payload --output-shape cursor"
+        "command": "\"${CURSOR_PLUGIN_ROOT}/hooks/run.sh\" reminder.py 2 4 --harness cursor"
       },
       {
-        "command": "\"${CURSOR_PLUGIN_ROOT}\"/hooks/run.sh \"${CURSOR_PLUGIN_ROOT}/hooks/reminder.py\" 3 4 --rules \"${CURSOR_PLUGIN_ROOT}/INSTRUCTIONS.md\" --fast-model \"Sonnet or Luna\" --strong-model \"Opus or Sol\" --lead-model \"Fable or Astra\" --context-from payload --output-shape cursor"
+        "command": "\"${CURSOR_PLUGIN_ROOT}/hooks/run.sh\" reminder.py 3 4 --harness cursor"
       },
       {
-        "command": "\"${CURSOR_PLUGIN_ROOT}\"/hooks/run.sh \"${CURSOR_PLUGIN_ROOT}/hooks/reminder.py\" 4 4 --rules \"${CURSOR_PLUGIN_ROOT}/INSTRUCTIONS.md\" --fast-model \"Sonnet or Luna\" --strong-model \"Opus or Sol\" --lead-model \"Fable or Astra\" --context-from payload --output-shape cursor"
+        "command": "\"${CURSOR_PLUGIN_ROOT}/hooks/run.sh\" reminder.py 4 4 --harness cursor"
       },
       {
-        "command": "\"${CURSOR_PLUGIN_ROOT}\"/hooks/run.sh \"${CURSOR_PLUGIN_ROOT}/hooks/disk_space.py\" --output-shape cursor"
+        "command": "\"${CURSOR_PLUGIN_ROOT}/hooks/run.sh\" disk_space.py --harness cursor"
       }
     ],
     "postToolUseFailure": [
       {
-        "command": "\"${CURSOR_PLUGIN_ROOT}\"/hooks/run.sh \"${CURSOR_PLUGIN_ROOT}/hooks/disk_space.py\" --output-shape cursor"
+        "command": "\"${CURSOR_PLUGIN_ROOT}/hooks/run.sh\" disk_space.py --harness cursor"
       }
     ],
     "subagentStart": [
       {
-        "command": "\"${CURSOR_PLUGIN_ROOT}\"/hooks/run.sh \"${CURSOR_PLUGIN_ROOT}/hooks/cursor_model_cap.py\""
+        "command": "\"${CURSOR_PLUGIN_ROOT}/hooks/run.sh\" cursor_model_cap.py"
       }
     ],
     "preToolUse": [
       {
         "matcher": "Shell",
-        "command": "\"${CURSOR_PLUGIN_ROOT}\"/hooks/run.sh \"${CURSOR_PLUGIN_ROOT}/hooks/command_prefix.py\" --output-shape cursor"
+        "command": "\"${CURSOR_PLUGIN_ROOT}/hooks/run.sh\" command_prefix.py --harness cursor"
       }
     ]
   }

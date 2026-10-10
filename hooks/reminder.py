@@ -5,7 +5,9 @@
 
 import json
 import sys
+from pathlib import Path
 
+from harnesses import add_harness_argument
 from hook_io import QuietArgumentParser, hook_output, read_payload, run_hook
 from reminder_baselines import (
     COPY,
@@ -23,6 +25,8 @@ from rules_copy import (
     rules_at,
 )
 from transcript import context_tokens, payload_tokens, transcript_fits_in_tail
+
+RULES_PATH = str(Path(__file__).resolve().parent.parent / "INSTRUCTIONS.md")
 
 
 def message_for_part(action, part, messages, rules):
@@ -44,7 +48,7 @@ def growth_reminder(rules, payload, options):
     can_send_whole_copy = len(messages) <= options.entries and (
         fire or len(messages) == 1
     )
-    if options.context_from == "payload":
+    if options.harness.context_from == "payload":
         added = payload_tokens(payload)
         action = claim_action_by_payload(
             session_id, fire, added, bool(can_send_whole_copy)
@@ -53,7 +57,7 @@ def growth_reminder(rules, payload, options):
     transcript_path = payload.get("transcript_path")
     if not transcript_path:
         return None
-    tokens = context_tokens(transcript_path, options.context_from)
+    tokens = context_tokens(transcript_path, options.harness.context_from)
     if tokens is None:
         if options.part != 1 or event_name(payload).lower() != "userpromptsubmit":
             return None
@@ -81,15 +85,9 @@ def session_start_reminder(rules, payload, options):
 
 
 def reminder_for(event, payload, options):
-    if payload.get("agent_type") in options.skipped_agent_types:
+    if payload.get("agent_type") in options.harness.skipped_agent_types:
         return None
-    model_names = {
-        "cheap": options.cheap_model,
-        "fast": options.fast_model,
-        "strong": options.strong_model,
-        "lead": options.lead_model,
-    }
-    rules = rules_at(options.rules, model_names)
+    rules = rules_at(RULES_PATH, options.harness.model_names)
     if event.lower() in ("sessionstart", "subagentstart"):
         return session_start_reminder(rules, payload, options)
     if payload.get("agent_id") or payload.get("subagent_id"):
@@ -101,22 +99,7 @@ def parsed_options(argv):
     parser = QuietArgumentParser(add_help=False)
     parser.add_argument("part", type=int, nargs="?", default=1)
     parser.add_argument("entries", type=int, nargs="?")
-    parser.add_argument("--rules", required=True)
-    parser.add_argument("--cheap-model")
-    parser.add_argument("--fast-model")
-    parser.add_argument("--strong-model")
-    parser.add_argument("--lead-model")
-    parser.add_argument(
-        "--skip-agent-type", dest="skipped_agent_types", action="append", default=[]
-    )
-    parser.add_argument(
-        "--context-from",
-        choices=("transcript", "size", "payload"),
-        default="transcript",
-    )
-    parser.add_argument(
-        "--output-shape", choices=("claude", "cursor"), default="claude"
-    )
+    add_harness_argument(parser)
     options = parser.parse_args(argv)
     if options.entries is None:
         options.entries = options.part
@@ -131,7 +114,9 @@ def main():
         return
     reminder = reminder_for(event, payload, options)
     if reminder:
-        json.dump(hook_output(event, reminder, options.output_shape), sys.stdout)
+        json.dump(
+            hook_output(event, reminder, options.harness.output_shape), sys.stdout
+        )
 
 
 if __name__ == "__main__":
