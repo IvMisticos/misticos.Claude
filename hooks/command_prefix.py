@@ -12,20 +12,13 @@ from hook_io import read_payload, run_hook
 from session_environment import session_environment_command
 
 
-def shell_tool_input(payload):
+def rewritten_tool_call(payload, shape):
     tool_input = payload.get("tool_input")
-    if isinstance(tool_input, dict) and isinstance(tool_input.get("command"), str):
-        return tool_input
-    return None
-
-
-def with_session_environment(command):
-    return f"{session_environment_command()}; {command}"
-
-
-def rewritten_tool_call(tool_input, shape):
-    command = with_session_environment(tool_input["command"])
-    updated_input = {**tool_input, "command": command}
+    command = tool_input.get("command") if isinstance(tool_input, dict) else None
+    if not isinstance(command, str):
+        return None
+    prefixed = f"{session_environment_command()}; {command}"
+    updated_input = {**tool_input, "command": prefixed}
     if shape == "cursor":
         return {"permission": "allow", "updated_input": updated_input}
     return {
@@ -41,12 +34,9 @@ def main():
     options = harness_parser().parse_args()
     if os.name != "posix":
         return
-    tool_input = shell_tool_input(read_payload())
-    if tool_input:
-        json.dump(
-            rewritten_tool_call(tool_input, options.harness.output_shape),
-            sys.stdout,
-        )
+    tool_call = rewritten_tool_call(read_payload(), options.harness.output_shape)
+    if tool_call:
+        json.dump(tool_call, sys.stdout)
 
 
 if __name__ == "__main__":
