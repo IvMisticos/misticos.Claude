@@ -1,25 +1,13 @@
 #!/usr/bin/env bash
 
 set -euo pipefail
+
+. "$(dirname "$0")/lib/real_tool.sh"
 shopt -s nocasematch
 
 location_options=()
 subcommand=""
 changes_global_identity=false
-
-real_git() {
-  local dir
-  local -a dirs
-  IFS=: read -ra dirs <<< "$PATH"
-  for dir in "${dirs[@]}"; do
-    if [ -f "$dir/git" ] && [ -x "$dir/git" ] && [ ! -f "$dir/../hooks/work_queue.py" ]; then
-      printf '%s\n' "$dir/git"
-      return 0
-    fi
-  done
-  echo "git: git is not installed" >&2
-  return 127
-}
 
 deny() {
   echo "git: keep the git identity the harness set. Read it with git config --get." \
@@ -196,7 +184,7 @@ targets_project_repository() {
   [ "$target" = "$project" ]
 }
 
-git=$(real_git)
+git=$(real_tool git)
 
 if [ -z "${ALLOW_GIT_IDENTITY_CHANGE-}" ]; then
   read_global_options "$@"

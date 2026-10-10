@@ -1,6 +1,8 @@
 import os
 import subprocess
 
+from disks import device_of
+
 COMMAND_TIMEOUT_SECONDS = 120
 LIST_NUGET_HTTP_CACHE = ("dotnet", "nuget", "locals", "http-cache", "--list")
 CLEAR_NUGET_HTTP_CACHE = ("dotnet", "nuget", "locals", "http-cache", "--clear")
@@ -28,13 +30,6 @@ def output_of(command, env=None):
 
 def ran(command, env=None):
     return output_of(command, env) is not None
-
-
-def device_of(path):
-    try:
-        return str(os.stat(path).st_dev)
-    except OSError:
-        return None
 
 
 def is_on(path, devices):

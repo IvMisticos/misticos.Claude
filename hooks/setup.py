@@ -100,15 +100,19 @@ def configure_codex():
         write_atomically(config_path, tomli_w.dumps(wanted))
 
 
-def install_cloud_tools():
-    if CLOUD_SESSION_MARK not in os.environ or os.geteuid() != 0:
-        return
+def install_apt_packages():
     packages = ("git-lfs", "curl", "jq", "gh", "unzip")
     if any(shutil.which(package) is None for package in packages):
         run("apt-get", "update")
         run("apt-get", "install", "-y", *packages)
+
+
+def install_bun():
     if shutil.which("bun") is None and not (HOME / ".bun" / "bin" / "bun").exists():
         run_pipeline("curl -fsSL https://bun.sh/install | bash -s canary")
+
+
+def install_dotnet():
     dotnet = HOME / ".dotnet" / "dotnet"
     if not dotnet.exists():
         run_pipeline(
@@ -119,6 +123,14 @@ def install_cloud_tools():
     dotnet_link = local_bin / "dotnet"
     dotnet_link.unlink(missing_ok=True)
     dotnet_link.symlink_to(dotnet)
+
+
+def install_cloud_tools():
+    if CLOUD_SESSION_MARK not in os.environ or os.geteuid() != 0:
+        return
+    install_apt_packages()
+    install_bun()
+    install_dotnet()
 
 
 def main():

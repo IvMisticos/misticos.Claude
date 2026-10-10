@@ -6,6 +6,7 @@
 import json
 import sys
 
+from hook_io import read_payload
 from model_cap import outranks
 
 ALLOW = {"permission": "allow"}
@@ -27,7 +28,7 @@ def spawn_decision(payload):
 
 def main():
     try:
-        payload = json.loads(sys.stdin.read() or "{}")
+        payload = read_payload()
         decision = spawn_decision(payload)
     except Exception:
         decision = ALLOW

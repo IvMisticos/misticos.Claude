@@ -1,8 +1,8 @@
 import asyncio
 
 from language_servers import (
-    LANGUAGE_SERVERS,
     EXTENSION_TO_SERVER,
+    LANGUAGE_SERVERS,
     ensure_installed,
     toolchain_environment,
 )

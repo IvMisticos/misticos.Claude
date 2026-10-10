@@ -5,12 +5,12 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
 
-from disk_space import (
-    Disk,
+from cleanup_policy import (
     most_free_since_cleanup,
     needs_cleanup,
     write_most_free_since_cleanup,
 )
+from disks import Disk
 
 GIB = 1 << 30
 

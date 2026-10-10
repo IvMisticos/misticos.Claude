@@ -2,7 +2,6 @@ import os
 import subprocess
 
 import pytest
-
 from test_git_shim import SHIMS, without_session_variables
 
 FAKE_GH = """#!/usr/bin/env bash

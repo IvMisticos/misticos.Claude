@@ -11,8 +11,8 @@ from disk_cleanup import (
     PRUNE_DOCKER_BUILD_CACHE,
     SHOW_DOCKER_CONTEXT,
     cleared_caches,
-    device_of,
 )
+from disks import device_of
 
 
 def test_clears_only_caches_on_a_disk_that_needs_space(tmp_path, monkeypatch):

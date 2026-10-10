@@ -1,6 +1,6 @@
 from typing import NamedTuple
 
-from text_positions import from_uri, lines_of, utf16_offset_to_index
+from text_positions import from_uri, lines_of, position_key, utf16_offset_to_index
 
 
 def location_line(location):
@@ -11,15 +11,19 @@ def location_line(location):
     path = from_uri(uri)
     if range_ is None:
         return str(path)
-    return f"{path}:{position_text(path, range_['start'])}"
+    return place(path, range_["start"])
 
 
 def position_text(path, position):
     try:
         line_text = lines_of(path)[position["line"]]
     except (OSError, UnicodeDecodeError, IndexError):
-        return f"{position['line'] + 1}:{position['character'] + 1}"
+        return one_based(position)
     return f"{position['line'] + 1}:{utf16_offset_to_index(line_text, position['character']) + 1}"
+
+
+def one_based(position):
+    return f"{position['line'] + 1}:{position['character'] + 1}"
 
 
 def locations_text(result):
@@ -107,10 +111,6 @@ def place(path, position):
     return f"{path}:{position_text(path, position)}"
 
 
-def position_key(position):
-    return position["line"], position["character"]
-
-
 def symbols_text(result):
     lines = symbol_lines(result or [], 0)
     return "\n".join(lines) or "no symbols"
@@ -133,8 +133,8 @@ def symbol_place(symbol):
     if range_ is None:
         return str(path or "")
     if path is None:
-        return f"{range_['start']['line'] + 1}:{range_['start']['character'] + 1}"
-    return f"{path}:{position_text(path, range_['start'])}"
+        return one_based(range_["start"])
+    return place(path, range_["start"])
 
 
 SYMBOL_KINDS = {

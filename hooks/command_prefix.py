@@ -8,6 +8,8 @@ import json
 import os
 import sys
 
+from harnesses import add_harness_argument
+from hook_io import read_payload
 from session_environment import session_environment_command
 
 
@@ -38,19 +40,16 @@ def rewritten_tool_call(tool_input, shape):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--output-shape", choices=("claude", "cursor"), default="claude"
-    )
+    add_harness_argument(parser)
     options = parser.parse_args()
     if os.name != "posix":
         return
-    try:
-        payload = json.loads(sys.stdin.read() or "{}")
-    except json.JSONDecodeError:
-        return
-    tool_input = shell_tool_input(payload)
+    tool_input = shell_tool_input(read_payload())
     if tool_input:
-        json.dump(rewritten_tool_call(tool_input, options.output_shape), sys.stdout)
+        json.dump(
+            rewritten_tool_call(tool_input, options.harness.output_shape),
+            sys.stdout,
+        )
 
 
 if __name__ == "__main__":

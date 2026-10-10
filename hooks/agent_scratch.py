@@ -3,16 +3,14 @@
 # requires-python = ">=3.11"
 # ///
 
-import json
 import os
 import re
 import shutil
 import subprocess
 import sys
-import traceback
 from pathlib import Path
 
-from reminder import hook_output
+from hook_io import read_payload, run_hook, scratchpad_of, write_context
 
 AGENT_ID = re.compile(r"[A-Za-z0-9_-]+")
 ENDS_WITH_TASKS_RUNNING = {"clear", "resume"}
@@ -25,10 +23,8 @@ SCRATCH_FOLDER_NOTE = (
 
 
 def agent_folders_root(payload):
-    scratchpad = payload.get("scratchpad_dir")
-    if isinstance(scratchpad, str) and os.path.isabs(scratchpad):
-        return Path(scratchpad) / "agents"
-    return None
+    scratchpad = scratchpad_of(payload)
+    return Path(scratchpad) / "agents" if scratchpad else None
 
 
 def agent_folder(payload):
@@ -57,7 +53,7 @@ def offer_agent_folder(payload):
         return
     folder.mkdir(parents=True, exist_ok=True)
     note = SCRATCH_FOLDER_NOTE.format(folder=folder)
-    json.dump(hook_output("SubagentStart", note, "claude"), sys.stdout)
+    write_context("SubagentStart", note, "claude")
 
 
 def delete_agent_folder(payload):
@@ -108,15 +104,11 @@ HANDLERS = {
 
 
 def main():
-    payload = json.loads(sys.stdin.read() or "{}")
+    payload = read_payload()
     handle = HANDLERS.get(payload.get("hook_event_name"))
     if handle:
         handle(payload)
 
 
 if __name__ == "__main__":
-    try:
-        main()
-    except Exception:
-        traceback.print_exc()
-        sys.exit(0)
+    run_hook(main)
