@@ -20,19 +20,22 @@ def git_root(path):
         return Path.cwd()
 
 
-def holds_file_with(directory, suffixes):
+def file_with_suffix(directory, suffixes):
     try:
-        return any(child.suffix in suffixes for child in directory.iterdir())
+        return next(
+            (child for child in directory.iterdir() if child.suffix in suffixes), None
+        )
     except OSError:
-        return False
+        return None
 
 
-def nearest_directory_with(path, suffixes, repo):
+def nearest_file_with(path, suffixes, repo):
     if repo not in path.parents:
         return None
     for directory in path.parents:
-        if holds_file_with(directory, suffixes):
-            return directory
+        match = file_with_suffix(directory, suffixes)
+        if match is not None:
+            return match
         if directory == repo:
             return None
     return None
@@ -52,20 +55,11 @@ def solution_mentioning(project_file, repo):
     return None
 
 
-def nearest_project_file(path, repo):
-    directory = nearest_directory_with(path, PROJECT_SUFFIXES, repo)
-    if directory is None:
-        return None
-    return next(
-        child for child in directory.iterdir() if child.suffix in PROJECT_SUFFIXES
-    )
-
-
 def csharp_root(path, repo):
-    nearest_solution = nearest_directory_with(path, SOLUTION_SUFFIXES, repo)
+    nearest_solution = nearest_file_with(path, SOLUTION_SUFFIXES, repo)
     if nearest_solution is not None:
-        return nearest_solution
-    project_file = nearest_project_file(path, repo)
+        return nearest_solution.parent
+    project_file = nearest_file_with(path, PROJECT_SUFFIXES, repo)
     if project_file is None:
         return repo
     return solution_mentioning(project_file, repo) or project_file.parent
