@@ -14,8 +14,9 @@ from hook_io import read_payload, run_hook, scratchpad_of, write_context
 LOW_SPACE_BYTES = 1 << 30
 LOW_SPACE_SHARE = 0.1
 OUT_OF_SPACE_ERROR = re.compile(
-    r"(^|[:\].])\s*[\"']?(there is )?(no space left on device|disk quota exceeded"
-    r"|not enough space on the disk|database or disk is full)",
+    r"(^|[:\].(,])\s*[\"']?(there\s+is\s+)?(no\s+space\s+left\s+on\s+device"
+    r"|disk\s+quota\s+exceeded|not\s+enough\s+space\s+on\s+the\s+disk"
+    r"|database\s+or\s+disk\s+is\s+full)",
     re.IGNORECASE | re.MULTILINE,
 )
 READ_ONLY_TOOLS = {"Read", "Grep", "Glob", "LS", "WebFetch", "WebSearch"}

@@ -5,6 +5,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
 
+import disk_space
 from cleanup_policy import (
     most_free_since_cleanup,
     needs_cleanup,
@@ -73,6 +74,9 @@ def test_measures_use_from_the_most_free_space_since_cleanup(
             True,
         ),
         ('Os { code: 28, message: "No space left on device" }', True),
+        ("error: could not write file 'x' (No space left on device)", True),
+        ("OSError(28, 'No space left on device')", True),
+        (Path(disk_space.__file__).read_text(), False),
         ('    r"no space left on device|disk quota exceeded"', False),
         ("The hook warns when a tool reports no space left on device.", False),
     ],
