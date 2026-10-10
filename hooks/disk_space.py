@@ -73,14 +73,11 @@ def is_low(disk):
     return disk.free < min(LOW_SPACE_BYTES, disk.total * LOW_SPACE_SHARE)
 
 
-def low_disks(paths):
-    return ((disk.path, disk.free) for disk in disks(paths) if is_low(disk))
-
-
 def disk_warning(payload):
     low_space = [
-        RUNNING_LOW.format(free=free // BYTES_PER_MIB, path=path)
-        for path, free in low_disks(watched_paths(payload))
+        RUNNING_LOW.format(free=disk.free // BYTES_PER_MIB, path=disk.path)
+        for disk in disks(watched_paths(payload))
+        if is_low(disk)
     ]
     if low_space:
         return " ".join([*low_space, FREE_SPACE_NOW, HOW_TO_CLEAN_UP])
@@ -95,15 +92,11 @@ def parsed_options(argv):
     return parser.parse_args(argv)
 
 
-def disk_notes(payload):
-    notes = filter(None, [disk_cleanup(watched_paths(payload)), disk_warning(payload)])
-    return " ".join(notes)
-
-
 def main():
     options = parsed_options(sys.argv[1:])
     payload = read_payload()
-    notes = disk_notes(payload)
+    cleanup = disk_cleanup(watched_paths(payload))
+    notes = " ".join(filter(None, [cleanup, disk_warning(payload)]))
     if notes:
         event = payload.get("hook_event_name")
         write_context(event, notes, options.harness.output_shape)
