@@ -77,8 +77,24 @@ def test_model_tiers_are_named(home):
     assert "the cheap model" not in text
 
 
-def test_subagent_start_sends_the_file(home):
-    payload = {"hook_event_name": "SubagentStart", "agent_id": "a1", "agent_type": "x"}
+@pytest.mark.parametrize(
+    "payload",
+    [
+        pytest.param(
+            {"hook_event_name": "SubagentStart", "agent_id": "a1", "agent_type": "x"},
+            id="subagent",
+        ),
+        pytest.param(
+            {
+                "hook_event_name": "SessionStart",
+                "session_id": "s1",
+                "agent_type": "misticos:scout",
+            },
+            id="main-session-of-a-skipped-type",
+        ),
+    ],
+)
+def test_start_sends_the_file(home, payload):
     assert context(reminder(home, 1, payload)).startswith("INSTRUCTIONS.md holds")
 
 
@@ -117,12 +133,3 @@ def test_cursor_shape(home):
     payload = {"hook_event_name": "sessionStart", "conversation_id": "c1"}
     output = reminder(home, 1, payload, cursor)
     assert output["additional_context"].startswith("INSTRUCTIONS.md holds")
-
-
-def test_a_main_session_of_a_skipped_type_still_gets_the_rules(home):
-    payload = {
-        "hook_event_name": "SessionStart",
-        "session_id": "s1",
-        "agent_type": "misticos:scout",
-    }
-    assert context(reminder(home, 1, payload)).startswith("INSTRUCTIONS.md holds")

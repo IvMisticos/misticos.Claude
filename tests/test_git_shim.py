@@ -117,9 +117,34 @@ def test_runs_with_harness_environment(run_git, environment):
     assert run_git("commit", "-m", "a", **environment).returncode == 0
 
 
-def test_allows_identity_change_on_request(run_git):
-    result = run_git("config", "user.name", "x", ALLOW_GIT_IDENTITY_CHANGE="1")
-    assert result.returncode == 0
+@pytest.mark.parametrize(
+    ("arguments", "environment"),
+    [
+        pytest.param(
+            ["config", "user.name", "x"],
+            {"ALLOW_GIT_IDENTITY_CHANGE": "1"},
+            id="on-request",
+        ),
+        pytest.param(
+            ["config", "user.name", "x"],
+            {"FAKE_TARGET_GIT_DIR": ""},
+            id="outside-any-repository",
+        ),
+        pytest.param(
+            ["commit", "-m", "a"],
+            {"GIT_AUTHOR_NAME": "t", "HARNESS_PROJECT_DIR": ""},
+            id="without-a-project",
+        ),
+        pytest.param(
+            ["init", "/tmp/new"], {"GIT_AUTHOR_NAME": "t"}, id="init-with-identity"
+        ),
+        pytest.param(
+            ["clone", "/tmp/new"], {"GIT_AUTHOR_NAME": "t"}, id="clone-with-identity"
+        ),
+    ],
+)
+def test_runs_allowed_identity_changes(run_git, arguments, environment):
+    assert run_git(*arguments, **environment).returncode == 0
 
 
 @pytest.mark.parametrize(
@@ -135,10 +160,6 @@ def test_runs_identity_changes_outside_the_project(
 ):
     result = run_git(*arguments, FAKE_TARGET_GIT_DIR=fixture_git_dir, **environment)
     assert result.returncode == 0
-
-
-def test_runs_identity_changes_outside_any_repository(run_git):
-    assert run_git("config", "user.name", "x", FAKE_TARGET_GIT_DIR="").returncode == 0
 
 
 def test_denies_global_identity_changes_outside_the_project(run_git, fixture_git_dir):
@@ -195,16 +216,6 @@ def test_denies_identity_changes_in_project_worktrees(run_git, project, tmp_path
     worktree.mkdir()
     result = run_git("-C", str(worktree), "config", "user.name", "x")
     assert result.returncode == 1
-
-
-def test_runs_identity_changes_without_a_project(run_git):
-    result = run_git("commit", "-m", "a", GIT_AUTHOR_NAME="t", HARNESS_PROJECT_DIR="")
-    assert result.returncode == 0
-
-
-@pytest.mark.parametrize("subcommand", ["init", "clone"])
-def test_runs_repository_creation_with_an_identity(run_git, subcommand):
-    assert run_git(subcommand, "/tmp/new", GIT_AUTHOR_NAME="t").returncode == 0
 
 
 def test_runs_identity_changes_in_a_repository_named_by_git_dir(tmp_path):
