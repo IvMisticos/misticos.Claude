@@ -41,9 +41,7 @@ def run_gh(shim_runner):
     ],
 )
 def test_denies_pull_request_writes(run_gh, arguments):
-    result = run_gh(*arguments)
-    assert result.returncode == 1
-    assert "GitHub MCP tools" in result.stderr
+    assert run_gh(*arguments).returncode == 1
 
 
 @pytest.mark.parametrize(

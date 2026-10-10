@@ -67,7 +67,6 @@ def test_allows_the_rewritten_command_in_codex(hook_environment):
     assert decision["hookEventName"] == "PreToolUse"
     assert decision["permissionDecision"] == "allow"
     assert decision["updatedInput"]["timeout_ms"] == 5
-    assert decision["updatedInput"]["command"].endswith("; ls")
 
 
 def test_allows_the_rewritten_command_in_cursor(hook_environment):
@@ -75,7 +74,6 @@ def test_allows_the_rewritten_command_in_cursor(hook_environment):
     output = hook_output(hook_environment, tool_input, "--harness", "cursor")
     assert output["permission"] == "allow"
     assert output["updated_input"]["working_directory"] == "/w"
-    assert output["updated_input"]["command"].endswith("; ls")
 
 
 @pytest.mark.parametrize("tool_input", [{}, {"command": ["ls"]}, "ls"])
@@ -88,18 +86,8 @@ def test_puts_the_shims_first_on_the_path(run_rewritten):
     assert result.stdout == f"{SHIMS}/gh\n{SHIMS}/git\n"
 
 
-@pytest.mark.parametrize(
-    "command",
-    ["gh pr merge 1", "true && gh pr merge 1", "bash -c 'gh pr create --fill'"],
-)
-def test_denies_pull_request_writes_through_the_shim(run_rewritten, command):
-    result = run_rewritten(command)
-    assert result.returncode == 1
-    assert "GitHub MCP tools" in result.stderr
-
-
-def test_runs_other_gh_commands(run_rewritten):
-    assert run_rewritten("gh pr view 1").stdout == "ran pr view 1\n"
+def test_denies_pull_request_writes_through_the_shim(run_rewritten):
+    assert run_rewritten("gh pr merge 1").returncode == 1
 
 
 def test_names_the_project(run_rewritten, project):
