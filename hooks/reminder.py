@@ -6,8 +6,8 @@
 import sys
 from pathlib import Path
 
-from harnesses import add_harness_argument
-from hook_io import QuietArgumentParser, read_payload, run_hook, write_context
+from harnesses import harness_parser
+from hook_io import read_payload, run_hook, write_context
 from reminder_baselines import (
     COPY,
     POINTER,
@@ -96,10 +96,9 @@ def reminder_for(event, payload, options):
 
 
 def parsed_options(argv):
-    parser = QuietArgumentParser(add_help=False)
+    parser = harness_parser()
     parser.add_argument("part", type=int, nargs="?", default=1)
     parser.add_argument("entries", type=int, nargs="?")
-    add_harness_argument(parser)
     options = parser.parse_args(argv)
     if options.entries is None:
         options.entries = options.part

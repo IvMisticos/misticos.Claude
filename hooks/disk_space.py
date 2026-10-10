@@ -6,18 +6,11 @@
 import json
 import os
 import re
-import sys
 
 from cleanup_policy import disk_cleanup
 from disks import BYTES_PER_MIB, disks
-from harnesses import add_harness_argument
-from hook_io import (
-    QuietArgumentParser,
-    read_payload,
-    run_hook,
-    scratchpad_of,
-    write_context,
-)
+from harnesses import harness_parser
+from hook_io import read_payload, run_hook, scratchpad_of, write_context
 
 LOW_SPACE_BYTES = 1 << 30
 LOW_SPACE_SHARE = 0.1
@@ -86,14 +79,8 @@ def disk_warning(payload):
     return None
 
 
-def parsed_options(argv):
-    parser = QuietArgumentParser(add_help=False)
-    add_harness_argument(parser)
-    return parser.parse_args(argv)
-
-
 def main():
-    options = parsed_options(sys.argv[1:])
+    options = harness_parser().parse_args()
     payload = read_payload()
     cleanup = disk_cleanup(watched_paths(payload))
     notes = " ".join(filter(None, [cleanup, disk_warning(payload)]))
