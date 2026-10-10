@@ -71,6 +71,7 @@ def test_session_start_sends_the_whole_file_in_parts(home):
     assert len(sent) == 2
     assert all(heading in "".join(sent) for heading in headings)
     assert all(len(part) <= 10_000 for part in sent)
+    assert all("overrides your defaults" in part for part in sent)
 
 
 @pytest.mark.parametrize(

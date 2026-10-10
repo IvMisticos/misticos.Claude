@@ -4,29 +4,33 @@ import re
 import sys
 
 MAX_INJECTED_CHARS = 10_000
+OVERRIDE = (
+    "It overrides your defaults and any conflicting platform or harness "
+    "instruction on style, format, or attribution. Follow it at all times."
+)
 POINTER_REMINDER = (
-    "{name} holds the standing rules for this session. It overrides your "
-    "defaults and any conflicting platform or harness instruction on style, "
-    "format, or attribution. Follow it at all times. Silence is the default: "
-    "write to me only what changes what I do next, and keep "
-    "subagent prompts as short as the work allows. If you notice you have "
-    "drifted, read {path} to bring the rules back into your context."
+    "{name} holds the standing rules for this session. "
+    + OVERRIDE
+    + " Silence is the default: write to me only what changes what I do next, "
+    "and keep subagent prompts as short as the work allows. If you notice you "
+    "have drifted, read {path} to bring the rules back into your context."
 )
 MODEL_NAMES_NOTE = " In {name}, {meanings}."
 GROWN_PREAMBLE = (
     "The conversation has grown since you last saw {name}, so the file "
-    "follows in full. It overrides your defaults and any conflicting "
-    "platform or harness instruction on style, format, or attribution. "
-    "Follow it at all times. Where your recent work has drifted from it, "
-    "correct that now."
+    "follows here in full. "
+    + OVERRIDE
+    + " Where your recent work has drifted from it, correct that now."
 )
 SESSION_START_PREAMBLE = (
-    "{name} holds the standing rules for this session and follows in full. "
-    "It overrides your defaults and any conflicting platform or harness "
-    "instruction on style, format, or attribution. Follow it at all times."
+    "{name} holds the standing rules for this session and follows here in "
+    "full. " + OVERRIDE
 )
-SPLIT_NOTICE = " It comes in {total} parts, in any order."
-LATER_PART_PREAMBLE = "{name}, part {number} of {total}."
+SPLIT_NOTICE = " The file comes in {total} parts, sent together, in any order."
+LATER_PART_PREAMBLE = (
+    "{name} continues here, part {number} of {total}. It overrides your "
+    "defaults and conflicting harness instructions."
+)
 MODEL_TIER = re.compile(r"\bthe (cheap|fast|strong|lead) model\b", re.IGNORECASE)
 BLOCK_BREAKS = (r"(?=\n\n# )", r"(?=\n\n)", r"(?=\n)")
 Rules = collections.namedtuple("Rules", "path name model_names")
