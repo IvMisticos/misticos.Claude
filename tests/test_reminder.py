@@ -5,6 +5,10 @@ from pathlib import Path
 
 import pytest
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
+
+from reminder import SECTIONS_SKIPPED_BY_AGENT_TYPE
+
 ROOT = Path(__file__).resolve().parent.parent
 REMINDER = ROOT / "hooks" / "reminder.py"
 RULES = ROOT / "INSTRUCTIONS.md"
@@ -92,6 +96,31 @@ def test_session_start_sends_the_whole_file_in_parts(home):
 )
 def test_start_sends_the_file(home, payload):
     assert context(reminder(home, 1, payload))
+
+
+def subagent_rules(home, agent_type):
+    payload = {
+        "hook_event_name": "SubagentStart",
+        "agent_id": "a1",
+        "agent_type": agent_type,
+    }
+    return "".join(part for part in all_parts(home, payload) if part)
+
+
+@pytest.mark.parametrize("agent_type", sorted(SECTIONS_SKIPPED_BY_AGENT_TYPE))
+def test_worker_types_skip_their_sections(home, agent_type):
+    sent = subagent_rules(home, agent_type)
+    for section in SECTIONS_SKIPPED_BY_AGENT_TYPE[agent_type]:
+        assert f"# {section}" not in sent
+    assert "# Code" in sent
+
+
+def test_other_subagents_get_every_section(home):
+    sent = subagent_rules(home, "general-purpose")
+    headings = [
+        line for line in RULES.read_text().splitlines() if line.startswith("# ")
+    ]
+    assert all(heading in sent for heading in headings)
 
 
 def test_skipped_agent_types_get_nothing(home):
