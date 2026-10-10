@@ -103,19 +103,20 @@ async def diagnostics(file: str) -> str:
     return diagnostics_text(resolved(file), report["items"])
 
 
-async def functions_at(file, line, column):
-    functions = await at_position(
-        "textDocument/prepareCallHierarchy", file, line, column
+async def functions_at(server, path, line, column):
+    functions = await server.at_position(
+        "textDocument/prepareCallHierarchy", path, line, column
     )
     if not functions:
-        raise ValueError(f"no function at {file}:{line}:{column}")
+        raise ValueError(f"no function at {path}:{line}:{column}")
     return functions
 
 
 async def hierarchy_calls(file, line, column, method, to_call):
-    server = await server_for(resolved(file))
+    path = resolved(file)
+    server = await server_for(path)
     calls = []
-    for function in await functions_at(file, line, column):
+    for function in await functions_at(server, path, line, column):
         found = await server.request(method, {"item": function})
         calls.extend(to_call(call, function) for call in found or [])
     return calls_text(calls)

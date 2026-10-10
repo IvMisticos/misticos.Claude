@@ -3,12 +3,11 @@
 # requires-python = ">=3.11"
 # ///
 
-import json
 import sys
 from pathlib import Path
 
 from harnesses import add_harness_argument
-from hook_io import QuietArgumentParser, hook_output, read_payload, run_hook
+from hook_io import QuietArgumentParser, read_payload, run_hook, write_context
 from reminder_baselines import (
     COPY,
     POINTER,
@@ -84,8 +83,14 @@ def session_start_reminder(rules, payload, options):
     return message_for_part(COPY, options.part, messages, rules)
 
 
+def is_skipped_subagent(event, payload, options):
+    starts_subagent = event.lower() == "subagentstart"
+    agent_type = payload.get("agent_type")
+    return starts_subagent and agent_type in options.harness.skipped_agent_types
+
+
 def reminder_for(event, payload, options):
-    if payload.get("agent_type") in options.harness.skipped_agent_types:
+    if is_skipped_subagent(event, payload, options):
         return None
     rules = rules_at(RULES_PATH, options.harness.model_names)
     if event.lower() in ("sessionstart", "subagentstart"):
@@ -114,9 +119,7 @@ def main():
         return
     reminder = reminder_for(event, payload, options)
     if reminder:
-        json.dump(
-            hook_output(event, reminder, options.harness.output_shape), sys.stdout
-        )
+        write_context(event, reminder, options.harness.output_shape)
 
 
 if __name__ == "__main__":

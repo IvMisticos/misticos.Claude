@@ -5,7 +5,7 @@ is_shim_dir() {
 real_tool() {
   local name=$1 dir
   local -a dirs
-  IFS=: read -ra dirs <<< "$PATH:$HOME/.local/bin"
+  IFS=: read -ra dirs <<< "${REAL_TOOL_PATH:-$PATH}"
   for dir in "${dirs[@]}"; do
     if [ -f "$dir/$name" ] && [ -x "$dir/$name" ] && ! is_shim_dir "$dir"; then
       printf '%s\n' "$dir/$name"

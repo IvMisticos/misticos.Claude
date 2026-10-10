@@ -4,6 +4,7 @@ set -euo pipefail
 
 bin_dir=$(cd "$(dirname "$0")" && pwd -P)
 . "$bin_dir/lib/real_tool.sh"
+REAL_TOOL_PATH="$PATH:$HOME/.local/bin"
 
 if [ "${1:-}" = tool ]; then
   real=$(real_tool "$2")

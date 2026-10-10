@@ -117,3 +117,12 @@ def test_cursor_shape(home):
     payload = {"hook_event_name": "sessionStart", "conversation_id": "c1"}
     output = reminder(home, 1, payload, cursor)
     assert output["additional_context"].startswith("INSTRUCTIONS.md holds")
+
+
+def test_a_main_session_of_a_skipped_type_still_gets_the_rules(home):
+    payload = {
+        "hook_event_name": "SessionStart",
+        "session_id": "s1",
+        "agent_type": "misticos:scout",
+    }
+    assert context(reminder(home, 1, payload)).startswith("INSTRUCTIONS.md holds")
