@@ -147,3 +147,16 @@ def test_leaves_the_path_alone_when_the_shell_drops_the_arguments():
         check=True,
     )
     assert result.stdout == "/usr/bin:/bin"
+
+
+def test_a_bad_argument_never_blocks_the_command(hook_environment):
+    payload = json.dumps({"tool_name": "Bash", "tool_input": {"command": "ls"}})
+    result = subprocess.run(
+        [sys.executable, COMMAND_PREFIX, "--unknown"],
+        input=payload,
+        env=hook_environment,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0

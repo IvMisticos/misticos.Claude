@@ -3,13 +3,12 @@
 # requires-python = ">=3.11"
 # ///
 
-import argparse
 import json
 import os
 import sys
 
 from harnesses import add_harness_argument
-from hook_io import read_payload
+from hook_io import QuietArgumentParser, read_payload, run_hook
 from session_environment import session_environment_command
 
 
@@ -39,7 +38,7 @@ def rewritten_tool_call(tool_input, shape):
 
 
 def main():
-    parser = argparse.ArgumentParser()
+    parser = QuietArgumentParser(add_help=False)
     add_harness_argument(parser)
     options = parser.parse_args()
     if os.name != "posix":
@@ -53,4 +52,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    run_hook(main)
