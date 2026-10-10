@@ -2,7 +2,7 @@
 name: reviewer
 description: Reviews a diff, pull request, or other output and reports findings. Read-only. Runs once and returns.
 model: opus
-tools: Read, Grep, Glob, Bash, WebSearch, WebFetch, mcp__plugin_misticos_code-navigation__*
+tools: Skill, Read, Grep, Glob, Bash, WebSearch, WebFetch, mcp__plugin_misticos_code-navigation__*
 experimental:
   cacheTtl: 5m
 ---

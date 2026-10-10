@@ -29,3 +29,12 @@ def test_pinned_model_stays_capped_at_the_caller(tmp_path):
 def test_requested_model_still_applies_to_unpinned_agents(tmp_path):
     worker = {"subagent_type": "general-purpose", "model": "haiku", "prompt": "find"}
     assert decided_model(worker, "claude-opus-5-5", tmp_path) is None
+
+
+def test_requested_model_is_capped_when_the_definition_has_no_tier(tmp_path):
+    agents = tmp_path / ".claude" / "agents"
+    agents.mkdir(parents=True)
+    (agents / "x.md").write_text("---\nname: x\nmodel: Inherit\n---\n")
+    (tmp_path / ".git").mkdir()
+    worker = {"subagent_type": "x", "model": "opus", "prompt": "build"}
+    assert decided_model(worker, "claude-sonnet-5-5", tmp_path) == "sonnet"

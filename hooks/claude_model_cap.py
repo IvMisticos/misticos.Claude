@@ -104,7 +104,7 @@ def definition_model(subagent_type, cwd):
 
 
 def is_pinned(definition):
-    return bool(definition) and definition != INHERIT
+    return claude_alias(definition) is not None
 
 
 def claude_alias(model):
