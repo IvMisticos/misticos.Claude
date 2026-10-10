@@ -4,13 +4,10 @@ import subprocess
 import sys
 
 import pytest
-from test_git_shim import ROOT, SHIMS, without_session_variables
+from conftest import FAKE_GH, ROOT, SHIMS, without_session_variables
 
 COMMAND_PREFIX = ROOT / "hooks" / "command_prefix.py"
 SESSION_ENVIRONMENT_SCRIPT = ROOT / "hooks" / "session_environment.sh"
-FAKE_GH = """#!/usr/bin/env bash
-echo "ran $*"
-"""
 
 
 @pytest.fixture
@@ -46,15 +43,9 @@ def codex_command(environment, command):
 
 
 @pytest.fixture
-def run_rewritten(tmp_path, hook_environment):
-    real_bin = tmp_path / "bin"
-    real_bin.mkdir()
-    fake_gh = real_bin / "gh"
-    fake_gh.write_text(FAKE_GH)
-    fake_gh.chmod(0o755)
+def run_rewritten(fake_bin, hook_environment):
     shell_environment = without_session_variables(os.environ)
-    shell_environment["PATH"] = f"{real_bin}:/usr/bin:/bin"
-    shell_environment.pop("ALLOW_GH_PULL_REQUEST_WRITE", None)
+    shell_environment["PATH"] = f"{fake_bin('gh', FAKE_GH)}:/usr/bin:/bin"
 
     def run(*commands, **environment):
         rewritten = [codex_command(hook_environment, command) for command in commands]

@@ -42,14 +42,10 @@ def home(tmp_path):
 
 
 @pytest.fixture
-def environment(tmp_path, home):
-    bin_dir = tmp_path / "bin"
-    bin_dir.mkdir()
+def environment(fake_bin, home):
+    bin_dir = fake_bin("curl", FAKE_CURL)
     for tool in TOOLS:
         (bin_dir / tool).symlink_to(shutil.which(tool))
-    curl = bin_dir / "curl"
-    curl.write_text(FAKE_CURL)
-    curl.chmod(0o755)
     return {"HOME": str(home), "PATH": str(bin_dir)}
 
 

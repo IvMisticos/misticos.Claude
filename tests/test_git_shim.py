@@ -1,12 +1,10 @@
 import os
 import subprocess
 import sys
-from pathlib import Path
 
 import pytest
+from conftest import ROOT, SHIMS, without_session_variables
 
-ROOT = Path(__file__).resolve().parent.parent
-SHIMS = ROOT / "shims"
 SESSION_ENVIRONMENT = ROOT / "hooks" / "session_environment.py"
 FAKE_GIT = """#!/usr/bin/env bash
 if [ "$1 $2" = "-C $HARNESS_PROJECT_DIR" ] && [ "$3" = rev-parse ]; then
@@ -24,14 +22,6 @@ echo "ran $*"
 """
 
 
-def without_session_variables(environment):
-    return {
-        name: value
-        for name, value in environment.items()
-        if not name.startswith(("GIT_", "HARNESS_", "CLAUDE_"))
-    }
-
-
 @pytest.fixture
 def project(tmp_path):
     project_dir = tmp_path / "project"
@@ -47,28 +37,14 @@ def fixture_git_dir(tmp_path):
 
 
 @pytest.fixture
-def run_git(tmp_path, project):
-    real_bin = tmp_path / "bin"
-    real_bin.mkdir()
-    fake_git = real_bin / "git"
-    fake_git.write_text(FAKE_GIT)
-    fake_git.chmod(0o755)
-    base_environment = without_session_variables(os.environ)
-    base_environment["PATH"] = f"{SHIMS}:{real_bin}:/usr/bin:/bin"
-    base_environment["HARNESS_PROJECT_DIR"] = str(project)
-    base_environment["FAKE_PROJECT_GIT_DIR"] = str(project / ".git")
-    base_environment["FAKE_TARGET_GIT_DIR"] = str(project / ".git")
-
-    def run(*arguments, **environment):
-        return subprocess.run(
-            [SHIMS / "git", *arguments],
-            env={**base_environment, **environment},
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-
-    return run
+def run_git(shim_runner, project):
+    return shim_runner(
+        "git",
+        FAKE_GIT,
+        HARNESS_PROJECT_DIR=str(project),
+        FAKE_PROJECT_GIT_DIR=str(project / ".git"),
+        FAKE_TARGET_GIT_DIR=str(project / ".git"),
+    )
 
 
 @pytest.mark.parametrize(

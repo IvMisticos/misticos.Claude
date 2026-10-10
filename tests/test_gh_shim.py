@@ -1,35 +1,10 @@
-import os
-import subprocess
-
 import pytest
-from test_git_shim import SHIMS, without_session_variables
-
-FAKE_GH = """#!/usr/bin/env bash
-echo "ran $*"
-"""
+from conftest import FAKE_GH
 
 
 @pytest.fixture
-def run_gh(tmp_path):
-    real_bin = tmp_path / "bin"
-    real_bin.mkdir()
-    fake_gh = real_bin / "gh"
-    fake_gh.write_text(FAKE_GH)
-    fake_gh.chmod(0o755)
-    base_environment = without_session_variables(os.environ)
-    base_environment["PATH"] = f"{SHIMS}:{real_bin}:/usr/bin:/bin"
-    base_environment.pop("ALLOW_GH_PULL_REQUEST_WRITE", None)
-
-    def run(*arguments, **environment):
-        return subprocess.run(
-            [SHIMS / "gh", *arguments],
-            env={**base_environment, **environment},
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-
-    return run
+def run_gh(shim_runner):
+    return shim_runner("gh", FAKE_GH)
 
 
 @pytest.mark.parametrize(
