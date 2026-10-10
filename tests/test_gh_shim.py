@@ -48,6 +48,8 @@ def run_gh(tmp_path):
         ["pr", "--repo=o/r", "create"],
         ["pr", "new", "--fill"],
         ["api", "graphql", "-f", "query=mutation { mergePullRequest(input: {}) }"],
+        ["pr", "edit", "1", "--body", "x"],
+        ["api", "-X", "PATCH", "repos/o/r/pulls/1", "-f", "body=x"],
         ["api", "graphql", "-f", "query=mutation { enqueuePullRequest(input: {}) }"],
         ["api", "/graphql", "-f", "query=mutation { createPullRequest(input: {}) }"],
         [
@@ -77,7 +79,6 @@ def test_denies_pull_request_writes(run_gh, arguments):
         ["pr", "list"],
         ["pr", "-R", "o/r", "view", "1"],
         ["api", "repos/o/r/pulls"],
-        ["api", "-X", "PATCH", "repos/o/r/pulls/1", "-f", "title=x"],
         ["api", "repos/o/r/issues", "-f", "title=x"],
         ["api", "search/code?q=mergePullRequest"],
         ["api", "repos/o/r/issues/1/comments", "-f", "body=createPullRequest fails"],
