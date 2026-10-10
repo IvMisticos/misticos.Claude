@@ -2,6 +2,7 @@
 name: scout
 description: Searches and filters data too large to read directly, such as logs, many files, web pages, or papers. Returns only what the caller asks for. Read-only.
 model: haiku
+autoCompactWindow: 130000
 tools: Read, Grep, Glob, Bash, WebSearch, WebFetch, mcp__plugin_misticos_code-navigation__*
 experimental:
   cacheTtl: 5m
