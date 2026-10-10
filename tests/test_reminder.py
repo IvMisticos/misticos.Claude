@@ -5,6 +5,10 @@ from pathlib import Path
 
 import pytest
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
+
+from reminder import SECTIONS_ONLY_FOR_ORCHESTRATORS
+
 ROOT = Path(__file__).resolve().parent.parent
 REMINDER = ROOT / "hooks" / "reminder.py"
 RULES = ROOT / "INSTRUCTIONS.md"
@@ -97,16 +101,11 @@ def test_start_sends_the_file(home, payload):
 def test_subagents_get_the_file_without_orchestrator_sections(home):
     payload = {"hook_event_name": "SubagentStart", "agent_id": "a1", "agent_type": "x"}
     sent = "".join(part for part in all_parts(home, payload) if part)
-    assert "# Code" in sent and "# Your behaviour" in sent
-    assert not any(
-        heading in sent
-        for heading in (
-            "# Issue tracking",
-            "# Pull requests",
-            "# Reviews",
-            "# Delegation",
-        )
-    )
+    headings = RULES.read_text().splitlines()
+    for section in SECTIONS_ONLY_FOR_ORCHESTRATORS:
+        assert f"# {section}" in headings
+        assert f"# {section}" not in sent
+    assert "# Code" in sent and "# Reviews" in sent
 
 
 def test_skipped_agent_types_get_nothing(home):

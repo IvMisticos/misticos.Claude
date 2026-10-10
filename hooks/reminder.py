@@ -26,7 +26,7 @@ from transcript import context_tokens, payload_tokens, transcript_fits_in_tail
 
 RULES_PATH = str(Path(__file__).resolve().parent.parent / "INSTRUCTIONS.md")
 SECTIONS_ONLY_FOR_ORCHESTRATORS = frozenset(
-    {"Issue tracking", "Pull requests", "Reviews", "Delegation"}
+    {"Issue tracking", "Pull requests", "Delegation"}
 )
 
 
