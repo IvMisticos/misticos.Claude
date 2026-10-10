@@ -33,22 +33,16 @@ writes_a_pull_request() {
 }
 
 names_pull_requests() {
-  local word
-  for word in "$@"; do
-    [[ $word == */pulls* ]] && return 0
-  done
-  return 1
+  [[ $* == */pulls* ]]
 }
 
 runs_a_pull_request_mutation() {
-  local word names_graphql=false names_mutation=false
+  local word
+  [[ $* =~ (create|merge|enqueue)PullRequest|enablePullRequestAutoMerge ]] || return 1
   for word in "$@"; do
-    case $word in
-      graphql | */graphql) names_graphql=true ;;
-      *createPullRequest* | *mergePullRequest* | *enablePullRequestAutoMerge* | *enqueuePullRequest*) names_mutation=true ;;
-    esac
+    [[ $word == graphql || $word == */graphql ]] && return 0
   done
-  $names_graphql && $names_mutation
+  return 1
 }
 
 api_method() {

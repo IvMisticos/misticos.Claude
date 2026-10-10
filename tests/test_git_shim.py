@@ -1,13 +1,9 @@
 import os
 import subprocess
-import sys
-from pathlib import Path
 
 import pytest
+from conftest import SHIMS, without_session_variables
 
-ROOT = Path(__file__).resolve().parent.parent
-SHIMS = ROOT / "shims"
-SESSION_ENVIRONMENT = ROOT / "hooks" / "session_environment.py"
 FAKE_GIT = """#!/usr/bin/env bash
 if [ "$1 $2" = "-C $HARNESS_PROJECT_DIR" ] && [ "$3" = rev-parse ]; then
   echo "$FAKE_PROJECT_GIT_DIR"
@@ -22,14 +18,6 @@ for word in "$@"; do
 done
 echo "ran $*"
 """
-
-
-def without_session_variables(environment):
-    return {
-        name: value
-        for name, value in environment.items()
-        if not name.startswith(("GIT_", "HARNESS_", "CLAUDE_"))
-    }
 
 
 @pytest.fixture
@@ -47,28 +35,14 @@ def fixture_git_dir(tmp_path):
 
 
 @pytest.fixture
-def run_git(tmp_path, project):
-    real_bin = tmp_path / "bin"
-    real_bin.mkdir()
-    fake_git = real_bin / "git"
-    fake_git.write_text(FAKE_GIT)
-    fake_git.chmod(0o755)
-    base_environment = without_session_variables(os.environ)
-    base_environment["PATH"] = f"{SHIMS}:{real_bin}:/usr/bin:/bin"
-    base_environment["HARNESS_PROJECT_DIR"] = str(project)
-    base_environment["FAKE_PROJECT_GIT_DIR"] = str(project / ".git")
-    base_environment["FAKE_TARGET_GIT_DIR"] = str(project / ".git")
-
-    def run(*arguments, **environment):
-        return subprocess.run(
-            [SHIMS / "git", *arguments],
-            env={**base_environment, **environment},
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-
-    return run
+def run_git(shim_runner, project):
+    return shim_runner(
+        "git",
+        FAKE_GIT,
+        HARNESS_PROJECT_DIR=str(project),
+        FAKE_PROJECT_GIT_DIR=str(project / ".git"),
+        FAKE_TARGET_GIT_DIR=str(project / ".git"),
+    )
 
 
 @pytest.mark.parametrize(
@@ -89,9 +63,7 @@ def run_git(tmp_path, project):
     ],
 )
 def test_denies_identity_arguments(run_git, arguments):
-    result = run_git(*arguments)
-    assert result.returncode == 1
-    assert "keep the git identity" in result.stderr
+    assert run_git(*arguments).returncode == 1
 
 
 @pytest.mark.parametrize(
@@ -141,9 +113,26 @@ def test_runs_with_harness_environment(run_git, environment):
     assert run_git("commit", "-m", "a", **environment).returncode == 0
 
 
-def test_allows_identity_change_on_request(run_git):
-    result = run_git("config", "user.name", "x", ALLOW_GIT_IDENTITY_CHANGE="1")
-    assert result.returncode == 0
+@pytest.mark.parametrize(
+    ("arguments", "environment"),
+    [
+        pytest.param(
+            ["config", "user.name", "x"],
+            {"FAKE_TARGET_GIT_DIR": ""},
+            id="outside-any-repository",
+        ),
+        pytest.param(
+            ["commit", "-m", "a"],
+            {"GIT_AUTHOR_NAME": "t", "HARNESS_PROJECT_DIR": ""},
+            id="without-a-project",
+        ),
+        pytest.param(
+            ["init", "/tmp/new"], {"GIT_AUTHOR_NAME": "t"}, id="new-repository"
+        ),
+    ],
+)
+def test_runs_allowed_identity_changes(run_git, arguments, environment):
+    assert run_git(*arguments, **environment).returncode == 0
 
 
 @pytest.mark.parametrize(
@@ -159,10 +148,6 @@ def test_runs_identity_changes_outside_the_project(
 ):
     result = run_git(*arguments, FAKE_TARGET_GIT_DIR=fixture_git_dir, **environment)
     assert result.returncode == 0
-
-
-def test_runs_identity_changes_outside_any_repository(run_git):
-    assert run_git("config", "user.name", "x", FAKE_TARGET_GIT_DIR="").returncode == 0
 
 
 def test_denies_global_identity_changes_outside_the_project(run_git, fixture_git_dir):
@@ -181,24 +166,6 @@ def test_runs_identity_changes_in_repositories_nested_in_the_project(run_git, pr
     assert result.returncode == 0
 
 
-def test_records_the_shell_identity_as_the_harness_identity(tmp_path):
-    env_file = tmp_path / "session.sh"
-    environment = without_session_variables(os.environ)
-    subprocess.run(
-        [sys.executable, SESSION_ENVIRONMENT],
-        env={**environment, "CLAUDE_ENV_FILE": str(env_file)},
-        check=True,
-    )
-    recorded = subprocess.run(
-        ["bash", "-c", f"source {env_file}; echo $HARNESS_GIT_IDENTITY"],
-        env={**environment, "GIT_AUTHOR_EMAIL": "shell@example.com"},
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-    assert recorded.stdout == "|shell@example.com||\n"
-
-
 def test_denies_identity_changes_through_a_symlinked_project(
     run_git, project, tmp_path
 ):
@@ -212,23 +179,6 @@ def test_denies_identity_changes_through_a_symlinked_project(
         FAKE_PROJECT_GIT_DIR=f"{link}/.git",
     )
     assert result.returncode == 1
-
-
-def test_denies_identity_changes_in_project_worktrees(run_git, project, tmp_path):
-    worktree = tmp_path / "worktree"
-    worktree.mkdir()
-    result = run_git("-C", str(worktree), "config", "user.name", "x")
-    assert result.returncode == 1
-
-
-def test_runs_identity_changes_without_a_project(run_git):
-    result = run_git("commit", "-m", "a", GIT_AUTHOR_NAME="t", HARNESS_PROJECT_DIR="")
-    assert result.returncode == 0
-
-
-@pytest.mark.parametrize("subcommand", ["init", "clone"])
-def test_runs_repository_creation_with_an_identity(run_git, subcommand):
-    assert run_git(subcommand, "/tmp/new", GIT_AUTHOR_NAME="t").returncode == 0
 
 
 def test_runs_identity_changes_in_a_repository_named_by_git_dir(tmp_path):

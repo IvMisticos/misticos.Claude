@@ -47,39 +47,46 @@ def test_start_creates_the_folder_and_names_it(scratchpad):
     assert (scratchpad / "agents" / "a3").is_dir()
 
 
-@pytest.mark.parametrize("tasks", [[], [OWN_TASK]])
-def test_stop_deletes_only_the_agents_folder(scratchpad, tasks):
-    run_hook(
-        "SubagentStop",
-        scratchpad_dir=str(scratchpad),
-        agent_id="a1",
-        background_tasks=tasks,
-    )
-    assert contents(scratchpad / "agents") == ["a2"]
+def agent_stop(tasks, left, case_id):
+    fields = {"agent_id": "a1", "background_tasks": tasks}
+    return pytest.param("SubagentStop", fields, left, id=f"agent-{case_id}")
+
+
+def session_stop(tasks, left, case_id):
+    fields = {"background_tasks": tasks}
+    return pytest.param("Stop", fields, left, id=f"session-{case_id}")
+
+
+def folders_and_agent_folders(scratchpad):
+    paths = [*scratchpad.iterdir(), *scratchpad.glob("agents/*")]
+    return sorted(str(path.relative_to(scratchpad)) for path in paths)
+
+
+EVERYTHING = ["agents", "agents/a1", "agents/a2", "notes.md"]
+WITHOUT_A1 = ["agents", "agents/a2", "notes.md"]
+WITHOUT_AGENTS = ["notes.md"]
 
 
 @pytest.mark.parametrize(
-    "tasks", [[SHELL_TASK], [OWN_TASK, SUBAGENT_TASK], [WORKFLOW_TASK], None]
+    ("event", "fields", "left"),
+    [
+        agent_stop([], WITHOUT_A1, "idle"),
+        agent_stop([OWN_TASK], WITHOUT_A1, "only-itself"),
+        agent_stop([SHELL_TASK], EVERYTHING, "shell"),
+        agent_stop([OWN_TASK, SUBAGENT_TASK], EVERYTHING, "subagent"),
+        agent_stop([WORKFLOW_TASK], EVERYTHING, "workflow"),
+        agent_stop(None, EVERYTHING, "unknown-tasks"),
+        session_stop([], WITHOUT_AGENTS, "idle"),
+        session_stop([SHELL_TASK], EVERYTHING, "shell"),
+        session_stop([SUBAGENT_TASK], EVERYTHING, "subagent"),
+        session_stop(None, EVERYTHING, "unknown-tasks"),
+    ],
 )
-def test_stop_keeps_the_folder_while_other_work_may_use_it(scratchpad, tasks):
-    run_hook(
-        "SubagentStop",
-        scratchpad_dir=str(scratchpad),
-        agent_id="a1",
-        background_tasks=tasks,
-    )
-    assert contents(scratchpad / "agents") == ["a1", "a2"]
-
-
-def test_session_stop_deletes_every_agent_folder_when_nothing_runs(scratchpad):
-    run_hook("Stop", scratchpad_dir=str(scratchpad), background_tasks=[])
-    assert contents(scratchpad) == ["notes.md"]
-
-
-@pytest.mark.parametrize("tasks", [[SHELL_TASK], [SUBAGENT_TASK], None])
-def test_session_stop_keeps_agent_folders_while_work_runs(scratchpad, tasks):
-    run_hook("Stop", scratchpad_dir=str(scratchpad), background_tasks=tasks)
-    assert contents(scratchpad / "agents") == ["a1", "a2"]
+def test_stop_deletes_agent_folders_no_running_work_uses(
+    scratchpad, event, fields, left
+):
+    run_hook(event, scratchpad_dir=str(scratchpad), **fields)
+    assert folders_and_agent_folders(scratchpad) == left
 
 
 def is_emptied_soon(folder):

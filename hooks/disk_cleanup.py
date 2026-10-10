@@ -44,31 +44,18 @@ def nuget_http_cache():
     return None
 
 
-def docker_root():
-    return output_of(FIND_DOCKER_ROOT) or None
-
-
-def pruned_daemon_build_cache():
+def docker_prunes():
     daemon_builder = output_of(SHOW_DOCKER_CONTEXT)
-    if not daemon_builder:
-        return False
-    env = os.environ | {"BUILDX_BUILDER": daemon_builder}
-    return ran(PRUNE_DOCKER_BUILD_CACHE, env)
-
-
-def cleared_docker_caches():
-    cleared = []
-    if pruned_daemon_build_cache():
-        cleared.append("the Docker build cache")
-    if ran(PRUNE_DANGLING_DOCKER_IMAGES):
-        cleared.append("dangling Docker images")
-    return cleared
+    if daemon_builder:
+        builder_env = os.environ | {"BUILDX_BUILDER": daemon_builder}
+        yield "the Docker build cache", PRUNE_DOCKER_BUILD_CACHE, builder_env
+    yield "dangling Docker images", PRUNE_DANGLING_DOCKER_IMAGES, None
 
 
 def cleared_caches(devices):
     cleared = []
     if is_on(nuget_http_cache(), devices) and ran(CLEAR_NUGET_HTTP_CACHE):
         cleared.append("the NuGet HTTP cache")
-    if is_on(docker_root(), devices):
-        cleared += cleared_docker_caches()
+    if is_on(output_of(FIND_DOCKER_ROOT), devices):
+        cleared += [cache for cache, prune, env in docker_prunes() if ran(prune, env)]
     return cleared

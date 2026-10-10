@@ -4,14 +4,13 @@
 # ///
 
 import glob
-import json
 import os
 import re
 from pathlib import Path
 
 from hook_io import run_pre_tool_use
 from model_cap import outranks, project_folders, tier_rank
-from transcript import transcript_tail_lines
+from transcript import dict_or_empty, recent_entries
 
 INHERIT = "inherit"
 TRUTHY_FLAGS = ("1", "true", "yes", "on")
@@ -26,33 +25,14 @@ def with_model(tool_input, model):
     return {"updatedInput": {**tool_input, "model": model}}
 
 
-def assistant_model(line, include_sidechains):
-    try:
-        entry = json.loads(line)
-    except (UnicodeDecodeError, json.JSONDecodeError):
-        return None
-    if not isinstance(entry, dict) or entry.get("type") != "assistant":
-        return None
-    if entry.get("isSidechain") and not include_sidechains:
-        return None
-    message = entry.get("message")
-    model = message.get("model") if isinstance(message, dict) else None
-    return model if tier_rank(model) is not None else None
-
-
-def transcript_models(transcript_path, include_sidechains):
-    try:
-        lines = transcript_tail_lines(transcript_path)
-    except OSError:
-        return
-    for line in reversed(lines):
-        model = assistant_model(line, include_sidechains)
-        if model is not None:
-            yield model
-
-
 def latest_model(transcript_path, include_sidechains=False):
-    return next(transcript_models(transcript_path, include_sidechains), None)
+    for entry in recent_entries(transcript_path):
+        if entry.get("isSidechain") and not include_sidechains:
+            continue
+        model = dict_or_empty(entry.get("message")).get("model")
+        if tier_rank(model) is not None:
+            return model
+    return None
 
 
 def subagent_transcript(transcript_path, agent_id):
@@ -96,23 +76,19 @@ def agent_dirs(cwd):
     return [*project_dirs, Path("~/.claude/agents").expanduser()]
 
 
-def user_definitions(cwd):
-    for directory in agent_dirs(cwd):
-        for path in sorted(directory.glob("**/*.md")):
+def agent_definitions(cwd):
+    sources = [(directory, "**/*.md", "") for directory in agent_dirs(cwd)]
+    sources.append((PLUGIN_AGENTS_DIR, "*.md", f"{PLUGIN_NAME}:"))
+    for directory, pattern, name_prefix in sources:
+        for path in sorted(directory.glob(pattern)):
             fields = frontmatter_fields(definition_text(path))
-            yield fields.get("name"), fields
-
-
-def plugin_definitions():
-    for path in sorted(PLUGIN_AGENTS_DIR.glob("*.md")):
-        fields = frontmatter_fields(definition_text(path))
-        yield f"{PLUGIN_NAME}:{fields.get('name')}", fields
+            yield name_prefix + fields.get("name", ""), fields
 
 
 def definition_model(subagent_type, cwd):
     if not subagent_type:
         return None
-    definitions = (*user_definitions(Path(cwd)), *plugin_definitions())
+    definitions = agent_definitions(Path(cwd))
     named = (fields for name, fields in definitions if name == subagent_type)
     return next(named, {}).get("model")
 
@@ -120,10 +96,6 @@ def definition_model(subagent_type, cwd):
 def claude_alias(model):
     rank = tier_rank(model)
     return next((alias for alias in CLAUDE_ALIASES if tier_rank(alias) == rank), None)
-
-
-def names_claude_tier(model):
-    return claude_alias(model) is not None
 
 
 def wanted_agent_model(definition, caller):
@@ -152,7 +124,7 @@ def requested_model_decision(tool_input, caller):
 
 def definition_model_decision(tool_input, definition, caller):
     wanted_model = wanted_agent_model(definition, caller)
-    if not names_claude_tier(wanted_model):
+    if claude_alias(wanted_model) is None:
         return None
     capped_model = caller if outranks(wanted_model, caller) else wanted_model
     return with_model(tool_input, claude_alias(capped_model))
@@ -163,7 +135,7 @@ def agent_decision(tool_input, cwd, caller):
     if force_flag.strip().lower() in TRUTHY_FLAGS:
         return forced_decision(caller)
     definition = definition_model(tool_input.get("subagent_type"), cwd)
-    if tool_input.get("model") and not names_claude_tier(definition):
+    if tool_input.get("model") and claude_alias(definition) is None:
         return requested_model_decision(tool_input, caller)
     return definition_model_decision(tool_input, definition, caller)
 

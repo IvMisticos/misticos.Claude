@@ -45,5 +45,12 @@ def harness_named(name):
         raise argparse.ArgumentTypeError(f"unknown harness: {name}") from None
 
 
-def add_harness_argument(parser):
+class QuietArgumentParser(argparse.ArgumentParser):
+    def error(self, message):
+        raise ValueError(message)
+
+
+def harness_parser():
+    parser = QuietArgumentParser(add_help=False)
     parser.add_argument("--harness", type=harness_named, default=HARNESSES["claude"])
+    return parser

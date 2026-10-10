@@ -11,8 +11,6 @@ CLEAN_UP_AGAIN_AFTER_BYTES = 1 << 30
 CLEANUP_RECORD = (
     Path.home() / ".claude" / "hooks" / "data" / "misticos.Claude" / "disk-cleanup.json"
 )
-CLEANED_UP = "Disk space ran low, so the hooks freed {freed} MiB."
-CLEARED_CACHES = "They cleared {caches}."
 
 
 def read_most_free_since_cleanup(record):
@@ -48,33 +46,13 @@ def most_free_since_cleanup(record, disks):
     return updated
 
 
-def cleanup_threshold(disk):
-    return min(CLEAN_UP_BELOW_BYTES, disk.total * CLEAN_UP_BELOW_SHARE)
-
-
-def needs_space(disk):
-    return disk.free < cleanup_threshold(disk)
-
-
-def cleanup_step(most_free):
-    return min(CLEAN_UP_AGAIN_AFTER_BYTES, most_free / 2)
-
-
 def needs_cleanup(disk, most_free_since_cleanup):
-    if not needs_space(disk):
+    if disk.free >= min(CLEAN_UP_BELOW_BYTES, disk.total * CLEAN_UP_BELOW_SHARE):
         return False
     most_free = most_free_since_cleanup.get(disk.device)
-    return most_free is None or disk.free < most_free - cleanup_step(most_free)
-
-
-def joined_with_and(items):
-    *rest, last = items
-    return f"{', '.join(rest)} and {last}" if rest else last
-
-
-def cleanup_report(cleared, freed):
-    freed_mib = CLEANED_UP.format(freed=freed // BYTES_PER_MIB)
-    return f"{freed_mib} {CLEARED_CACHES.format(caches=joined_with_and(cleared))}"
+    if most_free is None:
+        return True
+    return disk.free < most_free - min(CLEAN_UP_AGAIN_AFTER_BYTES, most_free / 2)
 
 
 def disk_cleanup(paths):
@@ -91,4 +69,9 @@ def disk_cleanup(paths):
     freed = max(0, total_free(after) - total_free(before))
     if freed < BYTES_PER_MIB or not cleared:
         return None
-    return cleanup_report(cleared, freed)
+    *rest, last = cleared
+    caches = f"{', '.join(rest)} and {last}" if rest else last
+    return (
+        f"Disk space ran low, so the hooks freed {freed // BYTES_PER_MIB} MiB. "
+        f"They cleared {caches}."
+    )

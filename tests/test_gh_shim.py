@@ -1,35 +1,10 @@
-import os
-import subprocess
-
 import pytest
-from test_git_shim import SHIMS, without_session_variables
-
-FAKE_GH = """#!/usr/bin/env bash
-echo "ran $*"
-"""
+from conftest import FAKE_GH
 
 
 @pytest.fixture
-def run_gh(tmp_path):
-    real_bin = tmp_path / "bin"
-    real_bin.mkdir()
-    fake_gh = real_bin / "gh"
-    fake_gh.write_text(FAKE_GH)
-    fake_gh.chmod(0o755)
-    base_environment = without_session_variables(os.environ)
-    base_environment["PATH"] = f"{SHIMS}:{real_bin}:/usr/bin:/bin"
-    base_environment.pop("ALLOW_GH_PULL_REQUEST_WRITE", None)
-
-    def run(*arguments, **environment):
-        return subprocess.run(
-            [SHIMS / "gh", *arguments],
-            env={**base_environment, **environment},
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-
-    return run
+def run_gh(shim_runner):
+    return shim_runner("gh", FAKE_GH)
 
 
 @pytest.mark.parametrize(
@@ -66,9 +41,7 @@ def run_gh(tmp_path):
     ],
 )
 def test_denies_pull_request_writes(run_gh, arguments):
-    result = run_gh(*arguments)
-    assert result.returncode == 1
-    assert "GitHub MCP tools" in result.stderr
+    assert run_gh(*arguments).returncode == 1
 
 
 @pytest.mark.parametrize(

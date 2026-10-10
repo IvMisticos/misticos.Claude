@@ -143,26 +143,18 @@ def run_tool(executable, arguments):
     return run_build([executable, *arguments])
 
 
-def core_plan(cores, alone):
-    if not CAN_PIN_CORES:
-        return None
-    restore_abandoned_pinning(PINNING_STATE)
-    return plan_cores(cores, alone)
-
-
-def runs_alone(plan, alone):
-    if plan is None and not alone:
-        notice("this system cannot pin cores, so the benchmark runs alone")
-    return alone or plan is None
-
-
 def run_benchmark(command, cores, alone):
     with contextlib.ExitStack() as held:
         held.enter_context(
             locked(BENCHMARK_LOCK, fcntl.LOCK_EX, "waiting for the running benchmark")
         )
-        plan = core_plan(cores, alone)
-        if runs_alone(plan, alone):
+        plan = None
+        if CAN_PIN_CORES:
+            restore_abandoned_pinning(PINNING_STATE)
+            plan = plan_cores(cores, alone)
+        elif not alone:
+            notice("this system cannot pin cores, so the benchmark runs alone")
+        if alone or plan is None:
             held.enter_context(
                 machine_locked(fcntl.LOCK_EX, "waiting for builds to finish")
             )

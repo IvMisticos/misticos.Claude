@@ -99,18 +99,17 @@ def lock_exclusively(baseline_file):
 
 
 def parsed_baselines(stored):
-    if not isinstance(stored, dict):
+    try:
+        baselines = Baselines(**stored)
+    except TypeError:
         return None
-    pointed_at = stored.get("pointed_at")
-    copied_at = stored.get("copied_at")
-    fire = stored.get("fire") or ""
-    action = stored.get("action") or IDLE
-    seen = stored.get("seen") or 0
-    if not all(isinstance(count, int) for count in (pointed_at, copied_at, seen)):
-        return None
-    if not isinstance(fire, str) or action not in (IDLE, POINTER, COPY):
-        return None
-    return Baselines(pointed_at, copied_at, fire, action, seen)
+    counts = (baselines.pointed_at, baselines.copied_at, baselines.seen)
+    valid = (
+        all(isinstance(count, int) for count in counts)
+        and isinstance(baselines.fire, str)
+        and baselines.action in (IDLE, POINTER, COPY)
+    )
+    return baselines if valid else None
 
 
 def read_baselines(baseline_file):
@@ -127,20 +126,13 @@ def write_baselines(baseline_file, baselines):
     json.dump(baselines._asdict(), baseline_file)
 
 
-def claim_action(session_id, fire, tokens, can_copy):
+def claim_action(session_id, fire, can_copy, tokens=None, added_tokens=0):
     with locked_baseline(session_id) as baseline_file:
         stored = read_baselines(baseline_file)
-        action, baselines = action_for_fire(stored, fire, tokens, can_copy)
-        write_baselines(baseline_file, baselines._replace(seen=tokens))
-        return action
-
-
-def claim_action_by_payload(session_id, fire, added_tokens, can_copy):
-    with locked_baseline(session_id) as baseline_file:
-        stored = read_baselines(baseline_file)
-        already_this_fire = stored is not None and fire and stored.fire == fire
-        seen = stored.seen if stored else 0
-        tokens = seen if already_this_fire else seen + added_tokens
+        if tokens is None:
+            already_this_fire = stored is not None and fire and stored.fire == fire
+            seen = stored.seen if stored else 0
+            tokens = seen if already_this_fire else seen + added_tokens
         action, baselines = action_for_fire(stored, fire, tokens, can_copy)
         write_baselines(baseline_file, baselines._replace(seen=tokens))
         return action

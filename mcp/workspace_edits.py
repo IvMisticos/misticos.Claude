@@ -14,14 +14,14 @@ def apply_workspace_edit(edit):
             raise ValueError(
                 f"the language server wants a file operation ({change.get('kind')}) that this tool does not apply; nothing was written"
             )
-    changed = []
-    for uri, edits in (edit.get("changes") or {}).items():
-        changed.append(apply_text_edits(from_uri(uri), edits))
-    for change in document_changes:
-        changed.append(
-            apply_text_edits(from_uri(change["textDocument"]["uri"]), change["edits"])
-        )
-    return changed
+    edits_by_uri = [
+        *(edit.get("changes") or {}).items(),
+        *(
+            (change["textDocument"]["uri"], change["edits"])
+            for change in document_changes
+        ),
+    ]
+    return [apply_text_edits(from_uri(uri), edits) for uri, edits in edits_by_uri]
 
 
 def apply_text_edits(path, edits):
@@ -50,7 +50,4 @@ def text_offset(lines, offsets, position):
 
 
 def line_offsets(text):
-    offsets = [0]
-    for match in LINE_BREAK.finditer(text):
-        offsets.append(match.end())
-    return offsets
+    return [0, *(match.end() for match in LINE_BREAK.finditer(text))]

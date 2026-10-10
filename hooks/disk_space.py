@@ -3,63 +3,23 @@
 # requires-python = ">=3.11"
 # ///
 
-import json
 import os
-import re
-import sys
 
 from cleanup_policy import disk_cleanup
 from disks import BYTES_PER_MIB, disks
-from harnesses import add_harness_argument
-from hook_io import (
-    QuietArgumentParser,
-    read_payload,
-    run_hook,
-    scratchpad_of,
-    write_context,
-)
+from harnesses import harness_parser
+from hook_io import read_payload, run_hook, scratchpad_of, write_context
 
 LOW_SPACE_BYTES = 1 << 30
 LOW_SPACE_SHARE = 0.1
-OUT_OF_SPACE_ERROR = re.compile(
-    r"no space left on device|disk quota exceeded|not enough space on the disk"
-    r"|database or disk is full",
-    re.IGNORECASE,
-)
-READ_ONLY_TOOLS = {"Read", "Grep", "Glob", "LS", "WebFetch", "WebSearch"}
-TOOL_RESULT_FIELDS = ("tool_response", "tool_output", "error_message")
 TEMP_DIR_VARIABLES = ("TMPDIR", "TEMP", "TMP")
 RUNNING_LOW = "Only {free} MiB of disk is free at {path}."
 FREE_SPACE_NOW = "Free space now."
-RAN_OUT = (
-    "A tool result reports running out of disk space. If a write of yours "
-    "failed, free space now. If you only read text that quotes such an "
-    "error, ignore this."
-)
 HOW_TO_CLEAN_UP = (
     "Delete build output, package caches and clones you no longer need. Keep "
     "the uv cache: the hooks run from it. Delete only what you created or can "
     "regenerate."
 )
-
-
-def tool_calls(payload):
-    calls = [payload, *(payload.get("tool_calls") or [])]
-    return (call for call in calls if isinstance(call, dict))
-
-
-def writing_tool_results(payload):
-    return (
-        json.dumps(call.get(field))
-        for call in tool_calls(payload)
-        if call.get("tool_name") not in READ_ONLY_TOOLS
-        for field in TOOL_RESULT_FIELDS
-    )
-
-
-def ran_out_of_space(payload):
-    results = writing_tool_results(payload)
-    return any(OUT_OF_SPACE_ERROR.search(result) for result in results)
 
 
 def watched_paths(payload):
@@ -73,37 +33,22 @@ def is_low(disk):
     return disk.free < min(LOW_SPACE_BYTES, disk.total * LOW_SPACE_SHARE)
 
 
-def low_disks(paths):
-    return ((disk.path, disk.free) for disk in disks(paths) if is_low(disk))
-
-
 def disk_warning(payload):
     low_space = [
-        RUNNING_LOW.format(free=free // BYTES_PER_MIB, path=path)
-        for path, free in low_disks(watched_paths(payload))
+        RUNNING_LOW.format(free=disk.free // BYTES_PER_MIB, path=disk.path)
+        for disk in disks(watched_paths(payload))
+        if is_low(disk)
     ]
     if low_space:
         return " ".join([*low_space, FREE_SPACE_NOW, HOW_TO_CLEAN_UP])
-    if ran_out_of_space(payload):
-        return f"{RAN_OUT} {HOW_TO_CLEAN_UP}"
     return None
 
 
-def parsed_options(argv):
-    parser = QuietArgumentParser(add_help=False)
-    add_harness_argument(parser)
-    return parser.parse_args(argv)
-
-
-def disk_notes(payload):
-    notes = filter(None, [disk_cleanup(watched_paths(payload)), disk_warning(payload)])
-    return " ".join(notes)
-
-
 def main():
-    options = parsed_options(sys.argv[1:])
+    options = harness_parser().parse_args()
     payload = read_payload()
-    notes = disk_notes(payload)
+    cleanup = disk_cleanup(watched_paths(payload))
+    notes = " ".join(filter(None, [cleanup, disk_warning(payload)]))
     if notes:
         event = payload.get("hook_event_name")
         write_context(event, notes, options.harness.output_shape)

@@ -40,11 +40,11 @@ def other_tasks_in_flight(payload):
     if not isinstance(tasks, list):
         return None
     agent_id = payload.get("agent_id")
-    return [task for task in tasks if not is_task(task, agent_id)]
-
-
-def is_task(task, task_id):
-    return isinstance(task, dict) and task.get("id") == task_id
+    return [
+        task
+        for task in tasks
+        if not (isinstance(task, dict) and task.get("id") == agent_id)
+    ]
 
 
 def offer_agent_folder(payload):
@@ -62,15 +62,10 @@ def delete_agent_folder(payload):
         shutil.rmtree(folder, ignore_errors=True)
 
 
-def delete_every_agent_folder(payload):
-    root = agent_folders_root(payload)
-    if root:
-        shutil.rmtree(root, ignore_errors=True)
-
-
 def delete_every_idle_agent_folder(payload):
-    if payload.get("background_tasks") == []:
-        delete_every_agent_folder(payload)
+    root = agent_folders_root(payload)
+    if root and payload.get("background_tasks") == []:
+        shutil.rmtree(root, ignore_errors=True)
 
 
 def delete_in_background(folder):

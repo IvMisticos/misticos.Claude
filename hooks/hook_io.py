@@ -1,4 +1,3 @@
-import argparse
 import json
 import os
 import sys
@@ -37,11 +36,6 @@ def run_pre_tool_use(decide):
     if decision:
         output = {"hookEventName": "PreToolUse", **decision}
         json.dump({"hookSpecificOutput": output}, sys.stdout)
-
-
-class QuietArgumentParser(argparse.ArgumentParser):
-    def error(self, message):
-        raise ValueError(message)
 
 
 def run_hook(main):
