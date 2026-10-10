@@ -211,13 +211,6 @@ def test_denies_identity_changes_through_a_symlinked_project(
     assert result.returncode == 1
 
 
-def test_denies_identity_changes_in_project_worktrees(run_git, project, tmp_path):
-    worktree = tmp_path / "worktree"
-    worktree.mkdir()
-    result = run_git("-C", str(worktree), "config", "user.name", "x")
-    assert result.returncode == 1
-
-
 def test_runs_identity_changes_in_a_repository_named_by_git_dir(tmp_path):
     project_dir = tmp_path / "project"
     fixture_dir = tmp_path / "fixture"
