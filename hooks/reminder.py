@@ -421,6 +421,8 @@ def session_start_reminder(rules, payload, options):
 
 
 def reminder_for(event, payload, options):
+    if payload.get("agent_type") in options.skipped_agent_types:
+        return None
     model_names = {
         "cheap": options.cheap_model,
         "fast": options.fast_model,
@@ -457,6 +459,9 @@ def parsed_options(argv):
     parser.add_argument("--fast-model")
     parser.add_argument("--strong-model")
     parser.add_argument("--lead-model")
+    parser.add_argument(
+        "--skip-agent-type", dest="skipped_agent_types", action="append", default=[]
+    )
     parser.add_argument(
         "--context-from",
         choices=("transcript", "size", "payload"),
