@@ -32,11 +32,11 @@ async def server_for(path):
         raise ValueError(f"no language server for {path.suffix} files")
     repo = git_root(path)
     key = (name, project_root(name, path, repo))
-    changes = file_changes_for(key, repo).since_last_check()
-    if changes.config_changed:
+    events, config_changed = file_changes_for(key, repo).since_last_check()
+    if config_changed:
         replace_server(key)
     server = await running_server(key)
-    server.apply_file_changes(changes.events)
+    server.apply_file_changes(events)
     return server
 
 

@@ -82,9 +82,14 @@ def file_stamps(paths):
     return stamps
 
 
-class FileChanges(NamedTuple):
-    events: list
-    config_changed: bool
+def change_between(previous_stamp, current_stamp):
+    if previous_stamp == current_stamp:
+        return None
+    if previous_stamp is None:
+        return CREATED
+    if current_stamp is None:
+        return DELETED
+    return CHANGED
 
 
 class ProjectFileChanges:
@@ -130,17 +135,11 @@ class ProjectFileChanges:
     def since_last_check(self):
         previous = self.stamps
         current = self.stamps = self.current_stamps()
-        created = [(path, CREATED) for path in current.keys() - previous.keys()]
-        deleted = [(path, DELETED) for path in previous.keys() - current.keys()]
-        changed = [
-            (path, CHANGED)
-            for path in current.keys() & previous.keys()
-            if current[path] != previous[path]
+        changes = [
+            (path, change)
+            for path in current.keys() | previous.keys()
+            if (change := change_between(previous.get(path), current.get(path)))
         ]
-        changes = created + deleted + changed
-        return FileChanges(
-            events=[{"uri": to_uri(path), "type": change} for path, change in changes],
-            config_changed=any(
-                self.configures_server_root(path) for path, _ in changes
-            ),
-        )
+        events = [{"uri": to_uri(path), "type": change} for path, change in changes]
+        config_changed = any(self.configures_server_root(path) for path, _ in changes)
+        return events, config_changed
