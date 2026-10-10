@@ -38,3 +38,8 @@ def test_requested_model_is_capped_when_the_definition_has_no_tier(tmp_path):
     (tmp_path / ".git").mkdir()
     worker = {"subagent_type": "x", "model": "opus", "prompt": "build"}
     assert decided_model(worker, "claude-sonnet-5-5", tmp_path) == "sonnet"
+
+
+def test_pin_applies_before_the_caller_model_is_known(tmp_path):
+    coder = {"subagent_type": "misticos:coder", "model": "opus", "prompt": "build"}
+    assert decided_model(coder, None, tmp_path) == "sonnet"

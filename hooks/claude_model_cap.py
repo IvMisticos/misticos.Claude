@@ -158,8 +158,6 @@ def cap_decision(payload):
     tool_input = payload.get("tool_input") or {}
     main_model = latest_model(payload.get("transcript_path") or "")
     caller = caller_model(payload, main_model)
-    if not claude_alias(caller):
-        return None
     if payload.get("tool_name") in ("Agent", "Task"):
         cwd = payload.get("cwd") or os.getcwd()
         return agent_decision(tool_input, cwd, caller)
