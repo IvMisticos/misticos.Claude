@@ -4,14 +4,13 @@
 # ///
 
 import glob
-import json
 import os
 import re
 from pathlib import Path
 
 from hook_io import run_pre_tool_use
 from model_cap import outranks, project_folders, tier_rank
-from transcript import transcript_tail_lines
+from transcript import dict_or_empty, recent_entries
 
 INHERIT = "inherit"
 TRUTHY_FLAGS = ("1", "true", "yes", "on")
@@ -26,33 +25,14 @@ def with_model(tool_input, model):
     return {"updatedInput": {**tool_input, "model": model}}
 
 
-def assistant_model(line, include_sidechains):
-    try:
-        entry = json.loads(line)
-    except (UnicodeDecodeError, json.JSONDecodeError):
-        return None
-    if not isinstance(entry, dict) or entry.get("type") != "assistant":
-        return None
-    if entry.get("isSidechain") and not include_sidechains:
-        return None
-    message = entry.get("message")
-    model = message.get("model") if isinstance(message, dict) else None
-    return model if tier_rank(model) is not None else None
-
-
-def transcript_models(transcript_path, include_sidechains):
-    try:
-        lines = transcript_tail_lines(transcript_path)
-    except OSError:
-        return
-    for line in reversed(lines):
-        model = assistant_model(line, include_sidechains)
-        if model is not None:
-            yield model
-
-
 def latest_model(transcript_path, include_sidechains=False):
-    return next(transcript_models(transcript_path, include_sidechains), None)
+    for entry in recent_entries(transcript_path):
+        if entry.get("isSidechain") and not include_sidechains:
+            continue
+        model = dict_or_empty(entry.get("message")).get("model")
+        if tier_rank(model) is not None:
+            return model
+    return None
 
 
 def subagent_transcript(transcript_path, agent_id):

@@ -16,8 +16,7 @@ def dict_or_empty(value):
 
 def is_conversation_turn(entry):
     return (
-        entry.get("type") == "assistant"
-        and not entry.get("isSidechain")
+        not entry.get("isSidechain")
         and dict_or_empty(entry.get("message")).get("model") != "<synthetic>"
     )
 
@@ -25,17 +24,6 @@ def is_conversation_turn(entry):
 def usage_context_tokens(usage):
     counts = (dict_or_empty(usage).get(field) for field in CONTEXT_USAGE_FIELDS)
     return sum(count for count in counts if isinstance(count, int))
-
-
-def line_context_tokens(line):
-    try:
-        entry = json.loads(line)
-    except (UnicodeDecodeError, json.JSONDecodeError):
-        return None
-    if not isinstance(entry, dict) or not is_conversation_turn(entry):
-        return None
-    usage = dict_or_empty(entry.get("message")).get("usage")
-    return usage_context_tokens(usage) or None
 
 
 def transcript_tail_lines(transcript_path):
@@ -47,13 +35,25 @@ def transcript_tail_lines(transcript_path):
     return lines if start == 0 else lines[1:]
 
 
-def latest_context_tokens(transcript_path):
+def recent_entries(transcript_path):
     try:
         lines = transcript_tail_lines(transcript_path)
     except OSError:
-        return None
+        return
     for line in reversed(lines):
-        tokens = line_context_tokens(line)
+        try:
+            entry = json.loads(line)
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            continue
+        if isinstance(entry, dict) and entry.get("type") == "assistant":
+            yield entry
+
+
+def latest_context_tokens(transcript_path):
+    for entry in recent_entries(transcript_path):
+        if not is_conversation_turn(entry):
+            continue
+        tokens = usage_context_tokens(dict_or_empty(entry.get("message")).get("usage"))
         if tokens:
             return tokens
     return None
