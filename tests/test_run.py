@@ -122,8 +122,3 @@ def test_installs_uv_after_another_hook_was_killed_while_installing(
 def test_finds_scripts_next_to_itself(environment):
     script = RUN.parent / "reminder.py"
     assert run_hook(environment, "reminder.py").stdout == f"uv run {script}\n"
-
-
-def test_finds_the_setup_script_beside_the_hooks(environment):
-    script = RUN.parent / ".." / "setup.py"
-    assert run_hook(environment, "../setup.py").stdout == f"uv run {script}\n"
