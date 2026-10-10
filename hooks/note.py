@@ -10,7 +10,8 @@ from hook_io import read_payload, run_hook, write_context
 NOTES = {
     "agent-roles": (
         "Start workers as misticos agents, picked by the role in their "
-        "descriptions. Use a built-in agent type only when no role fits."
+        "descriptions, including workflow agents through agentType. Use a "
+        "built-in agent type only when no role fits."
     ),
     "pr-body": (
         "The tool may have appended harness text to the pull request body, "
