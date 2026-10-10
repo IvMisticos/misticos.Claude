@@ -16,6 +16,8 @@ INHERIT = "inherit"
 TRUTHY_FLAGS = ("1", "true", "yes", "on")
 FRONTMATTER = re.compile(r"---\s*\n([\s\S]*?)---\s*\n?")
 CLAUDE_ALIASES = ("haiku", "sonnet", "opus", "fable")
+PLUGIN_NAME = "misticos"
+PLUGIN_AGENTS_DIR = Path(__file__).resolve().parent.parent / "agents"
 
 
 def transcript_models(transcript_path, include_sidechains):
@@ -80,16 +82,29 @@ def agent_dirs(cwd):
     return [*project_dirs, Path("~/.claude/agents").expanduser()]
 
 
+def user_definitions(cwd):
+    for directory in agent_dirs(cwd):
+        for path in sorted(directory.glob("**/*.md")):
+            fields = frontmatter(path)
+            yield fields.get("name"), fields
+
+
+def plugin_definitions():
+    for path in sorted(PLUGIN_AGENTS_DIR.glob("*.md")):
+        fields = frontmatter(path)
+        yield f"{PLUGIN_NAME}:{fields.get('name')}", fields
+
+
 def definition_model(subagent_type, cwd):
     if not subagent_type:
         return None
-    definitions = (
-        frontmatter(path)
-        for directory in agent_dirs(Path(cwd))
-        for path in sorted(directory.glob("**/*.md"))
-    )
-    named = (fields for fields in definitions if fields.get("name") == subagent_type)
+    definitions = (*user_definitions(Path(cwd)), *plugin_definitions())
+    named = (fields for name, fields in definitions if name == subagent_type)
     return next(named, {}).get("model")
+
+
+def is_pinned(definition):
+    return claude_alias(definition) is not None
 
 
 def claude_alias(model):
@@ -119,12 +134,12 @@ def agent_decision(tool_input, cwd, caller):
     force_flag = os.environ.get("CLAUDE_CODE_SUBAGENT_MODEL_FORCE", "")
     if force_flag.strip().lower() in TRUTHY_FLAGS:
         return forced_decision(caller)
+    definition = definition_model(tool_input.get("subagent_type"), cwd)
     requested_model = tool_input.get("model")
-    if requested_model:
+    if requested_model and not is_pinned(definition):
         if not outranks(requested_model, caller):
             return None
         return {"updatedInput": {**tool_input, "model": claude_alias(caller)}}
-    definition = definition_model(tool_input.get("subagent_type"), cwd)
     wanted_model = wanted_agent_model(definition, caller)
     if not claude_alias(wanted_model):
         return None
@@ -143,8 +158,6 @@ def cap_decision(payload):
     tool_input = payload.get("tool_input") or {}
     main_model = latest_model(payload.get("transcript_path") or "")
     caller = caller_model(payload, main_model)
-    if not claude_alias(caller):
-        return None
     if payload.get("tool_name") in ("Agent", "Task"):
         cwd = payload.get("cwd") or os.getcwd()
         return agent_decision(tool_input, cwd, caller)

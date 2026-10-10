@@ -25,6 +25,14 @@
         "hooks": [
           {
             "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/run.sh \"${CLAUDE_PLUGIN_ROOT}\"/hooks/agent_roles_note.py"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
             "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/run.sh \"${CLAUDE_PLUGIN_ROOT}\"/hooks/session_environment.py"
           }
         ]
@@ -113,19 +121,19 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/run.sh \"${CLAUDE_PLUGIN_ROOT}\"/hooks/reminder.py 1 4 --rules \"${CLAUDE_PLUGIN_ROOT}/INSTRUCTIONS.md\" --cheap-model Haiku --fast-model Sonnet --strong-model Opus --lead-model Fable"
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/run.sh \"${CLAUDE_PLUGIN_ROOT}\"/hooks/reminder.py 1 4 --rules \"${CLAUDE_PLUGIN_ROOT}/INSTRUCTIONS.md\" --cheap-model Haiku --fast-model Sonnet --strong-model Opus --lead-model Fable --skip-agent-type misticos:scout"
           },
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/run.sh \"${CLAUDE_PLUGIN_ROOT}\"/hooks/reminder.py 2 4 --rules \"${CLAUDE_PLUGIN_ROOT}/INSTRUCTIONS.md\" --cheap-model Haiku --fast-model Sonnet --strong-model Opus --lead-model Fable"
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/run.sh \"${CLAUDE_PLUGIN_ROOT}\"/hooks/reminder.py 2 4 --rules \"${CLAUDE_PLUGIN_ROOT}/INSTRUCTIONS.md\" --cheap-model Haiku --fast-model Sonnet --strong-model Opus --lead-model Fable --skip-agent-type misticos:scout"
           },
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/run.sh \"${CLAUDE_PLUGIN_ROOT}\"/hooks/reminder.py 3 4 --rules \"${CLAUDE_PLUGIN_ROOT}/INSTRUCTIONS.md\" --cheap-model Haiku --fast-model Sonnet --strong-model Opus --lead-model Fable"
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/run.sh \"${CLAUDE_PLUGIN_ROOT}\"/hooks/reminder.py 3 4 --rules \"${CLAUDE_PLUGIN_ROOT}/INSTRUCTIONS.md\" --cheap-model Haiku --fast-model Sonnet --strong-model Opus --lead-model Fable --skip-agent-type misticos:scout"
           },
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/run.sh \"${CLAUDE_PLUGIN_ROOT}\"/hooks/reminder.py 4 4 --rules \"${CLAUDE_PLUGIN_ROOT}/INSTRUCTIONS.md\" --cheap-model Haiku --fast-model Sonnet --strong-model Opus --lead-model Fable"
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/run.sh \"${CLAUDE_PLUGIN_ROOT}\"/hooks/reminder.py 4 4 --rules \"${CLAUDE_PLUGIN_ROOT}/INSTRUCTIONS.md\" --cheap-model Haiku --fast-model Sonnet --strong-model Opus --lead-model Fable --skip-agent-type misticos:scout"
           }
         ]
       }
