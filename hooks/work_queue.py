@@ -14,6 +14,7 @@ import time
 from pathlib import Path
 
 from core_pinning import CAN_PIN_CORES, pinned, plan_cores, restore_abandoned_pinning
+from queued_commands import queues
 
 HELD_VARIABLE = "HARNESS_QUEUE_HELD"
 LOCK_DIR = Path("/tmp") / f"misticos-queue-{os.getuid()}"
@@ -26,75 +27,6 @@ BUILD_SLOTS = max(1, USABLE_CPUS // 2)
 SLOT_POLL_SECONDS = 0.5
 STOP_SIGNALS = (signal.SIGTERM, signal.SIGHUP)
 SIGNALS_PYTHON_IGNORES = (signal.SIGPIPE, signal.SIGXFSZ)
-QUEUED_SUBCOMMANDS = {
-    "dotnet": {"build", "test", "publish", "pack"},
-    "cargo": {
-        "build",
-        "b",
-        "check",
-        "c",
-        "test",
-        "t",
-        "bench",
-        "clippy",
-        "doc",
-        "rustc",
-        "nextest",
-    },
-    "bun": {"build", "test"},
-    "uv": {"build"},
-}
-QUEUED_RUN_TARGETS = {
-    "bun": {"build", "test"},
-    "uv": {"pytest"},
-}
-PYTHON_LAUNCHERS = {"python", "python3"}
-OPTIONS_WITH_VALUE = {
-    "cargo": {"-C", "-Z", "--config", "--color"},
-    "uv": {
-        "--directory",
-        "--project",
-        "--cache-dir",
-        "--config-file",
-        "--color",
-        "-w",
-        "--with",
-        "--with-editable",
-        "--with-requirements",
-        "-p",
-        "--python",
-        "--package",
-        "--extra",
-        "--group",
-        "--env-file",
-        "--index",
-    },
-    "bun": {"--cwd", "-c", "--config", "-F", "--filter", "--env-file", "--shell"},
-}
-WATCH_FLAGS = {"--watch", "--hot"}
-
-
-def positionals(tool, arguments):
-    options_with_value = OPTIONS_WITH_VALUE.get(tool, set())
-    words = iter(arguments)
-    for word in words:
-        if word in options_with_value:
-            next(words, None)
-        elif not word.startswith(("-", "+")):
-            yield word
-
-
-def queues(tool, arguments):
-    if WATCH_FLAGS & set(arguments):
-        return False
-    match list(positionals(tool, arguments)):
-        case [subcommand, *_] if subcommand in QUEUED_SUBCOMMANDS.get(tool, ()):
-            return True
-        case ["run", launcher, target, *_] if launcher in PYTHON_LAUNCHERS:
-            return target in QUEUED_RUN_TARGETS.get(tool, ())
-        case ["run", target, *_]:
-            return target in QUEUED_RUN_TARGETS.get(tool, ())
-    return False
 
 
 def notice(message):
@@ -211,18 +143,26 @@ def run_tool(executable, arguments):
     return run_build([executable, *arguments])
 
 
-def run_benchmark(command, cores, alone):
-    if not CAN_PIN_CORES and not alone:
+def core_plan(cores, alone):
+    if not CAN_PIN_CORES:
+        return None
+    restore_abandoned_pinning(PINNING_STATE)
+    return plan_cores(cores, alone)
+
+
+def runs_alone(plan, alone):
+    if plan is None and not alone:
         notice("this system cannot pin cores, so the benchmark runs alone")
-        alone = True
+    return alone or plan is None
+
+
+def run_benchmark(command, cores, alone):
     with contextlib.ExitStack() as held:
         held.enter_context(
             locked(BENCHMARK_LOCK, fcntl.LOCK_EX, "waiting for the running benchmark")
         )
-        if CAN_PIN_CORES:
-            restore_abandoned_pinning(PINNING_STATE)
-        plan = plan_cores(cores, alone) if CAN_PIN_CORES else None
-        if alone:
+        plan = core_plan(cores, alone)
+        if runs_alone(plan, alone):
             held.enter_context(
                 machine_locked(fcntl.LOCK_EX, "waiting for builds to finish")
             )

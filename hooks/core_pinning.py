@@ -62,7 +62,7 @@ def started_at(task_path):
     return int(fields_after_name.split()[19])
 
 
-def listed(directory):
+def entries_of(directory):
     try:
         with os.scandir(directory) as entries:
             return list(entries)
@@ -71,10 +71,10 @@ def listed(directory):
 
 
 def live_threads():
-    for process in listed("/proc"):
+    for process in entries_of("/proc"):
         if not process.name.isdigit():
             continue
-        for task in listed(os.path.join(process.path, "task")):
+        for task in entries_of(os.path.join(process.path, "task")):
             try:
                 started = started_at(task.path)
             except OSError:
