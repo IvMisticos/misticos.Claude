@@ -151,9 +151,6 @@ class LanguageServer:
         if "method" in message:
             self.answer_server_request(message)
             return
-        self.resolve_response(message)
-
-    def resolve_response(self, message):
         future = self.pending.pop(message["id"], None)
         if future is None or future.done():
             return
@@ -182,37 +179,27 @@ class LanguageServer:
     def open_document(self, path):
         text = read_text(path)
         uri = to_uri(path)
-        if uri not in self.opened:
-            self.did_open(uri, self.language_ids[path.suffix], text)
+        version, opened_text = self.opened.get(uri, (0, None))
+        if text == opened_text:
             return text
-        if text != self.opened[uri][1]:
-            self.did_change(uri, text)
-        return text
-
-    def did_open(self, uri, language_id, text):
-        self.opened[uri] = (1, text)
-        self.notify(
-            "textDocument/didOpen",
-            {
-                "textDocument": {
-                    "uri": uri,
-                    "languageId": language_id,
-                    "version": 1,
-                    "text": text,
-                }
-            },
-        )
-
-    def did_change(self, uri, text):
-        version = self.opened[uri][0] + 1
-        self.opened[uri] = (version, text)
+        self.opened[uri] = (version + 1, text)
+        if version == 0:
+            document = {
+                "uri": uri,
+                "languageId": self.language_ids[path.suffix],
+                "version": 1,
+                "text": text,
+            }
+            self.notify("textDocument/didOpen", {"textDocument": document})
+            return text
         self.notify(
             "textDocument/didChange",
             {
-                "textDocument": {"uri": uri, "version": version},
+                "textDocument": {"uri": uri, "version": version + 1},
                 "contentChanges": [{"text": text}],
             },
         )
+        return text
 
     def close_document(self, uri):
         if self.opened.pop(uri, None) is not None:
