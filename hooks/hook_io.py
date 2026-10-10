@@ -1,5 +1,6 @@
 import argparse
 import json
+import os
 import sys
 import traceback
 
@@ -10,6 +11,13 @@ def read_payload():
     except json.JSONDecodeError:
         return {}
     return payload if isinstance(payload, dict) else {}
+
+
+def scratchpad_of(payload):
+    scratchpad = payload.get("scratchpad_dir")
+    if isinstance(scratchpad, str) and os.path.isabs(scratchpad):
+        return scratchpad
+    return None
 
 
 def hook_output(event, context, shape):
