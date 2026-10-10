@@ -73,13 +73,6 @@ def preamble_for(number, total, name, first_preamble):
     return first_preamble.format(name=name)
 
 
-def part_budget_chars(name, first_preamble):
-    longest_preamble = max(
-        len(preamble_for(number, 99, name, first_preamble)) for number in (1, 99)
-    )
-    return MAX_INJECTED_CHARS - longest_preamble - len("\n\n")
-
-
 def packed_parts(blocks, budget):
     parts = []
     for block in blocks:
@@ -90,16 +83,12 @@ def packed_parts(blocks, budget):
     return parts
 
 
-def fixed_size_chunks(text, budget):
-    return [text[at : at + budget] for at in range(0, len(text), budget)]
-
-
 def parts_within_budget(text, budget):
     for block_break in BLOCK_BREAKS:
         parts = packed_parts(re.split(block_break, text), budget)
         if all(len(part) <= budget for part in parts):
             return parts
-    return fixed_size_chunks(text, budget)
+    return [text[at : at + budget] for at in range(0, len(text), budget)]
 
 
 def part_messages(text, budget, name, first_preamble):
@@ -119,7 +108,7 @@ def full_copy_messages(rules, first_preamble):
         return ()
     if not text:
         return ()
-    budget = part_budget_chars(rules.name, first_preamble)
+    budget = MAX_INJECTED_CHARS
     while True:
         messages = part_messages(text, budget, rules.name, first_preamble)
         overflow = max(len(message) for message in messages) - MAX_INJECTED_CHARS
