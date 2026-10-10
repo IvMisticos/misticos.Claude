@@ -17,7 +17,7 @@ real_gh() {
 }
 
 deny() {
-  echo "gh: create and merge pull requests with the GitHub MCP tools." \
+  echo "gh: create, edit, and merge pull requests with the GitHub MCP tools." \
     "If they cannot do it, run gh with ALLOW_GH_PULL_REQUEST_WRITE=1." >&2
   exit 1
 }
@@ -36,12 +36,12 @@ pr_subcommand() {
   done
 }
 
-creates_or_merges_a_pull_request() {
+writes_a_pull_request() {
   local subcommand
   [ "${1-}" = pr ] || return 1
   shift
   subcommand=$(pr_subcommand "$@")
-  [[ $subcommand == create || $subcommand == new || $subcommand == merge ]]
+  [[ $subcommand == create || $subcommand == new || $subcommand == edit || $subcommand == merge ]]
 }
 
 names_pull_requests() {
@@ -90,13 +90,13 @@ api_writes_pull_requests() {
   runs_a_pull_request_mutation "$@" && return 0
   names_pull_requests "$@" || return 1
   method=$(api_method "$@")
-  [[ $method == POST || $method == PUT ]]
+  [[ $method == POST || $method == PUT || $method == PATCH ]]
 }
 
 gh=$(real_gh)
 
 if [ -z "${ALLOW_GH_PULL_REQUEST_WRITE-}" ]; then
-  creates_or_merges_a_pull_request "$@" && deny
+  writes_a_pull_request "$@" && deny
   api_writes_pull_requests "$@" && deny
 fi
 
