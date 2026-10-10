@@ -99,18 +99,17 @@ def lock_exclusively(baseline_file):
 
 
 def parsed_baselines(stored):
-    if not isinstance(stored, dict):
+    try:
+        baselines = Baselines(**stored)
+    except TypeError:
         return None
-    pointed_at = stored.get("pointed_at")
-    copied_at = stored.get("copied_at")
-    fire = stored.get("fire") or ""
-    action = stored.get("action") or IDLE
-    seen = stored.get("seen") or 0
-    if not all(isinstance(count, int) for count in (pointed_at, copied_at, seen)):
-        return None
-    if not isinstance(fire, str) or action not in (IDLE, POINTER, COPY):
-        return None
-    return Baselines(pointed_at, copied_at, fire, action, seen)
+    counts = (baselines.pointed_at, baselines.copied_at, baselines.seen)
+    valid = (
+        all(isinstance(count, int) for count in counts)
+        and isinstance(baselines.fire, str)
+        and baselines.action in (IDLE, POINTER, COPY)
+    )
+    return baselines if valid else None
 
 
 def read_baselines(baseline_file):
