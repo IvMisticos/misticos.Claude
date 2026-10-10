@@ -17,8 +17,27 @@ INHERIT = "inherit"
 TRUTHY_FLAGS = ("1", "true", "yes", "on")
 FRONTMATTER = re.compile(r"---\s*\n([\s\S]*?)---\s*\n?")
 CLAUDE_ALIASES = ("haiku", "sonnet", "opus", "fable")
+SUBAGENT_MODEL_VARIABLE = "CLAUDE_CODE_SUBAGENT_MODEL"
 PLUGIN_NAME = "misticos"
 PLUGIN_AGENTS_DIR = Path(__file__).resolve().parent.parent / "agents"
+
+
+def with_model(tool_input, model):
+    return {"updatedInput": {**tool_input, "model": model}}
+
+
+def assistant_model(line, include_sidechains):
+    try:
+        entry = json.loads(line)
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return None
+    if not isinstance(entry, dict) or entry.get("type") != "assistant":
+        return None
+    if entry.get("isSidechain") and not include_sidechains:
+        return None
+    message = entry.get("message")
+    model = message.get("model") if isinstance(message, dict) else None
+    return model if tier_rank(model) is not None else None
 
 
 def transcript_models(transcript_path, include_sidechains):
@@ -27,17 +46,8 @@ def transcript_models(transcript_path, include_sidechains):
     except OSError:
         return
     for line in reversed(lines):
-        try:
-            entry = json.loads(line)
-        except (UnicodeDecodeError, json.JSONDecodeError):
-            continue
-        if not isinstance(entry, dict) or entry.get("type") != "assistant":
-            continue
-        if entry.get("isSidechain") and not include_sidechains:
-            continue
-        message = entry.get("message")
-        model = message.get("model") if isinstance(message, dict) else None
-        if tier_rank(model) is not None:
+        model = assistant_model(line, include_sidechains)
+        if model is not None:
             yield model
 
 
@@ -59,12 +69,15 @@ def caller_model(payload, main_model):
     return latest_model(transcript_path, include_sidechains=True)
 
 
-def frontmatter(definition_path):
+def definition_text(definition_path):
     try:
         with open(definition_path, encoding="utf-8", errors="replace") as definition:
-            text = definition.read().lstrip("\ufeff").replace("\r\n", "\n")
+            return definition.read().lstrip("\ufeff").replace("\r\n", "\n")
     except OSError:
-        return {}
+        return ""
+
+
+def frontmatter_fields(text):
     block = FRONTMATTER.match(text)
     if not block:
         return {}
@@ -86,13 +99,13 @@ def agent_dirs(cwd):
 def user_definitions(cwd):
     for directory in agent_dirs(cwd):
         for path in sorted(directory.glob("**/*.md")):
-            fields = frontmatter(path)
+            fields = frontmatter_fields(definition_text(path))
             yield fields.get("name"), fields
 
 
 def plugin_definitions():
     for path in sorted(PLUGIN_AGENTS_DIR.glob("*.md")):
-        fields = frontmatter(path)
+        fields = frontmatter_fields(definition_text(path))
         yield f"{PLUGIN_NAME}:{fields.get('name')}", fields
 
 
@@ -104,22 +117,22 @@ def definition_model(subagent_type, cwd):
     return next(named, {}).get("model")
 
 
-def is_pinned(definition):
-    return claude_alias(definition) is not None
-
-
 def claude_alias(model):
     rank = tier_rank(model)
     return next((alias for alias in CLAUDE_ALIASES if tier_rank(alias) == rank), None)
 
 
+def names_claude_tier(model):
+    return claude_alias(model) is not None
+
+
 def wanted_agent_model(definition, caller):
-    model = definition or os.environ.get("CLAUDE_CODE_SUBAGENT_MODEL") or INHERIT
+    model = definition or os.environ.get(SUBAGENT_MODEL_VARIABLE) or INHERIT
     return caller if model == INHERIT else model
 
 
 def forced_decision(caller):
-    forced_model = os.environ.get("CLAUDE_CODE_SUBAGENT_MODEL")
+    forced_model = os.environ.get(SUBAGENT_MODEL_VARIABLE)
     if not outranks(forced_model, caller):
         return None
     return {
@@ -131,28 +144,35 @@ def forced_decision(caller):
     }
 
 
+def requested_model_decision(tool_input, caller):
+    if not outranks(tool_input.get("model"), caller):
+        return None
+    return with_model(tool_input, claude_alias(caller))
+
+
+def definition_model_decision(tool_input, definition, caller):
+    wanted_model = wanted_agent_model(definition, caller)
+    if not names_claude_tier(wanted_model):
+        return None
+    capped_model = caller if outranks(wanted_model, caller) else wanted_model
+    return with_model(tool_input, claude_alias(capped_model))
+
+
 def agent_decision(tool_input, cwd, caller):
     force_flag = os.environ.get("CLAUDE_CODE_SUBAGENT_MODEL_FORCE", "")
     if force_flag.strip().lower() in TRUTHY_FLAGS:
         return forced_decision(caller)
     definition = definition_model(tool_input.get("subagent_type"), cwd)
-    requested_model = tool_input.get("model")
-    if requested_model and not is_pinned(definition):
-        if not outranks(requested_model, caller):
-            return None
-        return {"updatedInput": {**tool_input, "model": claude_alias(caller)}}
-    wanted_model = wanted_agent_model(definition, caller)
-    if not claude_alias(wanted_model):
-        return None
-    pinned_model = caller if outranks(wanted_model, caller) else wanted_model
-    return {"updatedInput": {**tool_input, "model": claude_alias(pinned_model)}}
+    if tool_input.get("model") and not names_claude_tier(definition):
+        return requested_model_decision(tool_input, caller)
+    return definition_model_decision(tool_input, definition, caller)
 
 
 def session_decision(tool_input, main_model, caller):
     requested = tool_input.get("model") or main_model
     if not outranks(requested, caller):
         return None
-    return {"updatedInput": {**tool_input, "model": caller}}
+    return with_model(tool_input, caller)
 
 
 def cap_decision(payload):

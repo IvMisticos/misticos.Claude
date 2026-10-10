@@ -6,11 +6,10 @@
 import json
 import sys
 
+from hook_io import read_payload
 from model_cap import outranks
 
 ALLOW = {"permission": "allow"}
-
-from hook_io import read_payload
 
 
 def spawn_decision(payload):

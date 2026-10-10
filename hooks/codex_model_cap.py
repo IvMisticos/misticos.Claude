@@ -90,27 +90,35 @@ def applies_role(spawn, named_role):
     return is_v2 and bool(named_role)
 
 
-def cap_decision(payload):
-    caller = payload.get("model")
-    spawn = payload.get("tool_input") or {}
-    cwd = payload.get("cwd") or os.getcwd()
+def role_decision(spawn, cwd, caller):
     named_role = str(spawn.get("agent_type") or "").strip()
     role_name = named_role or DEFAULT_ROLE
     fixed_model = (
         role_model(role_name, cwd) if applies_role(spawn, named_role) else None
     )
-    if outranks(fixed_model, caller):
-        return {
-            "permissionDecision": "deny",
-            "permissionDecisionReason": (
-                f"The {role_name} role runs on {fixed_model}, above your {caller}. "
-                "Spawn with a role at or below your model."
-            ),
-        }
+    if not outranks(fixed_model, caller):
+        return None
+    return {
+        "permissionDecision": "deny",
+        "permissionDecisionReason": (
+            f"The {role_name} role runs on {fixed_model}, above your {caller}. "
+            "Spawn with a role at or below your model."
+        ),
+    }
+
+
+def request_decision(spawn, cwd, caller):
     requested = spawn.get("model") or default_subagent_model(cwd)
     if not outranks(requested, caller):
         return None
     return {"permissionDecision": "allow", "updatedInput": {**spawn, "model": caller}}
+
+
+def cap_decision(payload):
+    caller = payload.get("model")
+    spawn = payload.get("tool_input") or {}
+    cwd = payload.get("cwd") or os.getcwd()
+    return role_decision(spawn, cwd, caller) or request_decision(spawn, cwd, caller)
 
 
 if __name__ == "__main__":
