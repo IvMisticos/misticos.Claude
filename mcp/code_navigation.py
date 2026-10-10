@@ -30,15 +30,17 @@ def resolved(file):
     return path
 
 
-async def at_position(method, file, line, column, extra=None):
+async def server_at(file):
     path = resolved(file)
-    server = await server_for(path)
+    return path, await server_for(path)
+
+
+async def at_position(method, file, line, column, extra=None):
+    path, server = await server_at(file)
     return await server.at_position(method, path, line, column, extra)
 
 
-async def about_document(method, file):
-    path = resolved(file)
-    server = await server_for(path)
+async def about_document(method, path, server):
     server.open_document(path)
     return await server.request(method, {"textDocument": {"uri": to_uri(path)}})
 
@@ -85,67 +87,61 @@ async def rename(file: str, line: int, column: int, new_name: str) -> str:
 @mcp.tool()
 async def document_symbols(file: str) -> str:
     """Outline of a file: classes, functions, methods, fields, with positions."""
-    return symbols_text(await about_document("textDocument/documentSymbol", file))
+    path, server = await server_at(file)
+    return symbols_text(
+        await about_document("textDocument/documentSymbol", path, server)
+    )
 
 
 @mcp.tool()
 async def workspace_symbols(query: str, file_in_project: str) -> str:
     """Symbols matching query across the project that contains file_in_project; that file picks the language."""
-    path = resolved(file_in_project)
-    server = await server_for(path)
+    _, server = await server_at(file_in_project)
     return symbols_text(await server.request("workspace/symbol", {"query": query}))
 
 
 @mcp.tool()
 async def diagnostics(file: str) -> str:
     """Compile errors and warnings in a file, without building the project."""
-    report = await about_document("textDocument/diagnostic", file)
-    return diagnostics_text(resolved(file), report["items"])
+    path, server = await server_at(file)
+    report = await about_document("textDocument/diagnostic", path, server)
+    return diagnostics_text(path, report["items"])
 
 
-async def functions_at(server, path, line, column):
+CALL_DIRECTIONS = {
+    "incoming": ("callHierarchy/incomingCalls", "from"),
+    "outgoing": ("callHierarchy/outgoingCalls", "to"),
+}
+
+
+async def hierarchy_calls(direction, file, line, column):
+    method, other_end = CALL_DIRECTIONS[direction]
+    path, server = await server_at(file)
     functions = await server.at_position(
         "textDocument/prepareCallHierarchy", path, line, column
     )
     if not functions:
         raise ValueError(f"no function at {path}:{line}:{column}")
-    return functions
-
-
-async def hierarchy_calls(file, line, column, method, to_call):
-    path = resolved(file)
-    server = await server_for(path)
     calls = []
-    for function in await functions_at(server, path, line, column):
-        found = await server.request(method, {"item": function})
-        calls.extend(to_call(call, function) for call in found or [])
+    for function in functions:
+        for call in await server.request(method, {"item": function}) or []:
+            call_site_owner = call.get("from", function)
+            calls.append(
+                Call(call[other_end], call_site_owner["uri"], call["fromRanges"])
+            )
     return calls_text(calls)
 
 
 @mcp.tool()
 async def callers(file: str, line: int, column: int) -> str:
     """Functions that call the function at file:line:column (1-based), each with the places it calls from."""
-    return await hierarchy_calls(
-        file,
-        line,
-        column,
-        "callHierarchy/incomingCalls",
-        lambda call, function: Call(
-            call["from"], call["from"]["uri"], call["fromRanges"]
-        ),
-    )
+    return await hierarchy_calls("incoming", file, line, column)
 
 
 @mcp.tool()
 async def callees(file: str, line: int, column: int) -> str:
     """Functions that the function at file:line:column (1-based) calls, each with the places it is called."""
-    return await hierarchy_calls(
-        file,
-        line,
-        column,
-        "callHierarchy/outgoingCalls",
-        lambda call, function: Call(call["to"], function["uri"], call["fromRanges"]),
-    )
+    return await hierarchy_calls("outgoing", file, line, column)
 
 
 if __name__ == "__main__":
