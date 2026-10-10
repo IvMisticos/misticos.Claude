@@ -67,10 +67,16 @@ def test_measures_use_from_the_most_free_space_since_cleanup(
         ("cp: error writing 'a': No space left on device", True),
         ("OSError: [Errno 28] No space left on device", True),
         ("IOException: There is not enough space on the disk.", True),
+        ("Caused by:\n  No space left on device (os error 28)", True),
+        (
+            'error MSB3021: Unable to copy "a". There is not enough space on the disk.',
+            True,
+        ),
+        ('Os { code: 28, message: "No space left on device" }', True),
         ('    r"no space left on device|disk quota exceeded"', False),
         ("The hook warns when a tool reports no space left on device.", False),
     ],
 )
 def test_reports_only_errors_not_text_that_names_them(output, ran_out):
-    payload = {"tool_name": "Bash", "tool_response": {"stdout": output}}
+    payload = {"tool_name": "Bash", "tool_response": {"stderr": [output]}}
     assert ran_out_of_space(payload) == ran_out

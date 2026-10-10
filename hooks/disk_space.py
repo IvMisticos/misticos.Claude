@@ -3,7 +3,6 @@
 # requires-python = ">=3.11"
 # ///
 
-import json
 import os
 import re
 
@@ -15,9 +14,9 @@ from hook_io import read_payload, run_hook, scratchpad_of, write_context
 LOW_SPACE_BYTES = 1 << 30
 LOW_SPACE_SHARE = 0.1
 OUT_OF_SPACE_ERROR = re.compile(
-    r"[:\]]\s*(there is )?(no space left on device|disk quota exceeded"
+    r"(^|[:\].])\s*[\"']?(there is )?(no space left on device|disk quota exceeded"
     r"|not enough space on the disk|database or disk is full)",
-    re.IGNORECASE,
+    re.IGNORECASE | re.MULTILINE,
 )
 READ_ONLY_TOOLS = {"Read", "Grep", "Glob", "LS", "WebFetch", "WebSearch"}
 TOOL_RESULT_FIELDS = ("tool_response", "tool_output", "error_message")
@@ -41,12 +40,23 @@ def tool_calls(payload):
     return (call for call in calls if isinstance(call, dict))
 
 
+def texts_in(value):
+    if isinstance(value, str):
+        yield value
+    elif isinstance(value, dict):
+        yield from texts_in(list(value.values()))
+    elif isinstance(value, list):
+        for item in value:
+            yield from texts_in(item)
+
+
 def writing_tool_results(payload):
     return (
-        json.dumps(call.get(field))
+        text
         for call in tool_calls(payload)
         if call.get("tool_name") not in READ_ONLY_TOOLS
         for field in TOOL_RESULT_FIELDS
+        for text in texts_in(call.get(field))
     )
 
 
