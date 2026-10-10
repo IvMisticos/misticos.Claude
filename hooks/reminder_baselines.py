@@ -127,20 +127,13 @@ def write_baselines(baseline_file, baselines):
     json.dump(baselines._asdict(), baseline_file)
 
 
-def claim_action(session_id, fire, tokens, can_copy):
+def claim_action(session_id, fire, can_copy, tokens=None, added_tokens=0):
     with locked_baseline(session_id) as baseline_file:
         stored = read_baselines(baseline_file)
-        action, baselines = action_for_fire(stored, fire, tokens, can_copy)
-        write_baselines(baseline_file, baselines._replace(seen=tokens))
-        return action
-
-
-def claim_action_by_payload(session_id, fire, added_tokens, can_copy):
-    with locked_baseline(session_id) as baseline_file:
-        stored = read_baselines(baseline_file)
-        already_this_fire = stored is not None and fire and stored.fire == fire
-        seen = stored.seen if stored else 0
-        tokens = seen if already_this_fire else seen + added_tokens
+        if tokens is None:
+            already_this_fire = stored is not None and fire and stored.fire == fire
+            seen = stored.seen if stored else 0
+            tokens = seen if already_this_fire else seen + added_tokens
         action, baselines = action_for_fire(stored, fire, tokens, can_copy)
         write_baselines(baseline_file, baselines._replace(seen=tokens))
         return action

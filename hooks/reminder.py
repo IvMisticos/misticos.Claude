@@ -12,7 +12,6 @@ from reminder_baselines import (
     COPY,
     POINTER,
     claim_action,
-    claim_action_by_payload,
     fire_id,
     forget_baseline,
 )
@@ -44,14 +43,10 @@ def growth_reminder(rules, payload, options):
     fire = fire_id(event_name(payload), payload)
     if not fire and options.part > 1:
         return None
-    can_send_whole_copy = len(messages) <= options.entries and (
-        fire or len(messages) == 1
-    )
+    can_copy = len(messages) <= options.entries and bool(fire or len(messages) == 1)
     if options.harness.context_from == "payload":
         added = payload_tokens(payload)
-        action = claim_action_by_payload(
-            session_id, fire, added, bool(can_send_whole_copy)
-        )
+        action = claim_action(session_id, fire, can_copy, added_tokens=added)
         return message_for_part(action, options.part, messages, rules)
     transcript_path = payload.get("transcript_path")
     if not transcript_path:
@@ -65,7 +60,7 @@ def growth_reminder(rules, payload, options):
             if transcript_fits_in_tail(transcript_path)
             else None
         )
-    action = claim_action(session_id, fire, tokens, bool(can_send_whole_copy))
+    action = claim_action(session_id, fire, can_copy, tokens)
     return message_for_part(action, options.part, messages, rules)
 
 
