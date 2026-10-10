@@ -4,7 +4,6 @@
 # ///
 
 import os
-import re
 
 from cleanup_policy import disk_cleanup
 from disks import BYTES_PER_MIB, disks
@@ -13,57 +12,14 @@ from hook_io import read_payload, run_hook, scratchpad_of, write_context
 
 LOW_SPACE_BYTES = 1 << 30
 LOW_SPACE_SHARE = 0.1
-OUT_OF_SPACE_ERROR = re.compile(
-    r"(^|[:\].(,])\s*[\"']?(there\s+is\s+)?(no\s+space\s+left\s+on\s+device"
-    r"|disk\s+quota\s+exceeded|not\s+enough\s+space\s+on\s+the\s+disk"
-    r"|database\s+or\s+disk\s+is\s+full)",
-    re.IGNORECASE | re.MULTILINE,
-)
-READ_ONLY_TOOLS = {"Read", "Grep", "Glob", "LS", "WebFetch", "WebSearch"}
-TOOL_RESULT_FIELDS = ("tool_response", "tool_output", "error_message")
 TEMP_DIR_VARIABLES = ("TMPDIR", "TEMP", "TMP")
 RUNNING_LOW = "Only {free} MiB of disk is free at {path}."
 FREE_SPACE_NOW = "Free space now."
-RAN_OUT = (
-    "A tool result reports running out of disk space. If a write of yours "
-    "failed, free space now. If you only read text that quotes such an "
-    "error, ignore this."
-)
 HOW_TO_CLEAN_UP = (
     "Delete build output, package caches and clones you no longer need. Keep "
     "the uv cache: the hooks run from it. Delete only what you created or can "
     "regenerate."
 )
-
-
-def tool_calls(payload):
-    calls = [payload, *(payload.get("tool_calls") or [])]
-    return (call for call in calls if isinstance(call, dict))
-
-
-def texts_in(value):
-    if isinstance(value, str):
-        yield value
-    elif isinstance(value, dict):
-        yield from texts_in(list(value.values()))
-    elif isinstance(value, list):
-        for item in value:
-            yield from texts_in(item)
-
-
-def writing_tool_results(payload):
-    return (
-        text
-        for call in tool_calls(payload)
-        if call.get("tool_name") not in READ_ONLY_TOOLS
-        for field in TOOL_RESULT_FIELDS
-        for text in texts_in(call.get(field))
-    )
-
-
-def ran_out_of_space(payload):
-    results = writing_tool_results(payload)
-    return any(OUT_OF_SPACE_ERROR.search(result) for result in results)
 
 
 def watched_paths(payload):
@@ -85,8 +41,6 @@ def disk_warning(payload):
     ]
     if low_space:
         return " ".join([*low_space, FREE_SPACE_NOW, HOW_TO_CLEAN_UP])
-    if ran_out_of_space(payload):
-        return f"{RAN_OUT} {HOW_TO_CLEAN_UP}"
     return None
 
 
