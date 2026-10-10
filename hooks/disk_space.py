@@ -22,8 +22,8 @@ from hook_io import (
 LOW_SPACE_BYTES = 1 << 30
 LOW_SPACE_SHARE = 0.1
 OUT_OF_SPACE_ERROR = re.compile(
-    r"no space left on device|disk quota exceeded|not enough space on the disk"
-    r"|database or disk is full",
+    r"[:\]]\s*(there is )?(no space left on device|disk quota exceeded"
+    r"|not enough space on the disk|database or disk is full)",
     re.IGNORECASE,
 )
 READ_ONLY_TOOLS = {"Read", "Grep", "Glob", "LS", "WebFetch", "WebSearch"}

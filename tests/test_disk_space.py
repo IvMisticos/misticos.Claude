@@ -10,6 +10,7 @@ from cleanup_policy import (
     needs_cleanup,
     write_most_free_since_cleanup,
 )
+from disk_space import ran_out_of_space
 from disks import Disk
 
 GIB = 1 << 30
@@ -58,3 +59,18 @@ def test_measures_use_from_the_most_free_space_since_cleanup(
     most_free = most_free_since_cleanup(record, [disk(250, free_gib), still_low])
     assert most_free == {"1": int(5.3 * GIB), "2": 3 * GIB}
     assert needs_cleanup(disk(250, free_gib), most_free) == cleans_up
+
+
+@pytest.mark.parametrize(
+    ("output", "ran_out"),
+    [
+        ("cp: error writing 'a': No space left on device", True),
+        ("OSError: [Errno 28] No space left on device", True),
+        ("IOException: There is not enough space on the disk.", True),
+        ('    r"no space left on device|disk quota exceeded"', False),
+        ("The hook warns when a tool reports no space left on device.", False),
+    ],
+)
+def test_reports_only_errors_not_text_that_names_them(output, ran_out):
+    payload = {"tool_name": "Bash", "tool_response": {"stdout": output}}
+    assert ran_out_of_space(payload) == ran_out
