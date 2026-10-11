@@ -42,6 +42,9 @@ class CallFailure(Enum):
     RETRYABLE = auto()
 
 
+FAILURES_BY_PRIORITY = (CallFailure.RETRYABLE, CallFailure.NOT_FOUND)
+
+
 class ThreadSource(NamedTuple):
     requests: Callable
     parse: Callable
@@ -147,12 +150,18 @@ def output_by(deadline, process):
     return output if process.returncode == 0 else failure_from(error)
 
 
+def first_failure(outputs):
+    return next((f for f in FAILURES_BY_PRIORITY if f in outputs), None)
+
+
 def review_state_from(outputs, source):
-    if CallFailure.RETRYABLE in outputs:
-        return None
-    if CallFailure.NOT_FOUND in outputs:
-        return NOT_OPEN
-    return source.parse(*outputs)
+    match first_failure(outputs):
+        case CallFailure.RETRYABLE:
+            return None
+        case CallFailure.NOT_FOUND:
+            return NOT_OPEN
+        case None:
+            return source.parse(*outputs)
 
 
 def review_states(pull_requests, source):
