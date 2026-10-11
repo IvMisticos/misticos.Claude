@@ -8,7 +8,7 @@ from typing import NamedTuple
 
 from harnesses import harness_parser
 from hook_io import read_payload, run_hook, write_block
-from pull_requests import touched_pull_requests
+from pull_requests import last_activity_by_pull_request
 from review_threads import review_states, thread_source
 from session_state import STATE_ROOT, locked_session_file, read_json, write_json
 from transcript import dict_or_empty
@@ -21,9 +21,14 @@ ADVICE = "Resolve the ones you addressed; leave open the ones waiting on someone
 class Memory(NamedTuple):
     seen: dict
     skipped: frozenset
+    checked: dict
 
     def to_json(self):
-        return {"seen": self.seen, "skipped": sorted(self.skipped)}
+        return {
+            "seen": self.seen,
+            "skipped": sorted(self.skipped),
+            "checked": self.checked,
+        }
 
 
 def follows_own_block(payload):
@@ -46,7 +51,7 @@ def own_transcript(payload):
 
 def memory_key(payload):
     session_id = payload.get("session_id") or payload.get("conversation_id")
-    agent_id = payload.get("agent_id")
+    agent_id = payload.get("agent_id") or payload.get("subagent_id")
     if not isinstance(session_id, str):
         return None
     if isinstance(agent_id, str) and agent_id:
@@ -54,17 +59,27 @@ def memory_key(payload):
     return session_id
 
 
+def int_values(stored):
+    return {
+        name: value
+        for name, value in dict_or_empty(stored).items()
+        if isinstance(value, int)
+    }
+
+
+def parsed_names(stored):
+    if not isinstance(stored, list):
+        return frozenset()
+    return frozenset(name for name in stored if isinstance(name, str))
+
+
 def parsed_memory(stored):
     stored = dict_or_empty(stored)
-    seen = {
-        thread_id: comment_id
-        for thread_id, comment_id in dict_or_empty(stored.get("seen")).items()
-        if isinstance(comment_id, int)
-    }
-    skipped = stored.get("skipped")
-    if not isinstance(skipped, list):
-        return Memory(seen, frozenset())
-    return Memory(seen, frozenset(name for name in skipped if isinstance(name, str)))
+    return Memory(
+        seen=int_values(stored.get("seen")),
+        skipped=parsed_names(stored.get("skipped")),
+        checked=int_values(stored.get("checked")),
+    )
 
 
 def remembered(key):
@@ -104,20 +119,23 @@ def last_comments(threads_by_pull_request):
     }
 
 
-def updated_memory(memory, states):
+def updated_memory(memory, states, activity):
     skipped = {
         str(pull_request) for pull_request, state in states.items() if not state.is_open
     }
+    checked = {str(pull_request): activity[pull_request] for pull_request in states}
     return Memory(
-        memory.seen | last_comments(open_threads(states)), memory.skipped | skipped
+        seen=memory.seen | last_comments(open_threads(states)),
+        skipped=memory.skipped | skipped,
+        checked=memory.checked | checked,
     )
 
 
-def claim_new_activity(key, states):
+def claim_unseen_threads(key, states, activity):
     with locked_session_file(STATE_DIR, key) as state_file:
         memory = parsed_memory(read_json(state_file))
         changed = threads_with_new_comments(open_threads(states), memory.seen)
-        write_json(state_file, updated_memory(memory, states).to_json())
+        write_json(state_file, updated_memory(memory, states, activity).to_json())
     return changed
 
 
@@ -130,14 +148,21 @@ def reminder(changed):
     return " ".join([*lines, ADVICE])
 
 
-def pull_requests_to_check(transcript_path, key):
-    touched = touched_pull_requests(transcript_path)
-    if not touched:
-        return []
-    skipped = remembered(key).skipped
-    return [
-        pull_request for pull_request in touched if str(pull_request) not in skipped
-    ]
+def has_unchecked_activity(memory, pull_request, line_number):
+    name = str(pull_request)
+    return name not in memory.skipped and line_number > memory.checked.get(name, -1)
+
+
+def new_activity(transcript_path, key):
+    activity = last_activity_by_pull_request(transcript_path)
+    if not activity:
+        return {}
+    memory = remembered(key)
+    return {
+        pull_request: line_number
+        for pull_request, line_number in activity.items()
+        if has_unchecked_activity(memory, pull_request, line_number)
+    }
 
 
 def main():
@@ -149,9 +174,9 @@ def main():
     transcript_path = own_transcript(payload)
     if not (key and isinstance(transcript_path, str)):
         return
-    pull_requests = pull_requests_to_check(transcript_path, key)
-    states = review_states(pull_requests, thread_source())
-    changed = claim_new_activity(key, states) if states else {}
+    activity = new_activity(transcript_path, key)
+    states = review_states(list(activity), thread_source())
+    changed = claim_unseen_threads(key, states, activity) if states else {}
     if changed:
         write_block(reminder(changed), options.harness.output_shape)
 

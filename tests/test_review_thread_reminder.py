@@ -8,7 +8,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
 
-from pull_requests import PullRequest, touched_pull_requests
+from pull_requests import PullRequest, last_activity_by_pull_request
 from review_threads import output_by, started
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -73,6 +73,12 @@ def transcript(tmp_path):
     transcript = tmp_path / "transcript.jsonl"
     write_lines(transcript, tool_use(PULL_REQUEST))
     return transcript
+
+
+def add_activity(transcript):
+    event = f'<event>{{"pr":"{PULL_REQUEST}"}}</event>'
+    with transcript.open("a") as lines:
+        lines.write(json.dumps({"type": "user", "message": {"content": event}}) + "\n")
 
 
 def write_lines(path, *entries):
@@ -144,12 +150,23 @@ def test_new_unresolved_thread_blocks_once(home, gh_path, responses, transcript)
     assert run_hook(home, gh_path, stop(transcript)) is None
 
 
+def test_stop_without_new_activity_calls_no_gh(home, gh_path, responses, transcript):
+    answer_graphql(responses, Thread("T1", [1]))
+    run_hook(home, gh_path, stop(transcript))
+    answer_graphql(responses, Thread("T1", [1, 2]))
+    calls = responses / "calls.log"
+    calls.unlink()
+    assert run_hook(home, gh_path, stop(transcript)) is None
+    assert not calls.exists()
+
+
 def test_new_comment_on_a_seen_thread_blocks_again(
     home, gh_path, responses, transcript
 ):
     answer_graphql(responses, Thread("T1", [1]), Thread("T2", [2]))
     run_hook(home, gh_path, stop(transcript))
     answer_graphql(responses, Thread("T1", [1]), Thread("T2", [2, 4]))
+    add_activity(transcript)
     assert run_hook(home, gh_path, stop(transcript)) == blocked()
 
 
@@ -220,6 +237,7 @@ def test_pull_request_seen_not_open_is_not_queried_again(
     run_hook(home, gh_path, stop(transcript))
     calls = responses / "calls.log"
     calls.unlink()
+    add_activity(transcript)
     assert run_hook(home, gh_path, stop(transcript)) is None
     assert not calls.exists()
 
@@ -236,6 +254,7 @@ def test_remote_session_reads_review_threads_route(
     answer_remote(responses, Thread("T1", [1, 5]), Thread("T2", [2], resolved=True))
     assert run_hook(home, gh_path, stop(transcript), remote=True) == blocked()
     answer_remote(responses, Thread("T1", [1, 5, 6]), state="closed")
+    add_activity(transcript)
     assert run_hook(home, gh_path, stop(transcript), remote=True) is None
 
 
@@ -307,7 +326,7 @@ def test_finds_pull_requests_the_session_worked_on(tmp_path):
         assistant_call(bash_call("gh api repos/acme/api/pulls/6/comments")),
         tool_use(PULL_REQUEST),
     )
-    assert touched_pull_requests(transcript) == [
+    assert list(last_activity_by_pull_request(transcript)) == [
         PULL_REQUEST,
         PullRequest("acme", "widgets", 9),
         PullRequest("acme", "gadgets", 3),
@@ -337,4 +356,4 @@ def test_ignores_pull_requests_seen_only_in_results_and_prose(tmp_path):
         {"type": "user", "message": {"content": prose}},
         assistant_call({"type": "text", "text": prose}),
     )
-    assert touched_pull_requests(transcript) == []
+    assert last_activity_by_pull_request(transcript) == {}

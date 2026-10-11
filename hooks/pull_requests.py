@@ -2,7 +2,7 @@ import json
 import re
 from typing import NamedTuple
 
-from transcript import all_entries
+from transcript import numbered_entries
 
 NAME = r"[\w.-]+"
 PULL_REQUEST_EVENT = re.compile(rf'"pr"\s*:\s*"({NAME})/({NAME})#(\d+)"')
@@ -100,17 +100,22 @@ def answered_call_id(block):
     return answered if isinstance(answered, str) else None
 
 
-def touched_pull_requests(transcript_path):
-    found = []
+def pull_requests_in_entry(entry, creating_calls):
+    yield from pull_request_events_in(entry)
+    blocks = (item for item in nested_values(entry) if isinstance(item, dict))
+    for block in blocks:
+        if block_type(block) in CALL_TYPES:
+            yield from pull_requests_linked_in(block)
+            if creates_a_pull_request(block):
+                creating_calls.add(call_id(block))
+        elif answered_call_id(block) in creating_calls:
+            yield from pull_requests_linked_in(block)
+
+
+def last_activity_by_pull_request(transcript_path):
+    last_activity = {}
     creating_calls = set()
-    for entry in all_entries(transcript_path):
-        found.extend(pull_request_events_in(entry))
-        blocks = (item for item in nested_values(entry) if isinstance(item, dict))
-        for block in blocks:
-            if block_type(block) in CALL_TYPES:
-                found.extend(pull_requests_linked_in(block))
-                if creates_a_pull_request(block):
-                    creating_calls.add(call_id(block))
-            elif answered_call_id(block) in creating_calls:
-                found.extend(pull_requests_linked_in(block))
-    return list(dict.fromkeys(found))
+    for line_number, entry in numbered_entries(transcript_path):
+        for pull_request in pull_requests_in_entry(entry, creating_calls):
+            last_activity[pull_request] = line_number
+    return last_activity

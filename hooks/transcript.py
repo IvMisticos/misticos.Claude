@@ -42,13 +42,18 @@ def transcript_lines(transcript_path):
         return transcript.read().split(b"\n")
 
 
+def parsed_entry(line):
+    try:
+        entry = json.loads(line)
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return None
+    return entry if isinstance(entry, dict) else None
+
+
 def entries_in(lines):
     for line in lines:
-        try:
-            entry = json.loads(line)
-        except (UnicodeDecodeError, json.JSONDecodeError):
-            continue
-        if isinstance(entry, dict):
+        entry = parsed_entry(line)
+        if entry is not None:
             yield entry
 
 
@@ -60,12 +65,15 @@ def tail_entries(transcript_path):
     yield from entries_in(lines)
 
 
-def all_entries(transcript_path):
+def numbered_entries(transcript_path):
     try:
         lines = transcript_lines(transcript_path)
     except OSError:
         return
-    yield from entries_in(lines)
+    for line_number, line in enumerate(lines):
+        entry = parsed_entry(line)
+        if entry is not None:
+            yield line_number, entry
 
 
 def recent_entries(transcript_path):
