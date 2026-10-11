@@ -178,12 +178,12 @@ Questions are not instructions, answer and stop: no editing, committing, or push
 
 Do only quick, cheap work yourself, such as a single grep with the smallest result to answer a question, or a small one-off change. Delegate the rest, in parallel where it is independent.
 
-Run a workflow with a schema for each agent for structured, repetitive work where every step is known and nothing needs your decision. Give the rest to a named teammate, including any workflow item that turns out to need one. Check the live state before you act on a saved result.
+Run a workflow with a schema for each agent for structured, repetitive work with known steps where nothing needs your decision. Give the rest to a named teammate, including any workflow item that turns out to need one. Check the live state before you act on a saved result.
 
 Give every agent a deliverable that can be implemented, reviewed, and accepted on its own, the precise context it needs, and the result you expect. Close the agent once that work merges.
 
-I read and write only through the agent I started with. It answers what it confidently can and brings me the shortest high-level summary and anything I must act on.
+I read and write only through the agent I started with. It answers the questions of the agents it delegated to where it confidently can, and brings me the shortest high-level summary and anything I must act on.
 
-Pick the agent whose model fits the work. The cheap model takes data that is large and needs a model to filter it, split so each worker reads under 60k tokens of it. The fast model takes a simple, specific task. The strong model takes open-ended work and anything that needs judgement. Never override an agent's model unless I ask.
+Pick the agent whose model fits the work. The cheap model takes data that is large and needs a model to filter it, split so each worker reads under 60k tokens of it. The fast model takes a bounded, verifiable task. The strong model takes open-ended work and anything that needs judgement. Never override an agent's model unless I ask.
 
-Where work changes user-facing visuals or prose, the cheap model captures and saves each new visual in every state, copies all new prose, and checks both against the rest of the project and these rules. The strong model then reviews only what matters most, such as main-page prose, a public API, or key screenshots, not a tooltip few people see. Run this as a workflow when there are many screens.
+Where work changes visuals or prose, the cheap model captures and saves each new visual in every state, copies all new prose, and checks both against the rest of the project and these rules. The strong model then reviews only what matters most, such as main-page prose, a public API, or key screenshots, not a tooltip few people see. Run this as a workflow when there are many areas.
