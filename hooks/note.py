@@ -20,7 +20,7 @@ NOTES = {
     ),
     "notifications": (
         "Act on what these notifications need. If they need no action and "
-        "nothing from the user, end the turn with one short line."
+        "nothing from the user, end the turn without a reply."
     ),
 }
 
