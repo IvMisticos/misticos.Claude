@@ -10,6 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
 
 from pull_requests import PullRequest, last_activity_by_pull_request
 from review_threads import output_by, started
+from transcript import TranscriptPart, positioned_entries, transcript_part_from
 
 ROOT = Path(__file__).resolve().parent.parent
 HOOK = ROOT / "hooks" / "review_thread_reminder.py"
@@ -202,10 +203,14 @@ def test_gh_failure_stays_silent_and_retries_next_stop(
     assert run_hook(home, gh_path, stop(transcript)) == blocked()
 
 
-def test_missing_gh_stays_silent(home, tmp_path, transcript):
+def test_missing_gh_stays_silent_and_keeps_the_activity(
+    home, gh_path, responses, tmp_path, transcript
+):
     empty_bin = tmp_path / "empty"
     empty_bin.mkdir()
     assert run_hook(home, str(empty_bin), stop(transcript)) is None
+    answer_graphql(responses, Thread("T1", [1]))
+    assert run_hook(home, gh_path, stop(transcript)) == blocked()
 
 
 def test_continuing_after_a_block_stays_silent_and_keeps_the_thread_new(
@@ -265,6 +270,39 @@ def test_merged_or_missing_pull_request_is_not_queried_again(
     assert not calls.exists()
 
 
+def same_length_filler(entry):
+    empty = {"type": "user", "message": {"content": ""}}
+    padding = len(json.dumps(entry)) - len(json.dumps(empty))
+    return {"type": "user", "message": {"content": "x" * padding}}
+
+
+def test_stop_reads_only_lines_added_since_the_last_stop(
+    home, gh_path, responses, tmp_path
+):
+    answer_graphql(responses, Thread("T1", [1]))
+    transcript = tmp_path / "transcript.jsonl"
+    write_lines(transcript, same_length_filler(tool_use(PULL_REQUEST)))
+    assert run_hook(home, gh_path, stop(transcript)) is None
+    write_lines(transcript, tool_use(PULL_REQUEST))
+    assert run_hook(home, gh_path, stop(transcript)) is None
+    add_activity(transcript)
+    assert run_hook(home, gh_path, stop(transcript)) == blocked()
+
+
+def test_transcript_part_ends_at_the_last_complete_line(tmp_path):
+    transcript = tmp_path / "transcript.jsonl"
+    transcript.write_bytes(b'{"a": 1}\n{"b": 2}\n{"c"')
+    part = transcript_part_from(transcript, 9)
+    assert part == TranscriptPart(9, b'{"b": 2}\n')
+    assert list(positioned_entries(part)) == [(9, {"b": 2})]
+
+
+def test_transcript_part_starts_over_when_the_transcript_shrank(tmp_path):
+    transcript = tmp_path / "transcript.jsonl"
+    transcript.write_bytes(b'{"a": 1}\n')
+    assert transcript_part_from(transcript, 100) == TranscriptPart(0, b'{"a": 1}\n')
+
+
 def test_call_that_finished_counts_after_the_deadline():
     process = started([sys.executable, "-c", "print('done')"])
     process.wait()
@@ -308,6 +346,12 @@ def test_cursor_stays_silent_after_a_follow_up_or_abort(
         **fields,
     }
     assert run_hook(home, gh_path, payload, "--harness", "cursor") is None
+
+
+def activity_in(transcript):
+    return last_activity_by_pull_request(
+        positioned_entries(transcript_part_from(transcript, 0))
+    )
 
 
 def assistant_call(block):
@@ -371,7 +415,7 @@ def test_finds_pull_requests_the_session_worked_on(tmp_path):
         {"type": "response_item", "payload": codex_created},
         tool_use(PULL_REQUEST),
     )
-    assert list(last_activity_by_pull_request(transcript)) == [
+    assert list(activity_in(transcript)) == [
         PULL_REQUEST,
         PullRequest("acme", "widgets", 9),
         PullRequest("acme", "gadgets", 3),
@@ -424,7 +468,7 @@ def test_ignores_pull_requests_the_session_only_mentioned(tmp_path):
         {"type": "user", "message": {"content": f"Compare with {link}"}},
         assistant_call({"type": "text", "text": link}),
     )
-    assert last_activity_by_pull_request(transcript) == {}
+    assert activity_in(transcript) == {}
 
 
 def test_codex_create_result_matches_by_call_id(tmp_path):
@@ -446,9 +490,7 @@ def test_codex_create_result_matches_by_call_id(tmp_path):
         {"type": "response_item", "payload": create},
         {"type": "response_item", "payload": created},
     )
-    assert list(last_activity_by_pull_request(transcript)) == [
-        PullRequest("acme", "apps", 8)
-    ]
+    assert list(activity_in(transcript)) == [PullRequest("acme", "apps", 8)]
 
 
 def test_create_call_without_id_reads_no_other_entries(tmp_path):
@@ -464,7 +506,7 @@ def test_create_call_without_id_reads_no_other_entries(tmp_path):
         assistant_call(create),
         {"type": "user", "message": {"content": prose}},
     )
-    assert last_activity_by_pull_request(transcript) == {}
+    assert activity_in(transcript) == {}
 
 
 def test_newline_ends_a_gh_command(tmp_path):
@@ -476,7 +518,7 @@ def test_newline_ends_a_gh_command(tmp_path):
         tool_result("b1", "https://github.com/acme/c/pull/3\n"),
         assistant_call(bash_call("gh pr view \\\n  4 -R acme/d")),
     )
-    assert list(last_activity_by_pull_request(transcript)) == [
+    assert list(activity_in(transcript)) == [
         PullRequest("acme", "a", 1),
         PullRequest("acme", "b", 2),
         PullRequest("acme", "c", 3),
@@ -499,7 +541,7 @@ def test_gh_pr_target_comes_after_flags_and_their_values(tmp_path):
         assistant_call(bash_call("gh pr list -L 4 -R acme/g")),
         assistant_call(bash_call("gh pr create --milestone 4 -R acme/h")),
     )
-    assert list(last_activity_by_pull_request(transcript)) == [
+    assert list(activity_in(transcript)) == [
         PullRequest("acme", "a", 5),
         PullRequest("acme", "b", 6),
         PullRequest("acme", "c", 7),

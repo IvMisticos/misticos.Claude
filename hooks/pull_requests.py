@@ -4,7 +4,7 @@ from enum import Enum, auto
 from typing import NamedTuple
 
 from gh_commands import gh_api_words, gh_argument_lists, gh_pr_call
-from transcript import dict_or_empty, numbered_entries
+from transcript import dict_or_empty
 
 NAME = r"[\w.-]+"
 LINK_END = r"(?=[/?#]|$)"
@@ -217,10 +217,10 @@ def pull_requests_in_entry(entry, result_uses):
             result_uses[call_id(block)] = use
 
 
-def last_activity_by_pull_request(transcript_path):
+def last_activity_by_pull_request(entries_with_positions):
     last_activity = {}
     result_uses = {}
-    for line_number, entry in numbered_entries(transcript_path):
+    for position, entry in entries_with_positions:
         for pull_request in pull_requests_in_entry(entry, result_uses):
-            last_activity[pull_request] = line_number
+            last_activity[pull_request] = position
     return last_activity

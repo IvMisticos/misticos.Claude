@@ -1,5 +1,7 @@
+import io
 import json
 import os
+from typing import NamedTuple
 
 from harnesses import ContextSource
 
@@ -10,6 +12,15 @@ CONTEXT_USAGE_FIELDS = (
     "cache_read_input_tokens",
     "cache_creation_input_tokens",
 )
+
+
+class TranscriptPart(NamedTuple):
+    start: int
+    lines: bytes
+
+    @property
+    def end(self):
+        return self.start + len(self.lines)
 
 
 def dict_or_empty(value):
@@ -37,9 +48,24 @@ def transcript_tail_lines(transcript_path):
     return lines if start == 0 else lines[1:]
 
 
-def transcript_lines(transcript_path):
+def bytes_from(transcript_path, offset):
     with open(transcript_path, "rb") as transcript:
-        return transcript.read().split(b"\n")
+        size = transcript.seek(0, os.SEEK_END)
+        start = offset if offset <= size else 0
+        transcript.seek(start)
+        return start, transcript.read()
+
+
+def complete_lines(data):
+    return data[: data.rfind(b"\n") + 1]
+
+
+def transcript_part_from(transcript_path, offset):
+    try:
+        start, data = bytes_from(transcript_path, offset)
+    except OSError:
+        return TranscriptPart(offset, b"")
+    return TranscriptPart(start, complete_lines(data))
 
 
 def parsed_entry(line):
@@ -65,15 +91,13 @@ def tail_entries(transcript_path):
     yield from entries_in(lines)
 
 
-def numbered_entries(transcript_path):
-    try:
-        lines = transcript_lines(transcript_path)
-    except OSError:
-        return
-    for line_number, line in enumerate(lines):
+def positioned_entries(part):
+    position = part.start
+    for line in io.BytesIO(part.lines):
         entry = parsed_entry(line)
         if entry is not None:
-            yield line_number, entry
+            yield position, entry
+        position += len(line)
 
 
 def recent_entries(transcript_path):

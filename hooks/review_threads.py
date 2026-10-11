@@ -164,9 +164,11 @@ def review_state_from(outputs, source):
             return source.parse(*outputs)
 
 
+def gh_installed():
+    return shutil.which("gh") is not None
+
+
 def review_states(pull_requests, source):
-    if not shutil.which("gh"):
-        return {}
     running = {
         pull_request: [started(command) for command in source.requests(pull_request)]
         for pull_request in pull_requests

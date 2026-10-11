@@ -9,8 +9,9 @@ from typing import NamedTuple
 from harnesses import harness_parser
 from hook_io import read_payload, run_hook, write_block
 from pull_requests import last_activity_by_pull_request
-from review_threads import review_states, thread_source
+from review_threads import gh_installed, review_states, thread_source
 from session_state import STATE_ROOT, locked_session_file, read_record, write_record
+from transcript import positioned_entries, transcript_part_from
 
 STATE_DIR = os.path.join(STATE_ROOT, "review-threads")
 SUBAGENT_STOP = "subagentstop"
@@ -20,9 +21,10 @@ class Memory(NamedTuple):
     seen: dict
     skipped: tuple
     checked: dict
+    scanned: int = 0
 
 
-EMPTY_MEMORY = Memory(seen={}, skipped=(), checked={})
+EMPTY_MEMORY = Memory(seen={}, skipped=(), checked={}, scanned=0)
 
 
 def follows_own_block(payload):
@@ -90,7 +92,7 @@ def last_comments(threads_by_pull_request):
     }
 
 
-def updated_memory(memory, states, activity):
+def updated_memory(memory, states, activity, scanned):
     skipped = {
         str(pull_request) for pull_request, state in states.items() if not state.is_open
     }
@@ -99,14 +101,24 @@ def updated_memory(memory, states, activity):
         seen=memory.seen | last_comments(open_threads(states)),
         skipped=tuple(sorted({*memory.skipped, *skipped})),
         checked=memory.checked | checked,
+        scanned=scanned,
     )
 
 
-def claim_unseen_threads(key, states, activity):
+def next_scan_start(part, activity, states):
+    unanswered = (
+        position
+        for pull_request, position in activity.items()
+        if pull_request not in states
+    )
+    return min(unanswered, default=part.end)
+
+
+def claim_unseen_threads(key, states, activity, scanned):
     with locked_session_file(STATE_DIR, key) as state_file:
         memory = read_record(state_file, EMPTY_MEMORY)
         changed = threads_with_new_comments(open_threads(states), memory.seen)
-        write_record(state_file, updated_memory(memory, states, activity))
+        write_record(state_file, updated_memory(memory, states, activity, scanned))
     return changed
 
 
@@ -117,20 +129,17 @@ def reminder(changed):
     )
 
 
-def has_unchecked_activity(memory, pull_request, line_number):
+def has_unchecked_activity(memory, pull_request, position):
     name = str(pull_request)
-    return name not in memory.skipped and line_number > memory.checked.get(name, -1)
+    return name not in memory.skipped and position > memory.checked.get(name, -1)
 
 
-def new_activity(transcript_path, key):
-    activity = last_activity_by_pull_request(transcript_path)
-    if not activity:
-        return {}
-    memory = remembered(key)
+def new_activity(part, memory):
+    activity = last_activity_by_pull_request(positioned_entries(part))
     return {
-        pull_request: line_number
-        for pull_request, line_number in activity.items()
-        if has_unchecked_activity(memory, pull_request, line_number)
+        pull_request: position
+        for pull_request, position in activity.items()
+        if has_unchecked_activity(memory, pull_request, position)
     }
 
 
@@ -139,11 +148,14 @@ def review_reminder(payload):
         return None
     key = memory_key(payload)
     transcript_path = own_transcript(payload)
-    if not (key and isinstance(transcript_path, str)):
+    if not (key and isinstance(transcript_path, str) and gh_installed()):
         return None
-    activity = new_activity(transcript_path, key)
+    memory = remembered(key)
+    part = transcript_part_from(transcript_path, memory.scanned)
+    activity = new_activity(part, memory)
     states = review_states(list(activity), thread_source())
-    changed = claim_unseen_threads(key, states, activity) if states else {}
+    scanned = next_scan_start(part, activity, states)
+    changed = claim_unseen_threads(key, states, activity, scanned)
     return reminder(changed) if changed else None
 
 
