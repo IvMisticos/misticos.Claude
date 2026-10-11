@@ -19,15 +19,17 @@ def rewritten_tool_call(payload, shape):
         return None
     prefixed = f"{session_environment_command()}; {command}"
     updated_input = {**tool_input, "command": prefixed}
-    if shape == OutputShape.CURSOR:
-        return {"permission": "allow", "updated_input": updated_input}
-    return {
-        "hookSpecificOutput": {
-            "hookEventName": "PreToolUse",
-            "permissionDecision": "allow",
-            "updatedInput": updated_input,
-        }
-    }
+    match shape:
+        case OutputShape.CURSOR:
+            return {"permission": "allow", "updated_input": updated_input}
+        case OutputShape.CLAUDE:
+            return {
+                "hookSpecificOutput": {
+                    "hookEventName": "PreToolUse",
+                    "permissionDecision": "allow",
+                    "updatedInput": updated_input,
+                }
+            }
 
 
 def main():

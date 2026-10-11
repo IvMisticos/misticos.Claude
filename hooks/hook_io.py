@@ -22,11 +22,16 @@ def scratchpad_of(payload):
 
 
 def hook_output(event, context, shape):
-    if shape == OutputShape.CURSOR:
-        return {"additional_context": context}
-    return {
-        "hookSpecificOutput": {"hookEventName": event, "additionalContext": context}
-    }
+    match shape:
+        case OutputShape.CURSOR:
+            return {"additional_context": context}
+        case OutputShape.CLAUDE:
+            return {
+                "hookSpecificOutput": {
+                    "hookEventName": event,
+                    "additionalContext": context,
+                }
+            }
 
 
 def write_context(event, context, shape=OutputShape.CLAUDE):
