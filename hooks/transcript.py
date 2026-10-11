@@ -89,6 +89,8 @@ def transcript_fits_in_tail(transcript_path):
 
 
 def context_tokens(transcript_path, source):
-    if source == ContextSource.SIZE:
-        return context_tokens_from_size(transcript_path)
-    return latest_context_tokens(transcript_path)
+    match source:
+        case ContextSource.SIZE:
+            return context_tokens_from_size(transcript_path)
+        case _:
+            return latest_context_tokens(transcript_path)
