@@ -465,3 +465,20 @@ def test_create_call_without_id_reads_no_other_entries(tmp_path):
         {"type": "user", "message": {"content": prose}},
     )
     assert last_activity_by_pull_request(transcript) == {}
+
+
+def test_newline_ends_a_gh_command(tmp_path):
+    transcript = tmp_path / "transcript.jsonl"
+    write_lines(
+        transcript,
+        assistant_call(bash_call("gh pr view 1 -R acme/a\ngh pr view 2 -R acme/b")),
+        assistant_call(bash_call("gh auth status\ngh pr create --fill", "b1")),
+        tool_result("b1", "https://github.com/acme/c/pull/3\n"),
+        assistant_call(bash_call("gh pr view \\\n  4 -R acme/d")),
+    )
+    assert list(last_activity_by_pull_request(transcript)) == [
+        PullRequest("acme", "a", 1),
+        PullRequest("acme", "b", 2),
+        PullRequest("acme", "c", 3),
+        PullRequest("acme", "d", 4),
+    ]

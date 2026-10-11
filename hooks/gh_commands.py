@@ -1,7 +1,9 @@
 import shlex
 from typing import NamedTuple
 
-SHELL_OPERATOR_CHARACTERS = frozenset("();<>|&")
+SHELL_OPERATOR_CHARACTERS = "();<>|&\n"
+WORD_SEPARATORS = " \t\r"
+LINE_CONTINUATION = "\\\n"
 REPO_FLAGS = frozenset({"-R", "--repo"})
 CREATE_SUBCOMMANDS = frozenset({"create", "new"})
 
@@ -16,8 +18,11 @@ class GhPrCall(NamedTuple):
 
 
 def words_of(text):
-    lexer = shlex.shlex(text, posix=True, punctuation_chars=True)
+    joined = text.replace(LINE_CONTINUATION, "")
+    lexer = shlex.shlex(joined, posix=True, punctuation_chars=SHELL_OPERATOR_CHARACTERS)
+    lexer.whitespace = WORD_SEPARATORS
     lexer.whitespace_split = True
+    lexer.commenters = ""
     try:
         return list(lexer)
     except ValueError:
@@ -35,7 +40,7 @@ def command_words(command):
 
 
 def is_shell_operator(word):
-    return set(word) <= SHELL_OPERATOR_CHARACTERS
+    return set(word) <= set(SHELL_OPERATOR_CHARACTERS)
 
 
 def is_gh(word):
