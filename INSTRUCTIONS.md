@@ -149,7 +149,7 @@ Drive this loop to green unprompted. Come back only when CI and the review are b
 1. Never review unfinished work. Run every check locally and fix failures before you push.
 2. Push the relevant changes and subscribe to the PR. No polling, no scheduled check-ins.
 3. Wait for remote CI. Fix failures, then repeat from step 1.
-4. With CI green, start a teammate from the reviewer agent and name the PR in its prompt. The reviewer works in your local clone: it reviews `origin/<base>...pr/N` in a new detached worktree of `pr/N`, and removes that worktree when done.
+4. With CI green, start a teammate from the reviewer agent, or on the strong model where that agent doesn't exist, and name the PR in its prompt. The reviewer works in your local clone: it reviews `origin/<base>...pr/N` in a new detached worktree of `pr/N`, and removes that worktree when done.
 5. Findings reach you as notifications; never poll. Address every reasonable finding, then repeat from step 1 until the review returns nothing. No nitpicking.
 
 For a batch of PRs, run this loop as a workflow with one item per PR.
