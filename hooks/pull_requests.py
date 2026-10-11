@@ -18,6 +18,11 @@ CALL_ID_FIELD_BY_RESULT_TYPE = {
     "function_call_output": "call_id",
 }
 CREATE_TOOL_SUFFIX = "create_pull_request"
+GITHUB_TOOL_MARKER = "github"
+ASSISTANT = "assistant"
+ARGUMENT_FIELDS = ("input", "arguments", "action")
+GH_COMMAND = re.compile(r"(?:^|[\s;&|(`])gh\s")
+GH_PR_CREATE = re.compile(r"\bgh\s+pr\s+create\b")
 
 
 class PullRequest(NamedTuple):
@@ -74,10 +79,22 @@ def pull_requests_linked_in(value):
             yield named
 
 
+def texts_outside_calls(value):
+    if isinstance(value, str):
+        yield value
+    elif isinstance(value, list):
+        for item in value:
+            yield from texts_outside_calls(item)
+    elif isinstance(value, dict) and block_type(value) not in CALL_TYPES:
+        for item in value.values():
+            yield from texts_outside_calls(item)
+
+
 def pull_request_events_in(entry):
-    for item in nested_values(entry):
-        if isinstance(item, str):
-            yield from map(matched_pull_request, PULL_REQUEST_EVENT.finditer(item))
+    if block_type(entry) == ASSISTANT:
+        return
+    for text in texts_outside_calls(entry):
+        yield from map(matched_pull_request, PULL_REQUEST_EVENT.finditer(text))
 
 
 def block_type(block):
@@ -90,8 +107,45 @@ def call_id(call):
     return found if isinstance(found, str) else None
 
 
+def call_name(call):
+    name = call.get("name")
+    return name.lower() if isinstance(name, str) else ""
+
+
+def call_arguments(call):
+    for field in ARGUMENT_FIELDS:
+        value = call.get(field)
+        arguments = embedded_json(value) if isinstance(value, str) else value
+        if isinstance(arguments, dict):
+            return arguments
+    return {}
+
+
+def shell_command(arguments):
+    command = arguments.get("command") or arguments.get("cmd")
+    if isinstance(command, list):
+        command = " ".join(part for part in command if isinstance(part, str))
+    return command if isinstance(command, str) else ""
+
+
+def gh_command(call):
+    command = shell_command(call_arguments(call))
+    return command if GH_COMMAND.search(command) else ""
+
+
 def creates_a_pull_request(call):
-    return str(call.get("name") or "").endswith(CREATE_TOOL_SUFFIX)
+    return call_name(call).endswith(CREATE_TOOL_SUFFIX) or bool(
+        GH_PR_CREATE.search(gh_command(call))
+    )
+
+
+def pull_requests_in_call(call):
+    arguments = call_arguments(call)
+    if named := pull_request_in_arguments(arguments):
+        yield named
+    if GITHUB_TOOL_MARKER in call_name(call):
+        yield from pull_requests_linked_in(arguments)
+    yield from pull_requests_in_text(gh_command(call))
 
 
 def answered_call_id(block):
@@ -105,7 +159,7 @@ def pull_requests_in_entry(entry, creating_calls):
     blocks = (item for item in nested_values(entry) if isinstance(item, dict))
     for block in blocks:
         if block_type(block) in CALL_TYPES:
-            yield from pull_requests_linked_in(block)
+            yield from pull_requests_in_call(block)
             if creates_a_pull_request(block) and call_id(block):
                 creating_calls.add(call_id(block))
         elif answered_call_id(block) in creating_calls:

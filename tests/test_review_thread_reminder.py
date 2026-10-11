@@ -296,8 +296,9 @@ def tool_result(call_id, text):
     return {"type": "user", "message": {"content": [result]}}
 
 
-def bash_call(command):
-    return {"type": "tool_use", "name": "Bash", "input": {"command": command}}
+def bash_call(command, call_id="b0"):
+    command_input = {"command": command}
+    return {"type": "tool_use", "id": call_id, "name": "Bash", "input": command_input}
 
 
 def test_finds_pull_requests_the_session_worked_on(tmp_path):
@@ -311,8 +312,20 @@ def test_finds_pull_requests_the_session_worked_on(tmp_path):
     event = 'activity <event>{"pr":"acme/gadgets#3"}</event>'
     codex_call = {
         "type": "function_call",
+        "name": "mcp__github__pull_request_read",
         "call_id": "x1",
         "arguments": json.dumps({"owner": "acme", "repo": "tools", "pullNumber": 4}),
+    }
+    codex_create = {
+        "type": "function_call",
+        "call_id": "call_1",
+        "name": "shell",
+        "arguments": json.dumps({"command": ["bash", "-lc", "gh pr create --fill"]}),
+    }
+    codex_created = {
+        "type": "function_call_output",
+        "call_id": "call_1",
+        "output": "https://github.com/acme/apps/pull/8\n",
     }
     transcript = tmp_path / "transcript.jsonl"
     write_lines(
@@ -324,6 +337,10 @@ def test_finds_pull_requests_the_session_worked_on(tmp_path):
         {"type": "response_item", "payload": codex_call},
         assistant_call(bash_call("gh pr view https://github.com/acme/cli/pull/5")),
         assistant_call(bash_call("gh api repos/acme/api/pulls/6/comments")),
+        assistant_call(bash_call("gh pr create --fill", call_id="b1")),
+        tool_result("b1", "https://github.com/acme/web/pull/10\n"),
+        {"type": "response_item", "payload": codex_create},
+        {"type": "response_item", "payload": codex_created},
         tool_use(PULL_REQUEST),
     )
     assert list(last_activity_by_pull_request(transcript)) == [
@@ -333,10 +350,13 @@ def test_finds_pull_requests_the_session_worked_on(tmp_path):
         PullRequest("acme", "tools", 4),
         PullRequest("acme", "cli", 5),
         PullRequest("acme", "api", 6),
+        PullRequest("acme", "web", 10),
+        PullRequest("acme", "apps", 8),
     ]
 
 
-def test_ignores_pull_requests_seen_only_in_results_and_prose(tmp_path):
+def test_ignores_pull_requests_the_session_only_saw(tmp_path):
+    link = "https://github.com/acme/widgets/pull/2"
     listing = {
         "type": "tool_use",
         "id": "l1",
@@ -347,14 +367,22 @@ def test_ignores_pull_requests_seen_only_in_results_and_prose(tmp_path):
         "html_url": "https://github.com/acme/widgets/pull/1",
         "url": "https://api.github.com/repos/acme/widgets/pulls/1",
     }
-    prose = "Compare with https://github.com/acme/widgets/pull/2"
+    fetch = {"type": "tool_use", "name": "WebFetch", "input": {"url": link}}
+    write = {
+        "type": "tool_use",
+        "name": "Write",
+        "input": {"content": f'see {link} and {{"pr":"acme/widgets#3"}}'},
+    }
     transcript = tmp_path / "transcript.jsonl"
     write_lines(
         transcript,
         assistant_call(listing),
         tool_result("l1", json.dumps([listed])),
-        {"type": "user", "message": {"content": prose}},
-        assistant_call({"type": "text", "text": prose}),
+        assistant_call(fetch),
+        assistant_call(write),
+        assistant_call(bash_call(f"git commit -m 'Port {link}'")),
+        {"type": "user", "message": {"content": f"Compare with {link}"}},
+        assistant_call({"type": "text", "text": link}),
     )
     assert last_activity_by_pull_request(transcript) == {}
 
