@@ -6,6 +6,7 @@
 import sys
 from pathlib import Path
 
+from agent_types import AgentType
 from harnesses import ContextSource, harness_parser
 from hook_io import read_payload, run_hook, write_context
 from reminder_baselines import (
@@ -15,6 +16,7 @@ from reminder_baselines import (
     fire_id,
     forget_baseline,
 )
+from rule_sections import RuleSection
 from rules_copy import (
     GROWN_PREAMBLE,
     SESSION_START_PREAMBLE,
@@ -26,20 +28,20 @@ from transcript import context_tokens, payload_tokens, transcript_fits_in_tail
 
 RULES_PATH = str(Path(__file__).resolve().parent.parent / "INSTRUCTIONS.md")
 ORCHESTRATOR_ONLY_SECTIONS = frozenset(
-    {"Issue tracking", "Pull requests", "Delegation"}
+    {RuleSection.ISSUE_TRACKING, RuleSection.PULL_REQUESTS, RuleSection.DELEGATION}
 )
 SECTIONS_SKIPPED_BY_AGENT_TYPE = {
-    "misticos:coder": ORCHESTRATOR_ONLY_SECTIONS | {"Reviews"},
-    "misticos:engineer": ORCHESTRATOR_ONLY_SECTIONS | {"Reviews"},
-    "misticos:reviewer": ORCHESTRATOR_ONLY_SECTIONS,
-    "misticos:witness": ORCHESTRATOR_ONLY_SECTIONS
+    AgentType.CODER: ORCHESTRATOR_ONLY_SECTIONS | {RuleSection.REVIEWS},
+    AgentType.ENGINEER: ORCHESTRATOR_ONLY_SECTIONS | {RuleSection.REVIEWS},
+    AgentType.REVIEWER: ORCHESTRATOR_ONLY_SECTIONS,
+    AgentType.WITNESS: ORCHESTRATOR_ONLY_SECTIONS
     | {
-        "Communication",
-        "Code",
-        "Engineering",
-        "Git",
-        "Reviews",
-        "Your behaviour",
+        RuleSection.COMMUNICATION,
+        RuleSection.CODE,
+        RuleSection.ENGINEERING,
+        RuleSection.GIT,
+        RuleSection.REVIEWS,
+        RuleSection.YOUR_BEHAVIOUR,
     },
 }
 
