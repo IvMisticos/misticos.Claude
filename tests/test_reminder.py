@@ -115,6 +115,7 @@ def subagent_rules(home, agent_type):
 def test_worker_types_skip_their_sections(home, agent_type):
     sent = subagent_rules(home, agent_type)
     skipped = SECTIONS_SKIPPED_BY_AGENT_TYPE[agent_type]
+    assert skipped <= {heading.removeprefix("# ") for heading in rule_headings()}
     for heading in rule_headings():
         assert (heading in sent) == (heading.removeprefix("# ") not in skipped)
 
