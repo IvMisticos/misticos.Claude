@@ -13,7 +13,7 @@ query($owner: String!, $repo: String!, $number: Int!) {
   repository(owner: $owner, name: $repo) {
     pullRequest(number: $number) {
       state
-      reviewThreads(first: 100) {
+      reviewThreads(last: 100) {
         nodes { id isResolved comments(last: 1) { nodes { databaseId } } }
       }
     }
