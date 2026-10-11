@@ -7,6 +7,7 @@ from collections.abc import Callable
 from typing import NamedTuple
 
 GH_TIMEOUT_SECONDS = 10
+FINISHED_OUTPUT_WAIT_SECONDS = 0.1
 THREADS_QUERY = """
 query($owner: String!, $repo: String!, $number: Int!) {
   repository(owner: $owner, name: $repo) {
@@ -102,9 +103,13 @@ def started(command):
     )
 
 
+def time_left(deadline):
+    return max(FINISHED_OUTPUT_WAIT_SECONDS, deadline - time.monotonic())
+
+
 def output_by(deadline, process):
     try:
-        output, _ = process.communicate(timeout=max(0, deadline - time.monotonic()))
+        output, _ = process.communicate(timeout=time_left(deadline))
     except subprocess.TimeoutExpired:
         process.kill()
         process.communicate()

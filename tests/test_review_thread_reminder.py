@@ -1,6 +1,7 @@
 import json
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -8,6 +9,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
 
 from pull_requests import PullRequest, touched_pull_requests
+from review_threads import output_by, started
 
 ROOT = Path(__file__).resolve().parent.parent
 HOOK = ROOT / "hooks" / "review_thread_reminder.py"
@@ -208,6 +210,12 @@ def test_subagent_leaves_the_parent_reminder_unclaimed(
     )
     assert run_hook(home, gh_path, subagent) == blocked(1)
     assert run_hook(home, gh_path, stop(transcript)) == blocked(1)
+
+
+def test_call_that_finished_counts_after_the_deadline():
+    process = started([sys.executable, "-c", "print('done')"])
+    process.wait()
+    assert output_by(time.monotonic() - 1, process) == "done\n"
 
 
 def test_remote_session_reads_review_threads_route(
