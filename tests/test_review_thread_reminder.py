@@ -305,6 +305,19 @@ def test_stop_reads_only_lines_added_since_the_last_stop(
     assert run_hook(home, gh_path, stop(transcript)) == blocked()
 
 
+def test_shrunk_transcript_checks_its_activity_again(
+    home, gh_path, responses, tmp_path
+):
+    answer_graphql(responses, Thread("T1", [1]))
+    transcript = tmp_path / "transcript.jsonl"
+    filler = same_length_filler(tool_use(PULL_REQUEST))
+    write_lines(transcript, filler, filler, tool_use(PULL_REQUEST))
+    assert run_hook(home, gh_path, stop(transcript)) == blocked()
+    answer_graphql(responses, Thread("T1", [1, 2]))
+    write_lines(transcript, tool_use(PULL_REQUEST))
+    assert run_hook(home, gh_path, stop(transcript)) == blocked()
+
+
 def test_transcript_part_ends_at_the_last_complete_line(tmp_path):
     transcript = tmp_path / "transcript.jsonl"
     transcript.write_bytes(b'{"a": 1}\n{"b": 2}\n{"c"')
