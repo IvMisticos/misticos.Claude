@@ -122,9 +122,11 @@ def test_worker_types_skip_their_sections(home, agent_type):
         assert (heading in sent) == (heading.removeprefix("# ") not in skipped)
 
 
-def test_rule_sections_name_real_headings():
-    headings = RULES.read_text().splitlines()
-    assert all(f"# {section}" in headings for section in RuleSection)
+def test_rule_sections_match_headings():
+    headings = [
+        line for line in RULES.read_text().splitlines() if line.startswith("# ")
+    ]
+    assert [f"# {section}" for section in RuleSection] == headings
 
 
 def test_agent_types_name_real_agents():

@@ -3,11 +3,14 @@ from enum import StrEnum
 
 class RuleSection(StrEnum):
     COMMUNICATION = "Communication"
+    CLARITY = "Clarity"
+    NEVER_SOUND_LIKE_AN_AI = "Never sound like an AI"
     CODE = "Code"
     ENGINEERING = "Engineering"
-    GIT = "Git"
-    YOUR_BEHAVIOUR = "Your behaviour"
+    USER_INTERFACE = "User interface"
     ISSUE_TRACKING = "Issue tracking"
+    GIT = "Git"
     PULL_REQUESTS = "Pull requests"
-    DELEGATION = "Delegation"
     REVIEWS = "Reviews"
+    YOUR_BEHAVIOUR = "Your behaviour"
+    DELEGATION = "Delegation"
