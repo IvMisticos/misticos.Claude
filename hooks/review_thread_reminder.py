@@ -4,17 +4,26 @@
 # ///
 
 import os
+from typing import NamedTuple
 
 from harnesses import harness_parser
 from hook_io import read_payload, run_hook, write_block
 from pull_requests import touched_pull_requests
-from review_threads import thread_source, unresolved_threads_by_pull_request
+from review_threads import review_states, thread_source
 from session_state import STATE_ROOT, locked_session_file, read_json, write_json
 from transcript import dict_or_empty
 
 STATE_DIR = os.path.join(STATE_ROOT, "review-threads")
 SUBAGENT_STOP = "subagentstop"
 ADVICE = "Resolve the ones you addressed; leave open the ones waiting on someone else."
+
+
+class Memory(NamedTuple):
+    seen: dict
+    closed: frozenset
+
+    def to_json(self):
+        return {"seen": self.seen, "closed": sorted(self.closed)}
 
 
 def follows_own_block(payload):
@@ -45,11 +54,29 @@ def memory_key(payload):
     return session_id
 
 
-def parsed_seen(stored):
-    return {
+def parsed_memory(stored):
+    stored = dict_or_empty(stored)
+    seen = {
         thread_id: comment_id
-        for thread_id, comment_id in dict_or_empty(stored).items()
+        for thread_id, comment_id in dict_or_empty(stored.get("seen")).items()
         if isinstance(comment_id, int)
+    }
+    closed = stored.get("closed")
+    if not isinstance(closed, list):
+        return Memory(seen, frozenset())
+    return Memory(seen, frozenset(name for name in closed if isinstance(name, str)))
+
+
+def remembered(key):
+    with locked_session_file(STATE_DIR, key) as state_file:
+        return parsed_memory(read_json(state_file))
+
+
+def open_threads(states):
+    return {
+        pull_request: state.unresolved_threads
+        for pull_request, state in states.items()
+        if state.is_open
     }
 
 
@@ -77,11 +104,20 @@ def last_comments(threads_by_pull_request):
     }
 
 
-def claim_new_activity(key, threads_by_pull_request):
+def updated_memory(memory, states):
+    closed = {
+        str(pull_request) for pull_request, state in states.items() if not state.is_open
+    }
+    return Memory(
+        memory.seen | last_comments(open_threads(states)), memory.closed | closed
+    )
+
+
+def claim_new_activity(key, states):
     with locked_session_file(STATE_DIR, key) as state_file:
-        seen = parsed_seen(read_json(state_file))
-        changed = threads_with_new_comments(threads_by_pull_request, seen)
-        write_json(state_file, seen | last_comments(threads_by_pull_request))
+        memory = parsed_memory(read_json(state_file))
+        changed = threads_with_new_comments(open_threads(states), memory.seen)
+        write_json(state_file, updated_memory(memory, states).to_json())
     return changed
 
 
@@ -102,6 +138,14 @@ def reminder(changed):
     return " ".join([*lines, ADVICE])
 
 
+def pull_requests_to_check(transcript_path, key):
+    touched = touched_pull_requests(transcript_path)
+    if not touched:
+        return []
+    closed = remembered(key).closed
+    return [pull_request for pull_request in touched if str(pull_request) not in closed]
+
+
 def main():
     options = harness_parser().parse_args()
     payload = read_payload()
@@ -111,9 +155,9 @@ def main():
     transcript_path = own_transcript(payload)
     if not (key and isinstance(transcript_path, str)):
         return
-    pull_requests = touched_pull_requests(transcript_path)
-    threads = unresolved_threads_by_pull_request(pull_requests, thread_source())
-    changed = claim_new_activity(key, threads) if threads else {}
+    pull_requests = pull_requests_to_check(transcript_path, key)
+    states = review_states(pull_requests, thread_source())
+    changed = claim_new_activity(key, states) if states else {}
     if changed:
         write_block(reminder(changed), options.harness.output_shape)
 

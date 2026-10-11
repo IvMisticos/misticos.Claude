@@ -16,6 +16,7 @@ HOOK = ROOT / "hooks" / "review_thread_reminder.py"
 PULL_REQUEST = PullRequest("acme", "widgets", 7)
 ADVICE = "Resolve the ones you addressed; leave open the ones waiting on someone else."
 FAKE_GH = """#!/bin/bash
+printf '%s\\n' "$*" >> {responses}/calls.log
 case "$*" in
   *graphql*) response={responses}/graphql.json ;;
   *ccr/review_threads*) response={responses}/threads.json ;;
@@ -210,6 +211,17 @@ def test_subagent_leaves_the_parent_reminder_unclaimed(
     )
     assert run_hook(home, gh_path, subagent) == blocked(1)
     assert run_hook(home, gh_path, stop(transcript)) == blocked(1)
+
+
+def test_finished_pull_request_is_not_queried_again(
+    home, gh_path, responses, transcript
+):
+    answer_graphql(responses, state="MERGED")
+    run_hook(home, gh_path, stop(transcript))
+    calls = responses / "calls.log"
+    calls.unlink()
+    assert run_hook(home, gh_path, stop(transcript)) is None
+    assert not calls.exists()
 
 
 def test_call_that_finished_counts_after_the_deadline():

@@ -27,6 +27,14 @@ class ReviewThread(NamedTuple):
     last_comment_id: int
 
 
+class ReviewState(NamedTuple):
+    is_open: bool
+    unresolved_threads: tuple = ()
+
+
+CLOSED = ReviewState(is_open=False)
+
+
 class ThreadSource(NamedTuple):
     requests: Callable
     parse: Callable
@@ -50,16 +58,19 @@ def graphql_requests(pull_request):
     ]
 
 
-def graphql_unresolved_threads(output):
+def graphql_review_state(output):
     try:
         pull_request = json.loads(output)["data"]["repository"]["pullRequest"]
         if pull_request["state"] != "OPEN":
-            return None
-        return [
-            ReviewThread(node["id"], node["comments"]["nodes"][-1]["databaseId"])
-            for node in pull_request["reviewThreads"]["nodes"]
-            if not node["isResolved"]
-        ]
+            return CLOSED
+        return ReviewState(
+            is_open=True,
+            unresolved_threads=tuple(
+                ReviewThread(node["id"], node["comments"]["nodes"][-1]["databaseId"])
+                for node in pull_request["reviewThreads"]["nodes"]
+                if not node["isResolved"]
+            ),
+        )
     except (json.JSONDecodeError, KeyError, TypeError, IndexError):
         return None
 
@@ -72,21 +83,24 @@ def remote_requests(pull_request):
     ]
 
 
-def remote_unresolved_threads(state_output, threads_output):
+def remote_review_state(state_output, threads_output):
     if state_output.strip() != "open":
-        return None
+        return CLOSED
     try:
-        return [
-            ReviewThread(str(thread["comment_ids"][0]), thread["comment_ids"][-1])
-            for thread in json.loads(threads_output)
-            if not thread["resolved"]
-        ]
+        return ReviewState(
+            is_open=True,
+            unresolved_threads=tuple(
+                ReviewThread(str(thread["comment_ids"][0]), thread["comment_ids"][-1])
+                for thread in json.loads(threads_output)
+                if not thread["resolved"]
+            ),
+        )
     except (json.JSONDecodeError, KeyError, TypeError, IndexError):
         return None
 
 
-GRAPHQL = ThreadSource(graphql_requests, graphql_unresolved_threads)
-REMOTE = ThreadSource(remote_requests, remote_unresolved_threads)
+GRAPHQL = ThreadSource(graphql_requests, graphql_review_state)
+REMOTE = ThreadSource(remote_requests, remote_review_state)
 
 
 def thread_source():
@@ -117,7 +131,7 @@ def output_by(deadline, process):
     return output if process.returncode == 0 else None
 
 
-def unresolved_threads_by_pull_request(pull_requests, source):
+def review_states(pull_requests, source):
     if not shutil.which("gh"):
         return {}
     running = {
@@ -125,10 +139,10 @@ def unresolved_threads_by_pull_request(pull_requests, source):
         for pull_request in pull_requests
     }
     deadline = time.monotonic() + GH_TIMEOUT_SECONDS
-    threads_by_pull_request = {}
+    states = {}
     for pull_request, processes in running.items():
         outputs = [output_by(deadline, process) for process in processes]
-        threads = None if None in outputs else source.parse(*outputs)
-        if threads is not None:
-            threads_by_pull_request[pull_request] = threads
-    return threads_by_pull_request
+        state = None if None in outputs else source.parse(*outputs)
+        if state is not None:
+            states[pull_request] = state
+    return states
