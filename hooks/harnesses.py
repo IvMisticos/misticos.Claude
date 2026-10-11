@@ -2,8 +2,6 @@ import argparse
 from enum import Enum, auto
 from typing import NamedTuple
 
-from agent_types import AgentType
-
 
 class ContextSource(Enum):
     TRANSCRIPT = auto()
@@ -25,7 +23,6 @@ class Harness(NamedTuple):
     model_names: dict
     context_from: ContextSource
     output_shape: OutputShape
-    skipped_agent_types: frozenset = frozenset()
     reply_history: ReplyHistory = ReplyHistory.EVENTS
 
 
@@ -39,7 +36,6 @@ HARNESSES = {
         },
         context_from=ContextSource.TRANSCRIPT,
         output_shape=OutputShape.CLAUDE,
-        skipped_agent_types=frozenset({AgentType.SCOUT, AgentType.WATCHER}),
         reply_history=ReplyHistory.TRANSCRIPT,
     ),
     "codex": Harness(
