@@ -196,6 +196,20 @@ def test_subagent_checks_its_own_transcript(home, gh_path, responses, tmp_path):
     assert run_hook(home, gh_path, payload) is None
 
 
+def test_subagent_leaves_the_parent_reminder_unclaimed(
+    home, gh_path, responses, transcript
+):
+    answer_graphql(responses, Thread("T1", [1]))
+    subagent = stop(
+        transcript,
+        hook_event_name="SubagentStop",
+        agent_id="a1",
+        agent_transcript_path=str(transcript),
+    )
+    assert run_hook(home, gh_path, subagent) == blocked(1)
+    assert run_hook(home, gh_path, stop(transcript)) == blocked(1)
+
+
 def test_remote_session_reads_review_threads_route(
     home, gh_path, responses, transcript
 ):

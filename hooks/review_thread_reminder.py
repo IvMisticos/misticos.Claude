@@ -35,6 +35,16 @@ def own_transcript(payload):
     return payload.get("transcript_path")
 
 
+def memory_key(payload):
+    session_id = payload.get("session_id") or payload.get("conversation_id")
+    agent_id = payload.get("agent_id")
+    if not isinstance(session_id, str):
+        return None
+    if isinstance(agent_id, str) and agent_id:
+        return f"{session_id}-{agent_id}"
+    return session_id
+
+
 def parsed_seen(stored):
     return {
         thread_id: comment_id
@@ -67,8 +77,8 @@ def last_comments(threads_by_pull_request):
     }
 
 
-def claim_new_activity(session_id, threads_by_pull_request):
-    with locked_session_file(STATE_DIR, session_id) as state_file:
+def claim_new_activity(key, threads_by_pull_request):
+    with locked_session_file(STATE_DIR, key) as state_file:
         seen = parsed_seen(read_json(state_file))
         changed = threads_with_new_comments(threads_by_pull_request, seen)
         write_json(state_file, seen | last_comments(threads_by_pull_request))
@@ -97,13 +107,13 @@ def main():
     payload = read_payload()
     if follows_own_block(payload) or stopped_on_purpose(payload):
         return
-    session_id = payload.get("session_id") or payload.get("conversation_id")
+    key = memory_key(payload)
     transcript_path = own_transcript(payload)
-    if not (isinstance(session_id, str) and isinstance(transcript_path, str)):
+    if not (key and isinstance(transcript_path, str)):
         return
     pull_requests = touched_pull_requests(transcript_path)
     threads = unresolved_threads_by_pull_request(pull_requests, thread_source())
-    changed = claim_new_activity(session_id, threads) if threads else {}
+    changed = claim_new_activity(key, threads) if threads else {}
     if changed:
         write_block(reminder(changed), options.harness.output_shape)
 
