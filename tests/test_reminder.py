@@ -135,7 +135,7 @@ def test_agents_name_real_agent_files():
         for line in path.read_text().splitlines()
         if line.startswith("name: ")
     }
-    assert {agent.name.removeprefix("misticos:") for agent in AGENTS} <= names
+    assert {agent.name.removeprefix("misticos:") for agent in AGENTS} == names
 
 
 def test_other_subagents_get_every_section(home):
@@ -148,12 +148,9 @@ def test_other_subagents_get_every_section(home):
     [agent for agent in AGENTS if not agent.rule_sections],
     ids=lambda agent: agent.name,
 )
-def test_agents_without_sections_get_nothing(home, agent):
-    payload = {
-        "hook_event_name": "SubagentStart",
-        "agent_id": "a1",
-        "agent_type": agent.name,
-    }
+@pytest.mark.parametrize("ids", [{"agent_id": "a1"}, {}], ids=["with-id", "without-id"])
+def test_agents_without_sections_get_nothing(home, agent, ids):
+    payload = {"hook_event_name": "SubagentStart", "agent_type": agent.name, **ids}
     assert all_parts(home, payload) == [None] * PARTS
 
 

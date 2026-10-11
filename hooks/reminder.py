@@ -70,16 +70,26 @@ def event_name(payload):
     return str(payload.get("hook_event_name"))
 
 
+def is_subagent_start(payload):
+    return bool(
+        payload.get("agent_id")
+        or payload.get("subagent_id")
+        or event_name(payload).lower() == "subagentstart"
+    )
+
+
 def session_start_reminder(rules, payload, options):
-    is_subagent = payload.get("agent_id") or payload.get("subagent_id")
+    is_subagent = is_subagent_start(payload)
     if options.part == 1 and payload.get("session_id") and not is_subagent:
         forget_baseline(payload["session_id"])
-    skipped = (
-        ALL_SECTIONS - rule_sections_for(payload.get("agent_type"))
-        if is_subagent
-        else frozenset()
+    sections = (
+        rule_sections_for(payload.get("agent_type")) if is_subagent else ALL_SECTIONS
     )
-    messages = full_copy_messages(rules, SESSION_START_PREAMBLE, skipped)
+    if not sections:
+        return None
+    messages = full_copy_messages(
+        rules, SESSION_START_PREAMBLE, ALL_SECTIONS - sections
+    )
     if len(messages) > options.entries:
         return pointer_reminder(rules) if options.part == 1 else None
     return message_for_part(COPY, options.part, messages, rules)
