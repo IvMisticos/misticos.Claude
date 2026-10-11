@@ -76,6 +76,14 @@
             "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/run.sh\" reminder.py 4 4"
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/run.sh\" reply_nags.py"
+          }
+        ]
       }
     ],
     "PostToolBatch": [
@@ -104,6 +112,14 @@
           {
             "type": "command",
             "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/run.sh\" disk_space.py"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/run.sh\" reply_nags.py"
           }
         ]
       }
