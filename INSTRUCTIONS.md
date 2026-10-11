@@ -134,6 +134,8 @@ Use tools and MCPs for Git over API and commands. If unsure, search for them onc
 
 # Pull requests
 
+One matter per PR: give each unrelated change its own PR, however small.
+
 Put the issue tracker ID only in the PR title.
 
 Don't restate the code. Write no PR body if the diff leaves no important question open. Otherwise a short lead and at most one detail section. Most need no section.
