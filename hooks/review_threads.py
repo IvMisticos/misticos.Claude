@@ -8,6 +8,7 @@ from enum import Enum, auto
 from typing import NamedTuple
 
 GH_TIMEOUT_SECONDS = 10
+NOT_FOUND_ERRORS = ("(HTTP 404)", "Could not resolve to a")
 FINISHED_OUTPUT_WAIT_SECONDS = 0.1
 THREADS_QUERY = """
 query($owner: String!, $repo: String!, $number: Int!) {
@@ -37,8 +38,8 @@ NOT_OPEN = ReviewState(is_open=False)
 
 
 class CallFailure(Enum):
-    TIMED_OUT = auto()
-    FAILED = auto()
+    NOT_FOUND = auto()
+    RETRYABLE = auto()
 
 
 class ThreadSource(NamedTuple):
@@ -78,7 +79,7 @@ def graphql_review_state(output):
             ),
         )
     except (json.JSONDecodeError, KeyError, TypeError, IndexError):
-        return NOT_OPEN
+        return None
 
 
 def remote_requests(pull_request):
@@ -90,8 +91,11 @@ def remote_requests(pull_request):
 
 
 def remote_review_state(state_output, threads_output):
-    if state_output.strip() != "open":
+    state = state_output.strip()
+    if state == "closed":
         return NOT_OPEN
+    if state != "open":
+        return None
     try:
         return ReviewState(
             is_open=True,
@@ -102,7 +106,7 @@ def remote_review_state(state_output, threads_output):
             ),
         )
     except (json.JSONDecodeError, KeyError, TypeError, IndexError):
-        return NOT_OPEN
+        return None
 
 
 GRAPHQL = ThreadSource(graphql_requests, graphql_review_state)
@@ -118,7 +122,7 @@ def started(command):
         command,
         stdin=subprocess.DEVNULL,
         stdout=subprocess.PIPE,
-        stderr=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
         text=True,
     )
 
@@ -127,14 +131,28 @@ def time_left(deadline):
     return max(FINISHED_OUTPUT_WAIT_SECONDS, deadline - time.monotonic())
 
 
+def failure_from(error):
+    if any(marker in error for marker in NOT_FOUND_ERRORS):
+        return CallFailure.NOT_FOUND
+    return CallFailure.RETRYABLE
+
+
 def output_by(deadline, process):
     try:
-        output, _ = process.communicate(timeout=time_left(deadline))
+        output, error = process.communicate(timeout=time_left(deadline))
     except subprocess.TimeoutExpired:
         process.kill()
         process.communicate()
-        return CallFailure.TIMED_OUT
-    return output if process.returncode == 0 else CallFailure.FAILED
+        return CallFailure.RETRYABLE
+    return output if process.returncode == 0 else failure_from(error)
+
+
+def review_state_from(outputs, source):
+    if CallFailure.RETRYABLE in outputs:
+        return None
+    if CallFailure.NOT_FOUND in outputs:
+        return NOT_OPEN
+    return source.parse(*outputs)
 
 
 def review_states(pull_requests, source):
@@ -148,8 +166,7 @@ def review_states(pull_requests, source):
     states = {}
     for pull_request, processes in running.items():
         outputs = [output_by(deadline, process) for process in processes]
-        if CallFailure.TIMED_OUT in outputs:
-            continue
-        failed = CallFailure.FAILED in outputs
-        states[pull_request] = NOT_OPEN if failed else source.parse(*outputs)
+        state = review_state_from(outputs, source)
+        if state is not None:
+            states[pull_request] = state
     return states

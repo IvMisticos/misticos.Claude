@@ -22,6 +22,10 @@ case "$*" in
   *ccr/review_threads*) response={responses}/threads.json ;;
   *) response={responses}/state.txt ;;
 esac
+if [ -f {responses}/error.txt ]; then
+  printf '%s\\n' "$(<{responses}/error.txt)" >&2
+  exit 1
+fi
 [ -f "$response" ] || exit 1
 printf '%s\\n' "$(<"$response")"
 """
@@ -183,8 +187,14 @@ def test_finished_pull_request_stays_silent(
     assert run_hook(home, gh_path, stop(transcript)) is None
 
 
-def test_gh_failure_stays_silent(home, gh_path, transcript):
+def test_gh_failure_stays_silent_and_retries_next_stop(
+    home, gh_path, responses, transcript
+):
+    (responses / "error.txt").write_text("gh: Bad Gateway (HTTP 502)")
     assert run_hook(home, gh_path, stop(transcript)) is None
+    (responses / "error.txt").unlink()
+    answer_graphql(responses, Thread("T1", [1]))
+    assert run_hook(home, gh_path, stop(transcript)) == blocked()
 
 
 def test_missing_gh_stays_silent(home, tmp_path, transcript):
@@ -228,12 +238,20 @@ def test_subagent_leaves_the_parent_reminder_unclaimed(
     assert run_hook(home, gh_path, stop(transcript)) == blocked()
 
 
-@pytest.mark.parametrize("gh_answers", [True, False])
-def test_pull_request_seen_not_open_is_not_queried_again(
-    home, gh_path, responses, transcript, gh_answers
+def merged(responses):
+    answer_graphql(responses, state="MERGED")
+
+
+def missing(responses):
+    error = "gh: Could not resolve to a Repository with the name 'acme/widgets'."
+    (responses / "error.txt").write_text(error)
+
+
+@pytest.mark.parametrize("answer", [merged, missing])
+def test_merged_or_missing_pull_request_is_not_queried_again(
+    home, gh_path, responses, transcript, answer
 ):
-    if gh_answers:
-        answer_graphql(responses, state="MERGED")
+    answer(responses)
     run_hook(home, gh_path, stop(transcript))
     calls = responses / "calls.log"
     calls.unlink()
