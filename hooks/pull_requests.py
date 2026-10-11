@@ -5,11 +5,19 @@ from typing import NamedTuple
 from transcript import all_entries
 
 NAME = r"[\w.-]+"
-PULL_REQUEST_MENTIONS = (
-    re.compile(rf'"pr"\s*:\s*"({NAME})/({NAME})#(\d+)"'),
+PULL_REQUEST_EVENT = re.compile(rf'"pr"\s*:\s*"({NAME})/({NAME})#(\d+)"')
+PULL_REQUEST_LINKS = (
     re.compile(rf"github\.com/({NAME})/({NAME})/pull/(\d+)"),
     re.compile(rf"repos/({NAME})/({NAME})/pulls/(\d+)"),
 )
+CALL_TYPES = frozenset(
+    {"tool_use", "function_call", "custom_tool_call", "local_shell_call"}
+)
+CALL_ID_FIELD_BY_RESULT_TYPE = {
+    "tool_result": "tool_use_id",
+    "function_call_output": "call_id",
+}
+CREATE_TOOL_SUFFIX = "create_pull_request"
 
 
 class PullRequest(NamedTuple):
@@ -43,35 +51,66 @@ def embedded_json(text):
         return None
 
 
-def pull_requests_in_object(value):
-    named = pull_request_in_arguments(value)
-    if named:
-        yield named
-    for item in value.values():
-        yield from pull_requests_in(item)
+def nested_values(value):
+    yield value
+    if isinstance(value, dict):
+        value = list(value.values())
+    if isinstance(value, list):
+        for item in value:
+            yield from nested_values(item)
 
 
 def pull_requests_in_text(text):
-    for mention in PULL_REQUEST_MENTIONS:
-        for match in mention.finditer(text):
-            yield matched_pull_request(match)
-    yield from pull_requests_in(embedded_json(text))
+    for link in PULL_REQUEST_LINKS:
+        yield from map(matched_pull_request, link.finditer(text))
+    yield from pull_requests_linked_in(embedded_json(text))
 
 
-def pull_requests_in(value):
-    if isinstance(value, dict):
-        yield from pull_requests_in_object(value)
-    elif isinstance(value, list):
-        for item in value:
-            yield from pull_requests_in(item)
-    elif isinstance(value, str):
-        yield from pull_requests_in_text(value)
+def pull_requests_linked_in(value):
+    for item in nested_values(value):
+        if isinstance(item, str):
+            yield from pull_requests_in_text(item)
+        elif isinstance(item, dict) and (named := pull_request_in_arguments(item)):
+            yield named
+
+
+def pull_request_events_in(entry):
+    for item in nested_values(entry):
+        if isinstance(item, str):
+            yield from map(matched_pull_request, PULL_REQUEST_EVENT.finditer(item))
+
+
+def block_type(block):
+    kind = block.get("type")
+    return kind if isinstance(kind, str) else ""
+
+
+def call_id(call):
+    found = call.get("id") or call.get("call_id")
+    return found if isinstance(found, str) else None
+
+
+def creates_a_pull_request(call):
+    return str(call.get("name") or "").endswith(CREATE_TOOL_SUFFIX)
+
+
+def answered_call_id(block):
+    field = CALL_ID_FIELD_BY_RESULT_TYPE.get(block_type(block))
+    answered = block.get(field) if field else None
+    return answered if isinstance(answered, str) else None
 
 
 def touched_pull_requests(transcript_path):
-    found = (
-        pull_request
-        for entry in all_entries(transcript_path)
-        for pull_request in pull_requests_in(entry)
-    )
+    found = []
+    creating_calls = set()
+    for entry in all_entries(transcript_path):
+        found.extend(pull_request_events_in(entry))
+        blocks = (item for item in nested_values(entry) if isinstance(item, dict))
+        for block in blocks:
+            if block_type(block) in CALL_TYPES:
+                found.extend(pull_requests_linked_in(block))
+                if creates_a_pull_request(block):
+                    creating_calls.add(call_id(block))
+            elif answered_call_id(block) in creating_calls:
+                found.extend(pull_requests_linked_in(block))
     return list(dict.fromkeys(found))

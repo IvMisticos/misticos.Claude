@@ -268,27 +268,43 @@ def test_cursor_stays_silent_after_a_follow_up_or_abort(
     assert run_hook(home, gh_path, payload, "--harness", "cursor") is None
 
 
-def test_finds_pull_requests_the_session_touched(tmp_path):
+def assistant_call(block):
+    return {"type": "assistant", "message": {"content": [block]}}
+
+
+def tool_result(call_id, text):
+    result = {"type": "tool_result", "tool_use_id": call_id, "content": text}
+    return {"type": "user", "message": {"content": [result]}}
+
+
+def bash_call(command):
+    return {"type": "tool_use", "name": "Bash", "input": {"command": command}}
+
+
+def test_finds_pull_requests_the_session_worked_on(tmp_path):
+    create = {
+        "type": "tool_use",
+        "id": "c1",
+        "name": "mcp__github__create_pull_request",
+        "input": {"owner": "acme", "repo": "widgets", "title": "Add widgets"},
+    }
     created = {"id": "1", "url": "https://github.com/acme/widgets/pull/9"}
-    created_result = {"type": "tool_result", "content": json.dumps(created)}
     event = 'activity <event>{"pr":"acme/gadgets#3"}</event>'
     codex_call = {
         "type": "function_call",
+        "call_id": "x1",
         "arguments": json.dumps({"owner": "acme", "repo": "tools", "pullNumber": 4}),
     }
-    file_read = {"type": "tool_use", "input": {"owner": "acme", "repo": "widgets"}}
-    gh_view = {"command": "gh pr view https://github.com/acme/cli/pull/5"}
-    gh_api = {"command": "gh api repos/acme/api/pulls/6/comments"}
     transcript = tmp_path / "transcript.jsonl"
     write_lines(
         transcript,
         tool_use(PULL_REQUEST),
-        {"type": "user", "message": {"content": [created_result]}},
+        assistant_call(create),
+        tool_result("c1", json.dumps(created)),
         {"type": "user", "message": {"content": event}},
         {"type": "response_item", "payload": codex_call},
-        {"type": "assistant", "message": {"content": [file_read]}},
-        {"type": "assistant", "message": {"content": [{"input": gh_view}]}},
-        {"type": "assistant", "message": {"content": [{"input": gh_api}]}},
+        assistant_call(bash_call("gh pr view https://github.com/acme/cli/pull/5")),
+        assistant_call(bash_call("gh api repos/acme/api/pulls/6/comments")),
         tool_use(PULL_REQUEST),
     )
     assert touched_pull_requests(transcript) == [
@@ -299,3 +315,26 @@ def test_finds_pull_requests_the_session_touched(tmp_path):
         PullRequest("acme", "cli", 5),
         PullRequest("acme", "api", 6),
     ]
+
+
+def test_ignores_pull_requests_seen_only_in_results_and_prose(tmp_path):
+    listing = {
+        "type": "tool_use",
+        "id": "l1",
+        "name": "mcp__github__list_pull_requests",
+        "input": {"owner": "acme", "repo": "widgets"},
+    }
+    listed = {
+        "html_url": "https://github.com/acme/widgets/pull/1",
+        "url": "https://api.github.com/repos/acme/widgets/pulls/1",
+    }
+    prose = "Compare with https://github.com/acme/widgets/pull/2"
+    transcript = tmp_path / "transcript.jsonl"
+    write_lines(
+        transcript,
+        assistant_call(listing),
+        tool_result("l1", json.dumps([listed])),
+        {"type": "user", "message": {"content": prose}},
+        assistant_call({"type": "text", "text": prose}),
+    )
+    assert touched_pull_requests(transcript) == []
