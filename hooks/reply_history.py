@@ -119,6 +119,13 @@ def transcript_history(transcript_path):
     ]
 
 
+def without_trailing_prompts(history):
+    end = len(history)
+    while end and isinstance(history[end - 1], Prompt):
+        end -= 1
+    return history[:end]
+
+
 def windows(history):
     found = []
     for item in history:
@@ -131,8 +138,6 @@ def windows(history):
 
 def window_under_review(history, remembered, unseen_reply_count):
     found = windows(history)
-    if len(found) >= 2 and not found[-1].reply_count:
-        return found[-2]
     if found:
         return found[-1]
     if not remembered.prompt_id:

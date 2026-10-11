@@ -193,6 +193,15 @@ def test_counts_replies_that_left_the_transcript_tail(home, transcript):
     assert nagged_at == [2, 8]
 
 
+def test_a_prompt_missing_from_the_tail_still_starts_a_new_count(home, transcript):
+    transcript.human()
+    transcript.reply(SHORT)
+    transcript.fire(home, "UserPromptSubmit")
+    transcript.path.write_text("")
+    transcript.reply(SHORT)
+    assert transcript.fire(home) is None
+
+
 def test_skips_subagents(home, transcript):
     transcript.human()
     transcript.reply(LONG)

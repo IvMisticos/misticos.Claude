@@ -4,6 +4,7 @@
 # ///
 
 import os
+import uuid
 from typing import NamedTuple
 
 from harnesses import harness_parser
@@ -15,6 +16,7 @@ from reply_history import (
     parsed_event_log,
     transcript_history,
     window_under_review,
+    without_trailing_prompts,
 )
 from session_state import (
     STATE_ROOT,
@@ -123,7 +125,13 @@ def nags_from_transcript(event, payload, state):
     if event not in NAG_EVENTS:
         return [], state
     history = transcript_history(payload.get("transcript_path"))
-    nags, memory = due_nags(history, state.memory)
+    if event not in PROMPT_EVENTS:
+        nags, memory = due_nags(history, state.memory)
+        return nags, state._replace(memory=memory)
+    nags, memory = due_nags(without_trailing_prompts(history), state.memory)
+    memory = memory._replace(
+        window=f"submitted-{uuid.uuid4()}", window_replies=0, nagged_at=0
+    )
     return nags, state._replace(memory=memory)
 
 
