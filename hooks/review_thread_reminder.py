@@ -134,20 +134,24 @@ def new_activity(transcript_path, key):
     }
 
 
-def main():
-    options = harness_parser().parse_args()
-    payload = read_payload()
+def review_reminder(payload):
     if follows_own_block(payload) or stopped_on_purpose(payload):
-        return
+        return None
     key = memory_key(payload)
     transcript_path = own_transcript(payload)
     if not (key and isinstance(transcript_path, str)):
-        return
+        return None
     activity = new_activity(transcript_path, key)
     states = review_states(list(activity), thread_source())
     changed = claim_unseen_threads(key, states, activity) if states else {}
-    if changed:
-        write_block(reminder(changed), options.harness.output_shape)
+    return reminder(changed) if changed else None
+
+
+def main():
+    options = harness_parser().parse_args()
+    reason = review_reminder(read_payload())
+    if reason:
+        write_block(reason, options.harness.output_shape)
 
 
 if __name__ == "__main__":

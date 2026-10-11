@@ -133,3 +133,53 @@ def test_ignores_a_missing_or_relative_scratchpad(tmp_path, scratchpad_dir):
     )
     assert output is None
     assert list(tmp_path.iterdir()) == []
+
+
+UNRESOLVED_THREAD = {
+    "data": {
+        "repository": {
+            "pullRequest": {
+                "state": "OPEN",
+                "reviewThreads": {
+                    "nodes": [
+                        {
+                            "id": "T1",
+                            "isResolved": False,
+                            "comments": {"nodes": [{"databaseId": 1}]},
+                        }
+                    ]
+                },
+            }
+        }
+    }
+}
+
+
+def test_agent_reminded_about_review_threads_keeps_its_folder(
+    scratchpad, tmp_path, fake_bin
+):
+    gh_bin = fake_bin("gh", f"#!/bin/bash\necho '{json.dumps(UNRESOLVED_THREAD)}'\n")
+    pull_request = {"owner": "acme", "repo": "widgets", "pullNumber": 7}
+    call = {"type": "tool_use", "name": "pull_request_read", "input": pull_request}
+    transcript = tmp_path / "agent.jsonl"
+    transcript.write_text(json.dumps({"message": {"content": [call]}}) + "\n")
+    home = tmp_path / "home"
+    home.mkdir()
+    payload = {
+        "hook_event_name": "SubagentStop",
+        "session_id": "s1",
+        "agent_id": "a1",
+        "agent_transcript_path": str(transcript),
+        "background_tasks": [],
+        "scratchpad_dir": str(scratchpad),
+    }
+    output = subprocess.run(
+        [sys.executable, AGENT_SCRATCH],
+        input=json.dumps(payload),
+        capture_output=True,
+        text=True,
+        env={"HOME": str(home), "PATH": str(gh_bin)},
+        check=True,
+    ).stdout
+    assert json.loads(output)["decision"] == "block"
+    assert folders_and_agent_folders(scratchpad) == EVERYTHING
