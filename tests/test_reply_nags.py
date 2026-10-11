@@ -22,6 +22,7 @@ SHORT = "done"
         ("plain words", 11),
         ("before\n```python\nprint('x' * 900)\n```\nafter", 12),
         ("open fence\n~~~\nnever closed", 10),
+        ("short\n```\ncode\n````\nlong closer", 17),
         ("run `make test` now", 7),
         ("see [the PR](https://github.com/a/b/pull/1) ok", 13),
         ("link https://example.com/very/long/path here", 9),
@@ -33,10 +34,10 @@ def test_counts_prose_outside_code_and_links(text, length):
     assert prose_length(text) == length
 
 
-def test_prompt_keeps_only_the_previous_window():
+def test_log_starts_at_the_reviewed_prompt():
     log = EventLog().with_reply(SHORT).with_prompt().with_reply(SHORT)
-    log = log.with_reply(SHORT).with_prompt()
-    assert [type(item) for item in log.history] == [Prompt, Reply, Reply, Prompt]
+    log = log.with_prompt().starting_at("1")
+    assert [type(item) for item in log.history] == [Prompt, Reply, Prompt]
 
 
 @pytest.fixture
@@ -169,6 +170,17 @@ def test_a_user_message_starts_a_new_count(home, transcript):
     assert transcript.fire(home) is None
 
 
+def test_keeps_counting_after_the_prompt_leaves_the_transcript_tail(home, transcript):
+    transcript.human()
+    transcript.reply(SHORT)
+    transcript.fire(home)
+    transcript.path.write_text("")
+    transcript.reply(SHORT)
+    transcript.wake()
+    transcript.reply(SHORT)
+    assert "2 messages in a row" in transcript.fire(home)
+
+
 def test_skips_subagents(home, transcript):
     transcript.human()
     transcript.reply(LONG)
@@ -190,13 +202,21 @@ def test_codex_nags_about_the_last_turn_on_the_next_prompt(home):
     codex(home, "UserPromptSubmit", prompt="go")
     assert codex(home, "Stop", last_assistant_message=LONG) is None
     assert "349 characters" in codex(home, "UserPromptSubmit", prompt="next")
-    assert codex(home, "PostToolUse") is None
 
 
 def cursor(home, event, **fields):
     payload = {"hook_event_name": event, "conversation_id": "c1", **fields}
     output = run_hook(home, payload, "--harness", "cursor")
     return output["additional_context"] if output else None
+
+
+def test_cursor_keeps_long_replies_from_turns_without_tools(home):
+    cursor(home, "beforeSubmitPrompt", prompt="go")
+    cursor(home, "afterAgentResponse", text=LONG)
+    cursor(home, "beforeSubmitPrompt", prompt="next")
+    cursor(home, "afterAgentResponse", text=SHORT)
+    cursor(home, "beforeSubmitPrompt", prompt="again")
+    assert "349 characters" in cursor(home, "postToolUse")
 
 
 def test_cursor_nags_about_repeated_updates_after_a_tool(home):

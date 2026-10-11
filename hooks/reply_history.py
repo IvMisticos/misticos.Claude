@@ -27,11 +27,14 @@ class EventLog(NamedTuple):
         return EventLog(self.next_id + 1, (*self.history, reply))
 
     def with_prompt(self):
-        prompts = [
-            index for index, item in enumerate(self.history) if isinstance(item, Prompt)
-        ]
-        kept = self.history[prompts[-1] :] if prompts else ()
-        return EventLog(self.next_id + 1, (*kept, Prompt(str(self.next_id))))
+        prompt = Prompt(str(self.next_id))
+        return EventLog(self.next_id + 1, (*self.history, prompt))
+
+    def starting_at(self, prompt_id):
+        prompt = Prompt(prompt_id)
+        if prompt not in self.history:
+            return self
+        return self._replace(history=self.history[self.history.index(prompt) :])
 
     def to_json(self):
         return {
@@ -126,8 +129,13 @@ def windows(history):
     return found
 
 
-def window_under_review(history):
+def window_under_review(history, remembered_prompt_id):
     found = windows(history)
     if len(found) >= 2 and not found[-1].replies:
         return found[-2]
-    return found[-1] if found else None
+    if found:
+        return found[-1]
+    if not remembered_prompt_id:
+        return None
+    replies = [item for item in history if isinstance(item, Reply)]
+    return Window(remembered_prompt_id, replies)

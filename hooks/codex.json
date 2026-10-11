@@ -92,14 +92,6 @@
             "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/run.sh\" disk_space.py"
           }
         ]
-      },
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/run.sh\" reply_nags.py --harness codex"
-          }
-        ]
       }
     ],
     "PreToolUse": [

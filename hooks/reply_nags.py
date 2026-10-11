@@ -28,8 +28,8 @@ FIRST_NAG_AT_MESSAGES = 2
 MESSAGES_BETWEEN_NAGS = 6
 STATE_DIR = os.path.join(STATE_ROOT, "reply-nags")
 LONG_REPLY = (
-    "Your last message had {length} characters outside code and links, past "
-    "the {limit} limit. Cut what doesn't change what the user does next."
+    "One of your messages had {length} characters outside code and links, "
+    "past the {limit} limit. Cut what doesn't change what the user does next."
 )
 REPEATED_UPDATES = (
     "You sent {count} messages in a row with no user message in between. "
@@ -81,7 +81,7 @@ def parsed_state(stored):
 def unseen_replies(replies, seen_reply):
     ids = [reply.id for reply in replies]
     if seen_reply not in ids:
-        return replies[-1:]
+        return replies
     return replies[ids.index(seen_reply) + 1 :]
 
 
@@ -102,7 +102,7 @@ def long_reply_nag(history, memory):
 
 
 def repeated_updates_nag(history, memory):
-    window = window_under_review(history)
+    window = window_under_review(history, memory.window)
     if window is None:
         return None, memory
     nagged_at = memory.nagged_at if memory.window == window.prompt_id else 0
@@ -136,6 +136,7 @@ def nags_from_events(event, payload, state):
     nags, memory = [], state.memory
     if event in NAG_EVENTS:
         nags, memory = due_nags(log.history, memory)
+        log = log.starting_at(memory.window)
     if event in PROMPT_EVENTS:
         log = log.with_prompt()
     return nags, NagState(memory, log)

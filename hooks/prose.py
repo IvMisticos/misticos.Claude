@@ -1,7 +1,10 @@
 import re
 
-FENCED_CODE = re.compile(
-    r"^ {0,3}(`{3,}|~{3,})[^\n]*\n.*?(?:^ {0,3}\1[ \t]*$|\Z)", re.MULTILINE | re.DOTALL
+BACKTICK_FENCED_CODE = re.compile(
+    r"^ {0,3}(`{3,})[^\n]*\n.*?(?:^ {0,3}\1`*[ \t]*$|\Z)", re.MULTILINE | re.DOTALL
+)
+TILDE_FENCED_CODE = re.compile(
+    r"^ {0,3}(~{3,})[^\n]*\n.*?(?:^ {0,3}\1~*[ \t]*$|\Z)", re.MULTILINE | re.DOTALL
 )
 INLINE_CODE = re.compile(r"(`+)[^\n]+?\1")
 LINK = re.compile(r"!?\[([^\]]*)\]\([^)]*\)")
@@ -11,7 +14,8 @@ WHITESPACE = re.compile(r"\s+")
 
 
 def prose_of(text):
-    text = FENCED_CODE.sub(" ", text)
+    text = BACKTICK_FENCED_CODE.sub(" ", text)
+    text = TILDE_FENCED_CODE.sub(" ", text)
     text = INLINE_CODE.sub(" ", text)
     text = LINK.sub(r"\1", text)
     text = AUTOLINK.sub(" ", text)
