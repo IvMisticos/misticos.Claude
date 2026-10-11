@@ -5,8 +5,11 @@ from typing import NamedTuple
 from transcript import all_entries
 
 NAME = r"[\w.-]+"
-PULL_REQUEST_EVENT = re.compile(rf'"pr"\s*:\s*"({NAME})/({NAME})#(\d+)"')
-PULL_REQUEST_URL = re.compile(rf"https://github\.com/({NAME})/({NAME})/pull/(\d+)")
+PULL_REQUEST_MENTIONS = (
+    re.compile(rf'"pr"\s*:\s*"({NAME})/({NAME})#(\d+)"'),
+    re.compile(rf"github\.com/({NAME})/({NAME})/pull/(\d+)"),
+    re.compile(rf"repos/({NAME})/({NAME})/pulls/(\d+)"),
+)
 
 
 class PullRequest(NamedTuple):
@@ -31,12 +34,6 @@ def pull_request_in_arguments(arguments):
     return None
 
 
-def pull_request_in_result(result):
-    url = result.get("url")
-    match = PULL_REQUEST_URL.fullmatch(url) if isinstance(url, str) else None
-    return matched_pull_request(match) if match else None
-
-
 def embedded_json(text):
     if not text.startswith(("{", "[")):
         return None
@@ -47,7 +44,7 @@ def embedded_json(text):
 
 
 def pull_requests_in_object(value):
-    named = pull_request_in_arguments(value) or pull_request_in_result(value)
+    named = pull_request_in_arguments(value)
     if named:
         yield named
     for item in value.values():
@@ -55,8 +52,9 @@ def pull_requests_in_object(value):
 
 
 def pull_requests_in_text(text):
-    for match in PULL_REQUEST_EVENT.finditer(text):
-        yield matched_pull_request(match)
+    for mention in PULL_REQUEST_MENTIONS:
+        for match in mention.finditer(text):
+            yield matched_pull_request(match)
     yield from pull_requests_in(embedded_json(text))
 
 

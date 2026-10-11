@@ -265,6 +265,8 @@ def test_finds_pull_requests_the_session_touched(tmp_path):
         "arguments": json.dumps({"owner": "acme", "repo": "tools", "pullNumber": 4}),
     }
     file_read = {"type": "tool_use", "input": {"owner": "acme", "repo": "widgets"}}
+    gh_view = {"command": "gh pr view https://github.com/acme/cli/pull/5"}
+    gh_api = {"command": "gh api repos/acme/api/pulls/6/comments"}
     transcript = tmp_path / "transcript.jsonl"
     write_lines(
         transcript,
@@ -273,6 +275,8 @@ def test_finds_pull_requests_the_session_touched(tmp_path):
         {"type": "user", "message": {"content": event}},
         {"type": "response_item", "payload": codex_call},
         {"type": "assistant", "message": {"content": [file_read]}},
+        {"type": "assistant", "message": {"content": [{"input": gh_view}]}},
+        {"type": "assistant", "message": {"content": [{"input": gh_api}]}},
         tool_use(PULL_REQUEST),
     )
     assert touched_pull_requests(transcript) == [
@@ -280,4 +284,6 @@ def test_finds_pull_requests_the_session_touched(tmp_path):
         PullRequest("acme", "widgets", 9),
         PullRequest("acme", "gadgets", 3),
         PullRequest("acme", "tools", 4),
+        PullRequest("acme", "cli", 5),
+        PullRequest("acme", "api", 6),
     ]
