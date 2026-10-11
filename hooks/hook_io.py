@@ -3,6 +3,8 @@ import os
 import sys
 import traceback
 
+from harnesses import OutputShape
+
 
 def read_payload():
     try:
@@ -20,14 +22,14 @@ def scratchpad_of(payload):
 
 
 def hook_output(event, context, shape):
-    if shape == "cursor":
+    if shape == OutputShape.CURSOR:
         return {"additional_context": context}
     return {
         "hookSpecificOutput": {"hookEventName": event, "additionalContext": context}
     }
 
 
-def write_context(event, context, shape="claude"):
+def write_context(event, context, shape=OutputShape.CLAUDE):
     json.dump(hook_output(event, context, shape), sys.stdout)
 
 
