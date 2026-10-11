@@ -52,7 +52,6 @@ AGENTS = (
                 RuleSection.ENGINEERING,
                 RuleSection.USER_INTERFACE,
                 RuleSection.GIT,
-                RuleSection.PULL_REQUESTS,
                 RuleSection.REVIEWS,
                 RuleSection.YOUR_BEHAVIOUR,
             }
