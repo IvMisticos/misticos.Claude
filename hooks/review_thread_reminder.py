@@ -121,20 +121,12 @@ def claim_new_activity(key, states):
     return changed
 
 
-def pull_request_line(pull_request, threads):
-    if len(threads) == 1:
-        return (
-            f"PR {pull_request} has 1 review thread with new comments "
-            "that is still unresolved."
-        )
-    return (
-        f"PR {pull_request} has {len(threads)} review threads with new comments "
-        "that are still unresolved."
-    )
-
-
 def reminder(changed):
-    lines = [pull_request_line(*item) for item in changed.items()]
+    lines = [
+        f"PR {pull_request} has review threads with new comments "
+        "that are still unresolved."
+        for pull_request in changed
+    ]
     return " ".join([*lines, ADVICE])
 
 

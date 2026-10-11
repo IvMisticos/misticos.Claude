@@ -130,19 +130,17 @@ def run_hook(home, path, payload, *arguments, remote=False):
     return json.loads(result.stdout) if result.stdout else None
 
 
-def blocked(count):
-    threads = "1 review thread" if count == 1 else f"{count} review threads"
-    verb = "is" if count == 1 else "are"
+def blocked():
     reason = (
-        f"PR {PULL_REQUEST} has {threads} with new comments "
-        f"that {verb} still unresolved. {ADVICE}"
+        f"PR {PULL_REQUEST} has review threads with new comments "
+        f"that are still unresolved. {ADVICE}"
     )
     return {"decision": "block", "reason": reason}
 
 
 def test_new_unresolved_thread_blocks_once(home, gh_path, responses, transcript):
     answer_graphql(responses, Thread("T1", [1]), Thread("T2", [2, 3]))
-    assert run_hook(home, gh_path, stop(transcript)) == blocked(2)
+    assert run_hook(home, gh_path, stop(transcript)) == blocked()
     assert run_hook(home, gh_path, stop(transcript)) is None
 
 
@@ -152,7 +150,7 @@ def test_new_comment_on_a_seen_thread_blocks_again(
     answer_graphql(responses, Thread("T1", [1]), Thread("T2", [2]))
     run_hook(home, gh_path, stop(transcript))
     answer_graphql(responses, Thread("T1", [1]), Thread("T2", [2, 4]))
-    assert run_hook(home, gh_path, stop(transcript)) == blocked(1)
+    assert run_hook(home, gh_path, stop(transcript)) == blocked()
 
 
 def test_resolved_thread_stays_silent(home, gh_path, responses, transcript):
@@ -184,7 +182,7 @@ def test_continuing_after_a_block_stays_silent_and_keeps_the_thread_new(
     answer_graphql(responses, Thread("T1", [1]))
     active = stop(transcript, stop_hook_active=True)
     assert run_hook(home, gh_path, active) is None
-    assert run_hook(home, gh_path, stop(transcript)) == blocked(1)
+    assert run_hook(home, gh_path, stop(transcript)) == blocked()
 
 
 def test_subagent_checks_its_own_transcript(home, gh_path, responses, tmp_path):
@@ -209,8 +207,8 @@ def test_subagent_leaves_the_parent_reminder_unclaimed(
         agent_id="a1",
         agent_transcript_path=str(transcript),
     )
-    assert run_hook(home, gh_path, subagent) == blocked(1)
-    assert run_hook(home, gh_path, stop(transcript)) == blocked(1)
+    assert run_hook(home, gh_path, subagent) == blocked()
+    assert run_hook(home, gh_path, stop(transcript)) == blocked()
 
 
 @pytest.mark.parametrize("gh_answers", [True, False])
@@ -236,7 +234,7 @@ def test_remote_session_reads_review_threads_route(
     home, gh_path, responses, transcript
 ):
     answer_remote(responses, Thread("T1", [1, 5]), Thread("T2", [2], resolved=True))
-    assert run_hook(home, gh_path, stop(transcript), remote=True) == blocked(1)
+    assert run_hook(home, gh_path, stop(transcript), remote=True) == blocked()
     answer_remote(responses, Thread("T1", [1, 5, 6]), state="closed")
     assert run_hook(home, gh_path, stop(transcript), remote=True) is None
 
@@ -251,7 +249,7 @@ def test_cursor_gets_a_follow_up_message(home, gh_path, responses, transcript):
         "transcript_path": str(transcript),
     }
     output = run_hook(home, gh_path, payload, "--harness", "cursor")
-    assert output == {"followup_message": blocked(1)["reason"]}
+    assert output == {"followup_message": blocked()["reason"]}
 
 
 @pytest.mark.parametrize(
