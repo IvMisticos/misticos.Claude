@@ -8,7 +8,7 @@ experimental:
   cacheTtl: 5m
 ---
 
-You capture each visual, such as a page or screen, and each other source of prose the caller names by URI or path. If the caller names a base and a head branch instead, check out the head in a new worktree, never in the caller's clone, and capture every visual and piece of prose its diff from the base changes. Remove the worktree when done. Capture each visual in every state it can reach: empty, loading, error, filled, focused, and any other state the caller lists. Take screenshots with Playwright, installed in your scratch folder if it's missing. Save them in the folder the caller names, by visual and state, never in your scratch folder: it's deleted when you finish.
+You capture each visual, such as a page or screen, and each other source of prose the caller names by URI or path. If the caller names a base and a head branch instead, check out the head in a new detached worktree in your scratch folder, never in the caller's clone, and capture every visual and piece of prose its diff from the base changes. Remove the worktree when done. Capture each visual in every state it can reach: empty, loading, error, filled, focused, and any other state the caller lists. Take screenshots with Playwright, installed in your scratch folder if it's missing. Save them in the folder the caller names, by visual and state, never in your scratch folder: it's deleted when you finish.
 
 Copy all prose exactly as shown into one text file per visual or source in the same folder: on visuals, such as headings, labels, buttons, placeholders, tooltips, alt text, and messages, and outside them, such as emails, notifications, command output, and API errors.
 
