@@ -170,6 +170,15 @@ def test_new_comment_on_a_seen_thread_blocks_again(
     assert run_hook(home, gh_path, stop(transcript)) == blocked()
 
 
+@pytest.mark.parametrize("stored", ["not json", '{"unknown": 1}', "[1]"])
+def test_unreadable_state_starts_over(home, gh_path, responses, transcript, stored):
+    state = home / ".claude/hooks/data/misticos.Claude/review-threads/s1"
+    state.parent.mkdir(parents=True)
+    state.write_text(stored)
+    answer_graphql(responses, Thread("T1", [1]))
+    assert run_hook(home, gh_path, stop(transcript)) == blocked()
+
+
 def test_resolved_thread_stays_silent(home, gh_path, responses, transcript):
     answer_graphql(responses, Thread("T1", [1], resolved=True))
     assert run_hook(home, gh_path, stop(transcript)) is None

@@ -10,8 +10,7 @@ from harnesses import harness_parser
 from hook_io import read_payload, run_hook, write_block
 from pull_requests import last_activity_by_pull_request
 from review_threads import review_states, thread_source
-from session_state import STATE_ROOT, locked_session_file, read_json, write_json
-from transcript import dict_or_empty
+from session_state import STATE_ROOT, locked_session_file, read_record, write_record
 
 STATE_DIR = os.path.join(STATE_ROOT, "review-threads")
 SUBAGENT_STOP = "subagentstop"
@@ -19,15 +18,11 @@ SUBAGENT_STOP = "subagentstop"
 
 class Memory(NamedTuple):
     seen: dict
-    skipped: frozenset
+    skipped: tuple
     checked: dict
 
-    def to_json(self):
-        return {
-            "seen": self.seen,
-            "skipped": sorted(self.skipped),
-            "checked": self.checked,
-        }
+
+EMPTY_MEMORY = Memory(seen={}, skipped=(), checked={})
 
 
 def follows_own_block(payload):
@@ -58,32 +53,9 @@ def memory_key(payload):
     return session_id
 
 
-def int_values(stored):
-    return {
-        name: value
-        for name, value in dict_or_empty(stored).items()
-        if isinstance(value, int)
-    }
-
-
-def parsed_names(stored):
-    if not isinstance(stored, list):
-        return frozenset()
-    return frozenset(name for name in stored if isinstance(name, str))
-
-
-def parsed_memory(stored):
-    stored = dict_or_empty(stored)
-    return Memory(
-        seen=int_values(stored.get("seen")),
-        skipped=parsed_names(stored.get("skipped")),
-        checked=int_values(stored.get("checked")),
-    )
-
-
 def remembered(key):
     with locked_session_file(STATE_DIR, key) as state_file:
-        return parsed_memory(read_json(state_file))
+        return read_record(state_file, EMPTY_MEMORY)
 
 
 def open_threads(states):
@@ -125,16 +97,16 @@ def updated_memory(memory, states, activity):
     checked = {str(pull_request): activity[pull_request] for pull_request in states}
     return Memory(
         seen=memory.seen | last_comments(open_threads(states)),
-        skipped=memory.skipped | skipped,
+        skipped=tuple(sorted({*memory.skipped, *skipped})),
         checked=memory.checked | checked,
     )
 
 
 def claim_unseen_threads(key, states, activity):
     with locked_session_file(STATE_DIR, key) as state_file:
-        memory = parsed_memory(read_json(state_file))
+        memory = read_record(state_file, EMPTY_MEMORY)
         changed = threads_with_new_comments(open_threads(states), memory.seen)
-        write_json(state_file, updated_memory(memory, states, activity).to_json())
+        write_record(state_file, updated_memory(memory, states, activity))
     return changed
 
 
