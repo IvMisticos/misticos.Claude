@@ -51,7 +51,7 @@ def own_transcript(payload):
 
 def memory_key(payload):
     session_id = payload.get("session_id") or payload.get("conversation_id")
-    agent_id = payload.get("agent_id") or payload.get("subagent_id")
+    agent_id = payload.get("agent_id")
     if not isinstance(session_id, str):
         return None
     if isinstance(agent_id, str) and agent_id:
