@@ -6,6 +6,54 @@ WORD_SEPARATORS = " \t\r"
 LINE_CONTINUATION = "\\\n"
 REPO_FLAGS = frozenset({"-R", "--repo"})
 CREATE_SUBCOMMANDS = frozenset({"create", "new"})
+SHARED_VALUED_FLAGS = frozenset(
+    {
+        "-b",
+        "--body",
+        "-F",
+        "--body-file",
+        "-t",
+        "--title",
+        "--template",
+        "--subject",
+        "-q",
+        "--jq",
+        "--json",
+    }
+)
+EDIT_VALUED_FLAGS = frozenset(
+    {
+        "-B",
+        "--base",
+        "-m",
+        "--milestone",
+        "--add-assignee",
+        "--add-label",
+        "--add-project",
+        "--add-reviewer",
+        "--remove-assignee",
+        "--remove-label",
+        "--remove-project",
+        "--remove-reviewer",
+    }
+)
+VALUED_FLAGS_BY_TARGETED_SUBCOMMAND = {
+    "checkout": SHARED_VALUED_FLAGS | {"--branch"},
+    "checks": SHARED_VALUED_FLAGS | {"-i", "--interval"},
+    "close": SHARED_VALUED_FLAGS | {"-c", "--comment"},
+    "comment": SHARED_VALUED_FLAGS,
+    "diff": SHARED_VALUED_FLAGS | {"--color", "-e", "--exclude"},
+    "edit": SHARED_VALUED_FLAGS | EDIT_VALUED_FLAGS,
+    "lock": SHARED_VALUED_FLAGS | {"-r", "--reason"},
+    "merge": SHARED_VALUED_FLAGS | {"-A", "--author-email", "--match-head-commit"},
+    "ready": SHARED_VALUED_FLAGS,
+    "reopen": SHARED_VALUED_FLAGS | {"-c", "--comment"},
+    "revert": SHARED_VALUED_FLAGS,
+    "review": SHARED_VALUED_FLAGS,
+    "unlock": SHARED_VALUED_FLAGS,
+    "update-branch": SHARED_VALUED_FLAGS,
+    "view": SHARED_VALUED_FLAGS,
+}
 
 
 class GhPrCall(NamedTuple):
@@ -81,6 +129,22 @@ def is_flag(word):
     return word.startswith("-")
 
 
+def positionals(words, flags_with_values):
+    remaining = iter(words)
+    for word in remaining:
+        if word in flags_with_values:
+            next(remaining, None)
+        elif not is_flag(word):
+            yield word
+
+
+def pr_target(subcommand, following):
+    flags_with_values = VALUED_FLAGS_BY_TARGETED_SUBCOMMAND.get(subcommand)
+    if flags_with_values is None:
+        return ""
+    return next(positionals(following, flags_with_values), "")
+
+
 def gh_pr_call(arguments):
     repo, words = without_repo_flags(arguments)
     if words[:1] != ["pr"]:
@@ -91,9 +155,9 @@ def gh_pr_call(arguments):
     )
     if subcommand_at is None:
         return None
-    following = words[subcommand_at + 1 : subcommand_at + 2]
-    target = following[0] if following and not is_flag(following[0]) else ""
-    return GhPrCall(words[subcommand_at], target, repo)
+    subcommand = words[subcommand_at]
+    target = pr_target(subcommand, words[subcommand_at + 1 :])
+    return GhPrCall(subcommand, target, repo)
 
 
 def gh_api_words(arguments):

@@ -482,3 +482,27 @@ def test_newline_ends_a_gh_command(tmp_path):
         PullRequest("acme", "c", 3),
         PullRequest("acme", "d", 4),
     ]
+
+
+def test_gh_pr_target_comes_after_flags_and_their_values(tmp_path):
+    transcript = tmp_path / "transcript.jsonl"
+    write_lines(
+        transcript,
+        assistant_call(bash_call("gh pr view --json state 5 -R acme/a")),
+        assistant_call(bash_call("gh pr merge -s --body 1 6 -R acme/b")),
+        assistant_call(bash_call("gh pr close -c 2 7 -R acme/c")),
+        assistant_call(bash_call("gh pr review -c 8 -R acme/d")),
+        assistant_call(
+            bash_call("gh pr view -q .url https://github.com/acme/e/pull/9")
+        ),
+        assistant_call(bash_call("gh pr comment --body 3 -R acme/f")),
+        assistant_call(bash_call("gh pr list -L 4 -R acme/g")),
+        assistant_call(bash_call("gh pr create --milestone 4 -R acme/h")),
+    )
+    assert list(last_activity_by_pull_request(transcript)) == [
+        PullRequest("acme", "a", 5),
+        PullRequest("acme", "b", 6),
+        PullRequest("acme", "c", 7),
+        PullRequest("acme", "d", 8),
+        PullRequest("acme", "e", 9),
+    ]
