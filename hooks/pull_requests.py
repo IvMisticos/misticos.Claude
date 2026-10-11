@@ -86,7 +86,7 @@ def block_type(block):
 
 
 def call_id(call):
-    found = call.get("id") or call.get("call_id")
+    found = call.get("call_id") or call.get("id")
     return found if isinstance(found, str) else None
 
 

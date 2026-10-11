@@ -357,3 +357,27 @@ def test_ignores_pull_requests_seen_only_in_results_and_prose(tmp_path):
         assistant_call({"type": "text", "text": prose}),
     )
     assert last_activity_by_pull_request(transcript) == {}
+
+
+def test_codex_create_result_matches_by_call_id(tmp_path):
+    create = {
+        "type": "function_call",
+        "id": "fc_1",
+        "call_id": "call_1",
+        "name": "mcp__github__create_pull_request",
+        "arguments": json.dumps({"owner": "acme", "repo": "apps"}),
+    }
+    created = {
+        "type": "function_call_output",
+        "call_id": "call_1",
+        "output": json.dumps({"url": "https://github.com/acme/apps/pull/8"}),
+    }
+    transcript = tmp_path / "transcript.jsonl"
+    write_lines(
+        transcript,
+        {"type": "response_item", "payload": create},
+        {"type": "response_item", "payload": created},
+    )
+    assert list(last_activity_by_pull_request(transcript)) == [
+        PullRequest("acme", "apps", 8)
+    ]
