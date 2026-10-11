@@ -213,10 +213,12 @@ def test_subagent_leaves_the_parent_reminder_unclaimed(
     assert run_hook(home, gh_path, stop(transcript)) == blocked(1)
 
 
-def test_finished_pull_request_is_not_queried_again(
-    home, gh_path, responses, transcript
+@pytest.mark.parametrize("gh_answers", [True, False])
+def test_pull_request_seen_not_open_is_not_queried_again(
+    home, gh_path, responses, transcript, gh_answers
 ):
-    answer_graphql(responses, state="MERGED")
+    if gh_answers:
+        answer_graphql(responses, state="MERGED")
     run_hook(home, gh_path, stop(transcript))
     calls = responses / "calls.log"
     calls.unlink()

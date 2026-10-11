@@ -20,10 +20,10 @@ ADVICE = "Resolve the ones you addressed; leave open the ones waiting on someone
 
 class Memory(NamedTuple):
     seen: dict
-    closed: frozenset
+    skipped: frozenset
 
     def to_json(self):
-        return {"seen": self.seen, "closed": sorted(self.closed)}
+        return {"seen": self.seen, "skipped": sorted(self.skipped)}
 
 
 def follows_own_block(payload):
@@ -61,10 +61,10 @@ def parsed_memory(stored):
         for thread_id, comment_id in dict_or_empty(stored.get("seen")).items()
         if isinstance(comment_id, int)
     }
-    closed = stored.get("closed")
-    if not isinstance(closed, list):
+    skipped = stored.get("skipped")
+    if not isinstance(skipped, list):
         return Memory(seen, frozenset())
-    return Memory(seen, frozenset(name for name in closed if isinstance(name, str)))
+    return Memory(seen, frozenset(name for name in skipped if isinstance(name, str)))
 
 
 def remembered(key):
@@ -105,11 +105,11 @@ def last_comments(threads_by_pull_request):
 
 
 def updated_memory(memory, states):
-    closed = {
+    skipped = {
         str(pull_request) for pull_request, state in states.items() if not state.is_open
     }
     return Memory(
-        memory.seen | last_comments(open_threads(states)), memory.closed | closed
+        memory.seen | last_comments(open_threads(states)), memory.skipped | skipped
     )
 
 
@@ -142,8 +142,10 @@ def pull_requests_to_check(transcript_path, key):
     touched = touched_pull_requests(transcript_path)
     if not touched:
         return []
-    closed = remembered(key).closed
-    return [pull_request for pull_request in touched if str(pull_request) not in closed]
+    skipped = remembered(key).skipped
+    return [
+        pull_request for pull_request in touched if str(pull_request) not in skipped
+    ]
 
 
 def main():

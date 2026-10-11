@@ -4,6 +4,7 @@ import shutil
 import subprocess
 import time
 from collections.abc import Callable
+from enum import Enum, auto
 from typing import NamedTuple
 
 GH_TIMEOUT_SECONDS = 10
@@ -32,7 +33,12 @@ class ReviewState(NamedTuple):
     unresolved_threads: tuple = ()
 
 
-CLOSED = ReviewState(is_open=False)
+NOT_OPEN = ReviewState(is_open=False)
+
+
+class CallFailure(Enum):
+    TIMED_OUT = auto()
+    FAILED = auto()
 
 
 class ThreadSource(NamedTuple):
@@ -62,7 +68,7 @@ def graphql_review_state(output):
     try:
         pull_request = json.loads(output)["data"]["repository"]["pullRequest"]
         if pull_request["state"] != "OPEN":
-            return CLOSED
+            return NOT_OPEN
         return ReviewState(
             is_open=True,
             unresolved_threads=tuple(
@@ -72,7 +78,7 @@ def graphql_review_state(output):
             ),
         )
     except (json.JSONDecodeError, KeyError, TypeError, IndexError):
-        return None
+        return NOT_OPEN
 
 
 def remote_requests(pull_request):
@@ -85,7 +91,7 @@ def remote_requests(pull_request):
 
 def remote_review_state(state_output, threads_output):
     if state_output.strip() != "open":
-        return CLOSED
+        return NOT_OPEN
     try:
         return ReviewState(
             is_open=True,
@@ -96,7 +102,7 @@ def remote_review_state(state_output, threads_output):
             ),
         )
     except (json.JSONDecodeError, KeyError, TypeError, IndexError):
-        return None
+        return NOT_OPEN
 
 
 GRAPHQL = ThreadSource(graphql_requests, graphql_review_state)
@@ -127,8 +133,8 @@ def output_by(deadline, process):
     except subprocess.TimeoutExpired:
         process.kill()
         process.communicate()
-        return None
-    return output if process.returncode == 0 else None
+        return CallFailure.TIMED_OUT
+    return output if process.returncode == 0 else CallFailure.FAILED
 
 
 def review_states(pull_requests, source):
@@ -142,7 +148,8 @@ def review_states(pull_requests, source):
     states = {}
     for pull_request, processes in running.items():
         outputs = [output_by(deadline, process) for process in processes]
-        state = None if None in outputs else source.parse(*outputs)
-        if state is not None:
-            states[pull_request] = state
+        if CallFailure.TIMED_OUT in outputs:
+            continue
+        failed = CallFailure.FAILED in outputs
+        states[pull_request] = NOT_OPEN if failed else source.parse(*outputs)
     return states
