@@ -31,12 +31,13 @@ FIRST_NAG_AT_MESSAGES = 2
 MESSAGES_BETWEEN_NAGS = 6
 STATE_DIR = os.path.join(STATE_ROOT, "reply-nags")
 LONG_REPLY = (
-    "One of your messages had {length} characters outside code and links, "
-    "past the {limit} limit. Cut what doesn't change what the user does next."
+    "One of your recent messages had at least {length} characters outside "
+    "code and links. Don't resend it, but from now on keep your messages "
+    "briefer and cut them as your instructions say."
 )
 REPEATED_UPDATES = (
     "You sent {count} messages in a row with no user message in between. "
-    "Send no more updates unless the user asked for them or something needs "
+    "Send no progress updates unless the user asked for them or something needs "
     "their decision."
 )
 REPLY_TEXT_FIELD_BY_EVENT = {
@@ -123,7 +124,7 @@ def long_reply_nag(unseen):
     long_replies = [reply for reply in unseen if reply.prose_length > PROSE_LIMIT]
     if not long_replies:
         return None
-    return LONG_REPLY.format(length=long_replies[-1].prose_length, limit=PROSE_LIMIT)
+    return LONG_REPLY.format(length=long_replies[-1].prose_length)
 
 
 def repeated_updates_nag(history, memory, unseen):
