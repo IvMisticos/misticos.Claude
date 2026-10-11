@@ -15,7 +15,6 @@ from transcript import dict_or_empty
 
 STATE_DIR = os.path.join(STATE_ROOT, "review-threads")
 SUBAGENT_STOP = "subagentstop"
-ADVICE = "Resolve the ones you addressed; leave open the ones waiting on someone else."
 
 
 class Memory(NamedTuple):
@@ -140,12 +139,10 @@ def claim_unseen_threads(key, states, activity):
 
 
 def reminder(changed):
-    lines = [
-        f"PR {pull_request} has review threads with new comments "
-        "that are still unresolved."
+    return " ".join(
+        f"PR {pull_request} has unresolved review threads with new comments."
         for pull_request in changed
-    ]
-    return " ".join([*lines, ADVICE])
+    )
 
 
 def has_unchecked_activity(memory, pull_request, line_number):

@@ -14,7 +14,6 @@ from review_threads import output_by, started
 ROOT = Path(__file__).resolve().parent.parent
 HOOK = ROOT / "hooks" / "review_thread_reminder.py"
 PULL_REQUEST = PullRequest("acme", "widgets", 7)
-ADVICE = "Resolve the ones you addressed; leave open the ones waiting on someone else."
 FAKE_GH = """#!/bin/bash
 printf '%s\\n' "$*" >> {responses}/calls.log
 case "$*" in
@@ -141,10 +140,7 @@ def run_hook(home, path, payload, *arguments, remote=False):
 
 
 def blocked():
-    reason = (
-        f"PR {PULL_REQUEST} has review threads with new comments "
-        f"that are still unresolved. {ADVICE}"
-    )
+    reason = f"PR {PULL_REQUEST} has unresolved review threads with new comments."
     return {"decision": "block", "reason": reason}
 
 
