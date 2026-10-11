@@ -7,6 +7,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
 
+from agent_types import AgentType
 from reminder import SECTIONS_SKIPPED_BY_AGENT_TYPE
 from rule_sections import RuleSection
 
@@ -124,6 +125,17 @@ def test_worker_types_skip_their_sections(home, agent_type):
 def test_rule_sections_name_real_headings():
     headings = RULES.read_text().splitlines()
     assert all(f"# {section}" in headings for section in RuleSection)
+
+
+def test_agent_types_name_real_agents():
+    agents = ROOT / "agents"
+    names = {
+        line.removeprefix("name: ")
+        for path in agents.glob("*.md")
+        for line in path.read_text().splitlines()
+        if line.startswith("name: ")
+    }
+    assert {agent_type.removeprefix("misticos:") for agent_type in AgentType} <= names
 
 
 def test_other_subagents_get_every_section(home):
