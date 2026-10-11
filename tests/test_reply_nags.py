@@ -250,6 +250,15 @@ def test_cursor_counts_the_answer_after_the_last_tool(home):
     assert cursor(home, "postToolUse") is None
 
 
+def test_cursor_keeps_only_nags_from_the_last_turn_without_tools(home):
+    for _ in range(3):
+        cursor(home, "beforeSubmitPrompt", prompt="go")
+        cursor(home, "afterAgentResponse", text=SHORT)
+        cursor(home, "afterAgentResponse", text=SHORT)
+    cursor(home, "beforeSubmitPrompt", prompt="next")
+    assert cursor(home, "postToolUse").count("messages in a row") == 1
+
+
 def test_cursor_nags_about_repeated_updates_after_a_tool(home):
     cursor(home, "beforeSubmitPrompt", prompt="go")
     cursor(home, "afterAgentResponse", text=SHORT)

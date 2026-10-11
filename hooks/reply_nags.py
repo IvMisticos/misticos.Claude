@@ -54,16 +54,30 @@ class NagMemory(NamedTuple):
     nagged_at: int = 0
 
 
+class DueNags(NamedTuple):
+    long_reply: str = ""
+    repeated_updates: str = ""
+
+    def merged_over(self, older):
+        return DueNags(
+            self.long_reply or older.long_reply,
+            self.repeated_updates or older.repeated_updates,
+        )
+
+    def texts(self):
+        return [nag for nag in self if nag]
+
+
 class NagState(NamedTuple):
     memory: NagMemory = NagMemory()
     log: EventLog = EventLog()
-    pending_nags: tuple = ()
+    pending_nags: DueNags = DueNags()
 
     def to_json(self):
         return {
             "memory": self.memory._asdict(),
             "log": self.log.to_json(),
-            "pending_nags": list(self.pending_nags),
+            "pending_nags": self.pending_nags._asdict(),
         }
 
 
@@ -82,9 +96,11 @@ def parsed_memory(stored):
 
 
 def parsed_pending_nags(stored):
-    if not isinstance(stored, list):
-        return ()
-    return tuple(nag for nag in stored if isinstance(nag, str))
+    try:
+        nags = DueNags(**dict_or_empty(stored))
+    except TypeError:
+        return DueNags()
+    return nags if all(isinstance(nag, str) for nag in nags) else DueNags()
 
 
 def parsed_state(stored):
@@ -130,8 +146,7 @@ def due_nags(history, memory):
     repeated_updates, memory = repeated_updates_nag(history, memory, unseen)
     if replies:
         memory = memory._replace(seen_reply=replies[-1].id)
-    nags = (long_reply_nag(unseen), repeated_updates)
-    return [nag for nag in nags if nag], memory
+    return DueNags(long_reply_nag(unseen) or "", repeated_updates or ""), memory
 
 
 def nags_from_transcript(event, payload, state):
@@ -140,12 +155,12 @@ def nags_from_transcript(event, payload, state):
     history = transcript_history(payload.get("transcript_path"))
     if event not in PROMPT_EVENTS:
         nags, memory = due_nags(history, state.memory)
-        return nags, state._replace(memory=memory)
+        return nags.texts(), state._replace(memory=memory)
     nags, memory = due_nags(without_trailing_prompts(history), state.memory)
     memory = memory._replace(
         window=f"submitted-{uuid.uuid4()}", window_replies=0, nagged_at=0
     )
-    return nags, state._replace(memory=memory)
+    return nags.texts(), state._replace(memory=memory)
 
 
 def nags_from_events(event, payload, state):
@@ -153,16 +168,15 @@ def nags_from_events(event, payload, state):
     reply_text = payload.get(REPLY_TEXT_FIELD_BY_EVENT.get(event))
     if isinstance(reply_text, str) and reply_text.strip():
         log = log.with_reply(reply_text)
-    nags, memory = list(state.pending_nags), state.memory
-    if event in NAG_EVENTS | PROMPT_EVENTS:
-        due, memory = due_nags(log.history, memory)
-        nags += due
-        log = log.starting_at(memory.window)
+    if event not in NAG_EVENTS | PROMPT_EVENTS:
+        return [], state._replace(log=log)
+    due, memory = due_nags(log.history, state.memory)
+    log = log.starting_at(memory.window)
     if event in PROMPT_EVENTS:
         log = log.with_prompt()
     if event in NAG_EVENTS:
-        return nags, NagState(memory, log)
-    return [], NagState(memory, log, tuple(nags))
+        return due.merged_over(state.pending_nags).texts(), NagState(memory, log)
+    return [], NagState(memory, log, due.merged_over(state.pending_nags))
 
 
 def is_subagent(payload):
