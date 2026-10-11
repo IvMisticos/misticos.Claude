@@ -34,12 +34,12 @@ def write_context(event, context, shape=OutputShape.CLAUDE):
 
 
 def block_output(reason, shape):
-    if shape == "cursor":
+    if shape == OutputShape.CURSOR:
         return {"followup_message": reason}
     return {"decision": "block", "reason": reason}
 
 
-def write_block(reason, shape="claude"):
+def write_block(reason, shape=OutputShape.CLAUDE):
     json.dump(block_output(reason, shape), sys.stdout)
 
 
