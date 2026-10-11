@@ -39,7 +39,7 @@ HARNESSES = {
         },
         context_from=ContextSource.TRANSCRIPT,
         output_shape=OutputShape.CLAUDE,
-        skipped_agent_types=frozenset({AgentType.SCOUT}),
+        skipped_agent_types=frozenset({AgentType.SCOUT, AgentType.WATCHER}),
         reply_history=ReplyHistory.TRANSCRIPT,
     ),
     "codex": Harness(

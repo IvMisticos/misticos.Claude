@@ -6,4 +6,5 @@ class AgentType(StrEnum):
     ENGINEER = "misticos:engineer"
     REVIEWER = "misticos:reviewer"
     SCOUT = "misticos:scout"
+    WATCHER = "misticos:watcher"
     WITNESS = "misticos:witness"
