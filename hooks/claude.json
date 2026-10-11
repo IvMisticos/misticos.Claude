@@ -162,6 +162,14 @@
             "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/run.sh\" agent_scratch.py"
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/run.sh\" review_thread_reminder.py"
+          }
+        ]
       }
     ],
     "Stop": [
@@ -170,6 +178,14 @@
           {
             "type": "command",
             "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/run.sh\" agent_scratch.py"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/run.sh\" review_thread_reminder.py"
           }
         ]
       }
