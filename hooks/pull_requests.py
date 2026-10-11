@@ -1,15 +1,22 @@
 import json
 import re
+from enum import Enum, auto
 from typing import NamedTuple
 
-from transcript import numbered_entries
+from gh_commands import gh_api_words, gh_argument_lists, gh_pr_call
+from transcript import dict_or_empty, numbered_entries
 
 NAME = r"[\w.-]+"
+LINK_END = r"(?=[/?#]|$)"
 PULL_REQUEST_EVENT = re.compile(rf'"pr"\s*:\s*"({NAME})/({NAME})#(\d+)"')
-PULL_REQUEST_LINKS = (
-    re.compile(rf"github\.com/({NAME})/({NAME})/pull/(\d+)"),
-    re.compile(rf"repos/({NAME})/({NAME})/pulls/(\d+)"),
+PULL_REQUEST_URL = re.compile(rf"https://github\.com/({NAME})/({NAME})/pull/(\d+)")
+PULL_REQUEST_TARGETS = (
+    re.compile(rf"https://github\.com/({NAME})/({NAME})/pull/(\d+){LINK_END}"),
+    re.compile(
+        rf"(?:https://api\.github\.com)?/?repos/({NAME})/({NAME})/pulls/(\d+){LINK_END}"
+    ),
 )
+REPO = re.compile(rf"({NAME})/({NAME})")
 CALL_TYPES = frozenset(
     {"tool_use", "function_call", "custom_tool_call", "local_shell_call"}
 )
@@ -17,12 +24,18 @@ CALL_ID_FIELD_BY_RESULT_TYPE = {
     "tool_result": "tool_use_id",
     "function_call_output": "call_id",
 }
-CREATE_TOOL_SUFFIX = "create_pull_request"
-GITHUB_TOOL_MARKER = "github"
-ASSISTANT = "assistant"
 ARGUMENT_FIELDS = ("input", "arguments", "action")
-GH_COMMAND = re.compile(r"(?:^|[\s;&|(`])gh\s")
-GH_PR_CREATE = re.compile(r"\bgh\s+pr\s+create\b")
+TARGET_FIELDS = ("url", "path")
+GITHUB_TOOL_MARKER = "github"
+CREATE_TOOL_SUFFIX = "create_pull_request"
+NOTIFICATIONS_TOOL_SUFFIX = "readnotifications"
+USER = "user"
+TEXT = "text"
+
+
+class ResultUse(Enum):
+    CREATED_PULL_REQUEST = auto()
+    NOTIFICATIONS = auto()
 
 
 class PullRequest(NamedTuple):
@@ -36,6 +49,13 @@ class PullRequest(NamedTuple):
 
 def matched_pull_request(match):
     return PullRequest(match[1], match[2], int(match[3]))
+
+
+def targeted_pull_request(word):
+    for target in PULL_REQUEST_TARGETS:
+        if match := target.match(word):
+            return matched_pull_request(match)
+    return None
 
 
 def pull_request_in_arguments(arguments):
@@ -65,36 +85,8 @@ def nested_values(value):
             yield from nested_values(item)
 
 
-def pull_requests_in_text(text):
-    for link in PULL_REQUEST_LINKS:
-        yield from map(matched_pull_request, link.finditer(text))
-    yield from pull_requests_linked_in(embedded_json(text))
-
-
-def pull_requests_linked_in(value):
-    for item in nested_values(value):
-        if isinstance(item, str):
-            yield from pull_requests_in_text(item)
-        elif isinstance(item, dict) and (named := pull_request_in_arguments(item)):
-            yield named
-
-
-def texts_outside_calls(value):
-    if isinstance(value, str):
-        yield value
-    elif isinstance(value, list):
-        for item in value:
-            yield from texts_outside_calls(item)
-    elif isinstance(value, dict) and block_type(value) not in CALL_TYPES:
-        for item in value.values():
-            yield from texts_outside_calls(item)
-
-
-def pull_request_events_in(entry):
-    if block_type(entry) == ASSISTANT:
-        return
-    for text in texts_outside_calls(entry):
-        yield from map(matched_pull_request, PULL_REQUEST_EVENT.finditer(text))
+def nested_texts(value):
+    return (item for item in nested_values(value) if isinstance(item, str))
 
 
 def block_type(block):
@@ -121,22 +113,32 @@ def call_arguments(call):
     return {}
 
 
-def shell_command(arguments):
-    command = arguments.get("command") or arguments.get("cmd")
-    if isinstance(command, list):
-        command = " ".join(part for part in command if isinstance(part, str))
-    return command if isinstance(command, str) else ""
+def gh_calls(call):
+    arguments = call_arguments(call)
+    return gh_argument_lists(arguments.get("command") or arguments.get("cmd"))
 
 
-def gh_command(call):
-    command = shell_command(call_arguments(call))
-    return command if GH_COMMAND.search(command) else ""
+def pull_request_of_gh_pr_call(pr_call):
+    if not pr_call:
+        return None
+    if targeted := targeted_pull_request(pr_call.target):
+        return targeted
+    repo = REPO.fullmatch(pr_call.repo)
+    if repo and pr_call.target.isdigit():
+        return PullRequest(repo[1], repo[2], int(pr_call.target))
+    return None
 
 
-def creates_a_pull_request(call):
-    return call_name(call).endswith(CREATE_TOOL_SUFFIX) or bool(
-        GH_PR_CREATE.search(gh_command(call))
-    )
+def pull_requests_in_gh_call(arguments):
+    targets = [pull_request_of_gh_pr_call(gh_pr_call(arguments))]
+    targets += map(targeted_pull_request, gh_api_words(arguments))
+    return [target for target in targets if target]
+
+
+def pull_requests_in_github_tool(arguments):
+    targets = (arguments.get(field) for field in TARGET_FIELDS)
+    found = (targeted_pull_request(t) for t in targets if isinstance(t, str))
+    return [target for target in found if target]
 
 
 def pull_requests_in_call(call):
@@ -144,8 +146,23 @@ def pull_requests_in_call(call):
     if named := pull_request_in_arguments(arguments):
         yield named
     if GITHUB_TOOL_MARKER in call_name(call):
-        yield from pull_requests_linked_in(arguments)
-    yield from pull_requests_in_text(gh_command(call))
+        yield from pull_requests_in_github_tool(arguments)
+    for gh_arguments in gh_calls(call):
+        yield from pull_requests_in_gh_call(gh_arguments)
+
+
+def creates_by_gh(call):
+    pr_calls = (gh_pr_call(arguments) for arguments in gh_calls(call))
+    return any(pr_call and pr_call.creates_a_pull_request() for pr_call in pr_calls)
+
+
+def result_use(call):
+    name = call_name(call)
+    if name.endswith(CREATE_TOOL_SUFFIX) or creates_by_gh(call):
+        return ResultUse.CREATED_PULL_REQUEST
+    if name.endswith(NOTIFICATIONS_TOOL_SUFFIX):
+        return ResultUse.NOTIFICATIONS
+    return None
 
 
 def answered_call_id(block):
@@ -154,22 +171,56 @@ def answered_call_id(block):
     return answered if isinstance(answered, str) else None
 
 
-def pull_requests_in_entry(entry, creating_calls):
-    yield from pull_request_events_in(entry)
+def pull_request_events_in(texts):
+    for text in texts:
+        yield from map(matched_pull_request, PULL_REQUEST_EVENT.finditer(text))
+
+
+def pull_requests_linked_in(texts):
+    for text in texts:
+        yield from map(matched_pull_request, PULL_REQUEST_URL.finditer(text))
+
+
+def pull_requests_in_result(result, use):
+    match use:
+        case ResultUse.CREATED_PULL_REQUEST:
+            return pull_requests_linked_in(nested_texts(result))
+        case ResultUse.NOTIFICATIONS:
+            return pull_request_events_in(nested_texts(result))
+        case None:
+            return []
+
+
+def user_texts(entry):
+    if block_type(entry) != USER:
+        return
+    content = dict_or_empty(entry.get("message")).get("content")
+    blocks = content if isinstance(content, list) else [content]
+    for block in blocks:
+        if isinstance(block, str):
+            yield block
+        elif isinstance(block, dict) and block_type(block) == TEXT:
+            yield from nested_texts(block.get("text"))
+
+
+def pull_requests_in_entry(entry, result_uses):
+    yield from pull_request_events_in(user_texts(entry))
     blocks = (item for item in nested_values(entry) if isinstance(item, dict))
     for block in blocks:
-        if block_type(block) in CALL_TYPES:
-            yield from pull_requests_in_call(block)
-            if creates_a_pull_request(block) and call_id(block):
-                creating_calls.add(call_id(block))
-        elif answered_call_id(block) in creating_calls:
-            yield from pull_requests_linked_in(block)
+        if block_type(block) not in CALL_TYPES:
+            use = result_uses.get(answered_call_id(block))
+            yield from pull_requests_in_result(block, use)
+            continue
+        yield from pull_requests_in_call(block)
+        use = result_use(block)
+        if use and call_id(block):
+            result_uses[call_id(block)] = use
 
 
 def last_activity_by_pull_request(transcript_path):
     last_activity = {}
-    creating_calls = set()
+    result_uses = {}
     for line_number, entry in numbered_entries(transcript_path):
-        for pull_request in pull_requests_in_entry(entry, creating_calls):
+        for pull_request in pull_requests_in_entry(entry, result_uses):
             last_activity[pull_request] = line_number
     return last_activity

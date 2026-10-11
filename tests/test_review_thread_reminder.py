@@ -332,7 +332,9 @@ def test_finds_pull_requests_the_session_worked_on(tmp_path):
         "input": {"owner": "acme", "repo": "widgets", "title": "Add widgets"},
     }
     created = {"id": "1", "url": "https://github.com/acme/widgets/pull/9"}
-    event = 'activity <event>{"pr":"acme/gadgets#3"}</event>'
+    wake = 'activity <event>{"pr":"acme/gadgets#3"}</event>'
+    notifications = {"type": "tool_use", "id": "n1", "name": "ReadNotifications"}
+    notified = 'Notification 1 <event>{"pr":"acme/gadgets#11"}</event>'
     codex_call = {
         "type": "function_call",
         "name": "mcp__github__pull_request_read",
@@ -343,7 +345,7 @@ def test_finds_pull_requests_the_session_worked_on(tmp_path):
         "type": "function_call",
         "call_id": "call_1",
         "name": "shell",
-        "arguments": json.dumps({"command": ["bash", "-lc", "gh pr create --fill"]}),
+        "arguments": json.dumps({"command": ["bash", "-lc", "gh pr new --fill"]}),
     }
     codex_created = {
         "type": "function_call_output",
@@ -356,11 +358,14 @@ def test_finds_pull_requests_the_session_worked_on(tmp_path):
         tool_use(PULL_REQUEST),
         assistant_call(create),
         tool_result("c1", json.dumps(created)),
-        {"type": "user", "message": {"content": event}},
+        {"type": "user", "message": {"content": wake}},
+        assistant_call(notifications),
+        tool_result("n1", notified),
         {"type": "response_item", "payload": codex_call},
-        assistant_call(bash_call("gh pr view https://github.com/acme/cli/pull/5")),
-        assistant_call(bash_call("gh api repos/acme/api/pulls/6/comments")),
-        assistant_call(bash_call("gh pr create --fill", call_id="b1")),
+        assistant_call(bash_call("gh pr view https://github.com/acme/cli/pull/5 -c")),
+        assistant_call(bash_call("cd x && gh api repos/acme/api/pulls/6/comments")),
+        assistant_call(bash_call("gh pr -R acme/docs view 12 | head")),
+        assistant_call(bash_call("gh pr --repo=acme/web create --fill", "b1")),
         tool_result("b1", "https://github.com/acme/web/pull/10\n"),
         {"type": "response_item", "payload": codex_create},
         {"type": "response_item", "payload": codex_created},
@@ -370,15 +375,17 @@ def test_finds_pull_requests_the_session_worked_on(tmp_path):
         PULL_REQUEST,
         PullRequest("acme", "widgets", 9),
         PullRequest("acme", "gadgets", 3),
+        PullRequest("acme", "gadgets", 11),
         PullRequest("acme", "tools", 4),
         PullRequest("acme", "cli", 5),
         PullRequest("acme", "api", 6),
+        PullRequest("acme", "docs", 12),
         PullRequest("acme", "web", 10),
         PullRequest("acme", "apps", 8),
     ]
 
 
-def test_ignores_pull_requests_the_session_only_saw(tmp_path):
+def test_ignores_pull_requests_the_session_only_mentioned(tmp_path):
     link = "https://github.com/acme/widgets/pull/2"
     listing = {
         "type": "tool_use",
@@ -390,7 +397,13 @@ def test_ignores_pull_requests_the_session_only_saw(tmp_path):
         "html_url": "https://github.com/acme/widgets/pull/1",
         "url": "https://api.github.com/repos/acme/widgets/pulls/1",
     }
+    create = {
+        "type": "tool_use",
+        "name": "mcp__github__create_pull_request",
+        "input": {"owner": "acme", "repo": "widgets", "body": f"Follows {link}"},
+    }
     fetch = {"type": "tool_use", "name": "WebFetch", "input": {"url": link}}
+    read = {"type": "tool_use", "id": "r1", "name": "Read", "input": {"path": "t.py"}}
     write = {
         "type": "tool_use",
         "name": "Write",
@@ -401,9 +414,13 @@ def test_ignores_pull_requests_the_session_only_saw(tmp_path):
         transcript,
         assistant_call(listing),
         tool_result("l1", json.dumps([listed])),
+        assistant_call(create),
         assistant_call(fetch),
+        assistant_call(read),
+        tool_result("r1", '{"pr":"acme/widgets#4"}'),
         assistant_call(write),
         assistant_call(bash_call(f"git commit -m 'Port {link}'")),
+        assistant_call(bash_call(f"gh pr comment 12 --body 'Like {link}'")),
         {"type": "user", "message": {"content": f"Compare with {link}"}},
         assistant_call({"type": "text", "text": link}),
     )
