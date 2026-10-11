@@ -12,7 +12,7 @@ from pull_requests import PullRequest, touched_pull_requests
 ROOT = Path(__file__).resolve().parent.parent
 HOOK = ROOT / "hooks" / "review_thread_reminder.py"
 PULL_REQUEST = PullRequest("acme", "widgets", 7)
-ADVICE = "Resolve the ones you addressed; leave open only those waiting on the user."
+ADVICE = "Resolve the ones you addressed; leave open the ones waiting on someone else."
 FAKE_GH = """#!/bin/bash
 case "$*" in
   *graphql*) response={responses}/graphql.json ;;

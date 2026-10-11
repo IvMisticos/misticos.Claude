@@ -14,7 +14,7 @@ from transcript import dict_or_empty
 
 STATE_DIR = os.path.join(STATE_ROOT, "review-threads")
 SUBAGENT_STOP = "subagentstop"
-ADVICE = "Resolve the ones you addressed; leave open only those waiting on the user."
+ADVICE = "Resolve the ones you addressed; leave open the ones waiting on someone else."
 
 
 def follows_own_block(payload):
