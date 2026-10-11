@@ -106,12 +106,8 @@ def updated_memory(memory, states, activity, scanned):
 
 
 def next_scan_start(part, activity, states):
-    unanswered = (
-        position
-        for pull_request, position in activity.items()
-        if pull_request not in states
-    )
-    return min(unanswered, default=part.end)
+    all_answered = all(pull_request in states for pull_request in activity)
+    return part.end if all_answered else part.start
 
 
 def claim_unseen_threads(key, states, activity, scanned):

@@ -203,6 +203,22 @@ def test_gh_failure_stays_silent_and_retries_next_stop(
     assert run_hook(home, gh_path, stop(transcript)) == blocked()
 
 
+def test_gh_failure_retries_a_pull_request_found_in_a_create_result(
+    home, gh_path, responses, tmp_path
+):
+    transcript = tmp_path / "transcript.jsonl"
+    write_lines(
+        transcript,
+        assistant_call(bash_call("gh pr create --fill", "b1")),
+        tool_result("b1", "https://github.com/acme/widgets/pull/7\n"),
+    )
+    (responses / "error.txt").write_text("gh: Bad Gateway (HTTP 502)")
+    assert run_hook(home, gh_path, stop(transcript)) is None
+    (responses / "error.txt").unlink()
+    answer_graphql(responses, Thread("T1", [1]))
+    assert run_hook(home, gh_path, stop(transcript)) == blocked()
+
+
 def test_missing_gh_stays_silent_and_keeps_the_activity(
     home, gh_path, responses, tmp_path, transcript
 ):
