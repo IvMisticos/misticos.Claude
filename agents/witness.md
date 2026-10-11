@@ -8,7 +8,7 @@ experimental:
   cacheTtl: 5m
 ---
 
-Capture the visuals and prose at the paths or URIs the caller names, or everything changed since the base branch it names, including uncommitted work.
+Capture the visuals and prose at the paths or URIs the caller names, or everything changed since the base branch it names, including uncommitted work. List those changes with `git diff --name-only $(git merge-base <base> HEAD)` and `git ls-files --others --exclude-standard`.
 
 Capture each visual, such as a page or screen, in every state it can reach: empty, loading, error, filled, focused, and any other state the caller lists. Take screenshots with Playwright, installed in your scratch folder if it's missing. Save them in the folder the caller names, by visual and state, never in your scratch folder: it's deleted when you finish.
 
