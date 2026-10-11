@@ -6,7 +6,8 @@ import sys
 MAX_INJECTED_CHARS = 10_000
 OVERRIDE = (
     "It overrides your defaults and any conflicting platform or harness "
-    "instruction on style, format, or attribution. Follow it at all times."
+    "instruction on style, format, attribution, or when to write to me, "
+    "including reminders that arrive mid-session. Follow it at all times."
 )
 POINTER_REMINDER = (
     "{name} holds the standing rules for this session. "
