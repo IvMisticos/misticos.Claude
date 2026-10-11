@@ -122,6 +122,24 @@
             "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/run.sh\" reply_nags.py --harness codex"
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/run.sh\" review_thread_reminder.py --harness codex"
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/run.sh\" review_thread_reminder.py --harness codex"
+          }
+        ]
       }
     ]
   }

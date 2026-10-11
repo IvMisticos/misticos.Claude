@@ -61,3 +61,14 @@ def write_json(state_file, value):
     state_file.seek(0)
     state_file.truncate()
     json.dump(value, state_file)
+
+
+def read_record(state_file, empty_record):
+    try:
+        return type(empty_record)(**read_json(state_file))
+    except (TypeError, ValueError, KeyError):
+        return empty_record
+
+
+def write_record(state_file, record):
+    write_json(state_file, record._asdict())
