@@ -112,7 +112,7 @@ def test_worker_types_skip_their_sections(home, agent_type):
     sent = subagent_rules(home, agent_type)
     for section in SECTIONS_SKIPPED_BY_AGENT_TYPE[agent_type]:
         assert f"# {section}" not in sent
-    assert "# Code" in sent
+    assert "# Clarity" in sent
 
 
 def test_other_subagents_get_every_section(home):
@@ -123,12 +123,11 @@ def test_other_subagents_get_every_section(home):
     assert all(heading in sent for heading in headings)
 
 
-@pytest.mark.parametrize("agent_type", ["misticos:scout", "misticos:witness"])
-def test_skipped_agent_types_get_nothing(home, agent_type):
+def test_skipped_agent_types_get_nothing(home):
     payload = {
         "hook_event_name": "SubagentStart",
         "agent_id": "a1",
-        "agent_type": agent_type,
+        "agent_type": "misticos:scout",
     }
     assert all_parts(home, payload) == [None] * PARTS
 

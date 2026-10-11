@@ -19,7 +19,7 @@ HARNESSES = {
         },
         context_from="transcript",
         output_shape="claude",
-        skipped_agent_types=frozenset({"misticos:scout", "misticos:witness"}),
+        skipped_agent_types=frozenset({"misticos:scout"}),
     ),
     "codex": Harness(
         model_names={"fast": "Luna", "strong": "Sol", "lead": "Astra"},

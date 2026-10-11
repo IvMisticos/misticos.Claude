@@ -32,6 +32,15 @@ SECTIONS_SKIPPED_BY_AGENT_TYPE = {
     "misticos:coder": ORCHESTRATOR_ONLY_SECTIONS | {"Reviews"},
     "misticos:engineer": ORCHESTRATOR_ONLY_SECTIONS | {"Reviews"},
     "misticos:reviewer": ORCHESTRATOR_ONLY_SECTIONS,
+    "misticos:witness": ORCHESTRATOR_ONLY_SECTIONS
+    | {
+        "Communication",
+        "Code",
+        "Engineering",
+        "Git",
+        "Reviews",
+        "Your behaviour",
+    },
 }
 
 
