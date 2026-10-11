@@ -564,3 +564,21 @@ def test_gh_pr_target_comes_after_flags_and_their_values(tmp_path):
         PullRequest("acme", "d", 8),
         PullRequest("acme", "e", 9),
     ]
+
+
+def test_shell_comments_hide_gh_commands(tmp_path):
+    transcript = tmp_path / "transcript.jsonl"
+    write_lines(
+        transcript,
+        assistant_call(
+            bash_call("# don't gh pr close 9 -R acme/a\ngh pr view 1 -R acme/b")
+        ),
+        assistant_call(
+            bash_call("gh pr view 2 -R acme/c # it's open\ngh pr view 3 -R acme/d")
+        ),
+    )
+    assert list(activity_in(transcript)) == [
+        PullRequest("acme", "b", 1),
+        PullRequest("acme", "c", 2),
+        PullRequest("acme", "d", 3),
+    ]

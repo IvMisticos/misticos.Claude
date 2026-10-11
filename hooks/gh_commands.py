@@ -1,3 +1,4 @@
+import io
 import shlex
 from typing import NamedTuple
 
@@ -65,12 +66,27 @@ class GhPrCall(NamedTuple):
         return self.subcommand in CREATE_SUBCOMMANDS
 
 
+class CommentEndingBeforeNewline(io.StringIO):
+    def readline(self, size=-1):
+        line = super().readline(size)
+        if not line.endswith("\n"):
+            return line
+        self.seek(self.tell() - 1)
+        return line.removesuffix("\n")
+
+
+def shell_text(text):
+    return text.replace(LINE_CONTINUATION, "")
+
+
 def words_of(text):
-    joined = text.replace(LINE_CONTINUATION, "")
-    lexer = shlex.shlex(joined, posix=True, punctuation_chars=SHELL_OPERATOR_CHARACTERS)
+    lexer = shlex.shlex(
+        CommentEndingBeforeNewline(shell_text(text)),
+        posix=True,
+        punctuation_chars=SHELL_OPERATOR_CHARACTERS,
+    )
     lexer.whitespace = WORD_SEPARATORS
     lexer.whitespace_split = True
-    lexer.commenters = ""
     try:
         return list(lexer)
     except ValueError:
