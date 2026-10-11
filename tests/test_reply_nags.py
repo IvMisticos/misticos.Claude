@@ -240,6 +240,16 @@ def test_cursor_keeps_long_replies_from_turns_without_tools(home):
     assert "349 characters" in cursor(home, "postToolUse")
 
 
+def test_cursor_counts_the_answer_after_the_last_tool(home):
+    cursor(home, "beforeSubmitPrompt", prompt="go")
+    cursor(home, "afterAgentResponse", text="Checking.")
+    assert cursor(home, "postToolUse") is None
+    cursor(home, "afterAgentResponse", text="Done.")
+    cursor(home, "beforeSubmitPrompt", prompt="next")
+    assert "2 messages in a row" in cursor(home, "postToolUse")
+    assert cursor(home, "postToolUse") is None
+
+
 def test_cursor_nags_about_repeated_updates_after_a_tool(home):
     cursor(home, "beforeSubmitPrompt", prompt="go")
     cursor(home, "afterAgentResponse", text=SHORT)

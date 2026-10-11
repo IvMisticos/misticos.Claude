@@ -57,9 +57,14 @@ class NagMemory(NamedTuple):
 class NagState(NamedTuple):
     memory: NagMemory = NagMemory()
     log: EventLog = EventLog()
+    pending_nags: tuple = ()
 
     def to_json(self):
-        return {"memory": self.memory._asdict(), "log": self.log.to_json()}
+        return {
+            "memory": self.memory._asdict(),
+            "log": self.log.to_json(),
+            "pending_nags": list(self.pending_nags),
+        }
 
 
 def parsed_memory(stored):
@@ -76,10 +81,18 @@ def parsed_memory(stored):
     return memory if valid else NagMemory()
 
 
+def parsed_pending_nags(stored):
+    if not isinstance(stored, list):
+        return ()
+    return tuple(nag for nag in stored if isinstance(nag, str))
+
+
 def parsed_state(stored):
     stored = dict_or_empty(stored)
     return NagState(
-        parsed_memory(stored.get("memory")), parsed_event_log(stored.get("log"))
+        parsed_memory(stored.get("memory")),
+        parsed_event_log(stored.get("log")),
+        parsed_pending_nags(stored.get("pending_nags")),
     )
 
 
@@ -140,13 +153,16 @@ def nags_from_events(event, payload, state):
     reply_text = payload.get(REPLY_TEXT_FIELD_BY_EVENT.get(event))
     if isinstance(reply_text, str) and reply_text.strip():
         log = log.with_reply(reply_text)
-    nags, memory = [], state.memory
-    if event in NAG_EVENTS:
-        nags, memory = due_nags(log.history, memory)
+    nags, memory = list(state.pending_nags), state.memory
+    if event in NAG_EVENTS | PROMPT_EVENTS:
+        due, memory = due_nags(log.history, memory)
+        nags += due
         log = log.starting_at(memory.window)
     if event in PROMPT_EVENTS:
         log = log.with_prompt()
-    return nags, NagState(memory, log)
+    if event in NAG_EVENTS:
+        return nags, NagState(memory, log)
+    return [], NagState(memory, log, tuple(nags))
 
 
 def is_subagent(payload):
