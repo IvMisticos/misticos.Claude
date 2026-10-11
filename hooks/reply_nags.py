@@ -11,6 +11,7 @@ from hook_io import read_payload, run_hook, write_context
 from reply_history import (
     EventLog,
     Reply,
+    Window,
     parsed_event_log,
     transcript_history,
     window_under_review,
@@ -47,6 +48,7 @@ NAG_EVENTS = frozenset({"userpromptsubmit", "posttoolbatch", "posttooluse"})
 class NagMemory(NamedTuple):
     seen_reply: str = ""
     window: str = ""
+    window_replies: int = 0
     nagged_at: int = 0
 
 
@@ -66,6 +68,7 @@ def parsed_memory(stored):
     valid = (
         isinstance(memory.seen_reply, str)
         and isinstance(memory.window, str)
+        and isinstance(memory.window_replies, int)
         and isinstance(memory.nagged_at, int)
     )
     return memory if valid else NagMemory()
@@ -85,39 +88,35 @@ def unseen_replies(replies, seen_reply):
     return replies[ids.index(seen_reply) + 1 :]
 
 
-def long_reply_nag(history, memory):
-    replies = [item for item in history if isinstance(item, Reply)]
-    if not replies:
-        return None, memory
-    long_replies = [
-        reply
-        for reply in unseen_replies(replies, memory.seen_reply)
-        if reply.prose_length > PROSE_LIMIT
-    ]
-    memory = memory._replace(seen_reply=replies[-1].id)
+def long_reply_nag(unseen):
+    long_replies = [reply for reply in unseen if reply.prose_length > PROSE_LIMIT]
     if not long_replies:
-        return None, memory
-    nag = LONG_REPLY.format(length=long_replies[-1].prose_length, limit=PROSE_LIMIT)
-    return nag, memory
+        return None
+    return LONG_REPLY.format(length=long_replies[-1].prose_length, limit=PROSE_LIMIT)
 
 
-def repeated_updates_nag(history, memory):
-    window = window_under_review(history, memory.window)
+def repeated_updates_nag(history, memory, unseen):
+    remembered = Window(memory.window, memory.window_replies)
+    window = window_under_review(history, remembered, len(unseen))
     if window is None:
         return None, memory
     nagged_at = memory.nagged_at if memory.window == window.prompt_id else 0
     due_at = nagged_at + MESSAGES_BETWEEN_NAGS if nagged_at else FIRST_NAG_AT_MESSAGES
-    count = len(window.replies)
+    count = window.reply_count
+    memory = memory._replace(window=window.prompt_id, window_replies=count)
     if count < due_at:
-        return None, memory._replace(window=window.prompt_id, nagged_at=nagged_at)
-    nag = REPEATED_UPDATES.format(count=count)
-    return nag, memory._replace(window=window.prompt_id, nagged_at=count)
+        return None, memory._replace(nagged_at=nagged_at)
+    return REPEATED_UPDATES.format(count=count), memory._replace(nagged_at=count)
 
 
 def due_nags(history, memory):
-    long_reply, memory = long_reply_nag(history, memory)
-    repeated_updates, memory = repeated_updates_nag(history, memory)
-    return [nag for nag in (long_reply, repeated_updates) if nag], memory
+    replies = [item for item in history if isinstance(item, Reply)]
+    unseen = unseen_replies(replies, memory.seen_reply)
+    repeated_updates, memory = repeated_updates_nag(history, memory, unseen)
+    if replies:
+        memory = memory._replace(seen_reply=replies[-1].id)
+    nags = (long_reply_nag(unseen), repeated_updates)
+    return [nag for nag in nags if nag], memory
 
 
 def nags_from_transcript(event, payload, state):

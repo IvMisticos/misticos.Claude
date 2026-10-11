@@ -15,7 +15,7 @@ class Reply(NamedTuple):
 
 class Window(NamedTuple):
     prompt_id: str
-    replies: list
+    reply_count: int
 
 
 class EventLog(NamedTuple):
@@ -123,19 +123,18 @@ def windows(history):
     found = []
     for item in history:
         if isinstance(item, Prompt):
-            found.append(Window(item.id, []))
+            found.append(Window(item.id, 0))
         elif found:
-            found[-1].replies.append(item)
+            found[-1] = found[-1]._replace(reply_count=found[-1].reply_count + 1)
     return found
 
 
-def window_under_review(history, remembered_prompt_id):
+def window_under_review(history, remembered, unseen_reply_count):
     found = windows(history)
-    if len(found) >= 2 and not found[-1].replies:
+    if len(found) >= 2 and not found[-1].reply_count:
         return found[-2]
     if found:
         return found[-1]
-    if not remembered_prompt_id:
+    if not remembered.prompt_id:
         return None
-    replies = [item for item in history if isinstance(item, Reply)]
-    return Window(remembered_prompt_id, replies)
+    return remembered._replace(reply_count=remembered.reply_count + unseen_reply_count)

@@ -23,6 +23,7 @@ SHORT = "done"
         ("before\n```python\nprint('x' * 900)\n```\nafter", 12),
         ("open fence\n~~~\nnever closed", 10),
         ("short\n```\ncode\n````\nlong closer", 17),
+        ("shown\n~~~\n```\n~~~\nafter", 11),
         ("run `make test` now", 7),
         ("see [the PR](https://github.com/a/b/pull/1) ok", 13),
         ("link https://example.com/very/long/path here", 9),
@@ -178,7 +179,18 @@ def test_keeps_counting_after_the_prompt_leaves_the_transcript_tail(home, transc
     transcript.reply(SHORT)
     transcript.wake()
     transcript.reply(SHORT)
-    assert "2 messages in a row" in transcript.fire(home)
+    assert "3 messages in a row" in transcript.fire(home)
+
+
+def test_counts_replies_that_left_the_transcript_tail(home, transcript):
+    transcript.human()
+    nagged_at = []
+    for count in range(1, 9):
+        transcript.reply(SHORT)
+        if transcript.fire(home):
+            nagged_at.append(count)
+        transcript.path.write_text("")
+    assert nagged_at == [2, 8]
 
 
 def test_skips_subagents(home, transcript):
