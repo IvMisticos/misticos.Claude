@@ -35,11 +35,12 @@ def transcript_tail_lines(transcript_path):
     return lines if start == 0 else lines[1:]
 
 
-def tail_entries(transcript_path):
-    try:
-        lines = transcript_tail_lines(transcript_path)
-    except OSError:
-        return
+def transcript_lines(transcript_path):
+    with open(transcript_path, "rb") as transcript:
+        return transcript.read().split(b"\n")
+
+
+def entries_in(lines):
     for line in lines:
         try:
             entry = json.loads(line)
@@ -47,6 +48,22 @@ def tail_entries(transcript_path):
             continue
         if isinstance(entry, dict):
             yield entry
+
+
+def tail_entries(transcript_path):
+    try:
+        lines = transcript_tail_lines(transcript_path)
+    except OSError:
+        return
+    yield from entries_in(lines)
+
+
+def all_entries(transcript_path):
+    try:
+        lines = transcript_lines(transcript_path)
+    except OSError:
+        return
+    yield from entries_in(lines)
 
 
 def recent_entries(transcript_path):

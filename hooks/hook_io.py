@@ -31,6 +31,16 @@ def write_context(event, context, shape="claude"):
     json.dump(hook_output(event, context, shape), sys.stdout)
 
 
+def block_output(reason, shape):
+    if shape == "cursor":
+        return {"followup_message": reason}
+    return {"decision": "block", "reason": reason}
+
+
+def write_block(reason, shape="claude"):
+    json.dump(block_output(reason, shape), sys.stdout)
+
+
 def run_pre_tool_use(decide):
     decision = decide(read_payload())
     if decision:
