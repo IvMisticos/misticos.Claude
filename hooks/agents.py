@@ -3,10 +3,6 @@ from typing import NamedTuple
 from rule_sections import RuleSection
 
 ALL_SECTIONS = frozenset(RuleSection)
-ORCHESTRATOR_ONLY_SECTIONS = frozenset(
-    {RuleSection.ISSUE_TRACKING, RuleSection.PULL_REQUESTS, RuleSection.DELEGATION}
-)
-WORKER_SECTIONS = ALL_SECTIONS - ORCHESTRATOR_ONLY_SECTIONS
 
 
 class Agent(NamedTuple):
@@ -15,9 +11,52 @@ class Agent(NamedTuple):
 
 
 AGENTS = (
-    Agent("misticos:coder", WORKER_SECTIONS - {RuleSection.REVIEWS}),
-    Agent("misticos:engineer", WORKER_SECTIONS - {RuleSection.REVIEWS}),
-    Agent("misticos:reviewer", WORKER_SECTIONS),
+    Agent(
+        "misticos:coder",
+        frozenset(
+            {
+                RuleSection.COMMUNICATION,
+                RuleSection.CLARITY,
+                RuleSection.NEVER_SOUND_LIKE_AN_AI,
+                RuleSection.CODE,
+                RuleSection.ENGINEERING,
+                RuleSection.USER_INTERFACE,
+                RuleSection.GIT,
+                RuleSection.YOUR_BEHAVIOUR,
+            }
+        ),
+    ),
+    Agent(
+        "misticos:engineer",
+        frozenset(
+            {
+                RuleSection.COMMUNICATION,
+                RuleSection.CLARITY,
+                RuleSection.NEVER_SOUND_LIKE_AN_AI,
+                RuleSection.CODE,
+                RuleSection.ENGINEERING,
+                RuleSection.USER_INTERFACE,
+                RuleSection.GIT,
+                RuleSection.YOUR_BEHAVIOUR,
+            }
+        ),
+    ),
+    Agent(
+        "misticos:reviewer",
+        frozenset(
+            {
+                RuleSection.COMMUNICATION,
+                RuleSection.CLARITY,
+                RuleSection.NEVER_SOUND_LIKE_AN_AI,
+                RuleSection.CODE,
+                RuleSection.ENGINEERING,
+                RuleSection.USER_INTERFACE,
+                RuleSection.GIT,
+                RuleSection.REVIEWS,
+                RuleSection.YOUR_BEHAVIOUR,
+            }
+        ),
+    ),
     Agent("misticos:scout", frozenset()),
     Agent("misticos:watcher", frozenset()),
     Agent(
