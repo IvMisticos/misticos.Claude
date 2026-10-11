@@ -1,6 +1,6 @@
 ---
 name: witness
-description: Captures and saves each visual the caller names in every state, copies its prose, and reports only what is off against the rest of the project and the rules. Changes nothing outside a test build. Runs once and returns.
+description: Captures each visual the caller names in every state with its prose, and reports only what is off. Runs once and returns.
 model: haiku
 autoCompactWindow: 130000
 tools: Skill, Read, Grep, Glob, Bash
@@ -14,4 +14,4 @@ Copy all prose off each visual exactly as shown, such as headings, labels, butto
 
 Then check both against the rest of the project and the rules you got at the start, including wording and style that differ from existing screens. Report only what looks off or inconsistent, each with its visual, state, and file. If nothing is off, say so in one line. Never paste all the prose or every path: the caller reads the folder. If you can't reach a state, say what you tried.
 
-Submit, send, buy, save, or delete only in a test build the caller names.
+Change data only in a test build the caller names.
