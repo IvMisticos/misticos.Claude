@@ -7,6 +7,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
 
+from harnesses import HARNESSES
 from reminder import SECTIONS_SKIPPED_BY_AGENT_TYPE
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -123,11 +124,12 @@ def test_other_subagents_get_every_section(home):
     assert all(heading in sent for heading in headings)
 
 
-def test_skipped_agent_types_get_nothing(home):
+@pytest.mark.parametrize("agent_type", sorted(HARNESSES["claude"].skipped_agent_types))
+def test_skipped_agent_types_get_nothing(home, agent_type):
     payload = {
         "hook_event_name": "SubagentStart",
         "agent_id": "a1",
-        "agent_type": "misticos:scout",
+        "agent_type": agent_type,
     }
     assert all_parts(home, payload) == [None] * PARTS
 
