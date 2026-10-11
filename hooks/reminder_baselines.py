@@ -1,20 +1,18 @@
 import collections
 import contextlib
-import json
 import os
-import re
-import sys
-import time
 
-if sys.platform == "win32":
-    import msvcrt
-else:
-    import fcntl
+from session_state import (
+    STATE_ROOT,
+    locked_session_file,
+    read_json,
+    session_file_path,
+    write_json,
+)
 
 FULL_COPY_EVERY_TOKENS = 100_000
 POINTER_EVERY_TOKENS = 25_000
-FORGET_BASELINE_AFTER_SECONDS = 7 * 24 * 60 * 60
-BASELINE_DIR = os.path.expanduser("~/.claude/hooks/data/misticos.Claude/reminder")
+BASELINE_DIR = os.path.join(STATE_ROOT, "reminder")
 IDLE = ""
 POINTER = "pointer"
 COPY = "copy"
@@ -63,41 +61,6 @@ def action_for_fire(baselines, fire, tokens, can_copy):
     return next_action(baselines, fire, tokens, can_copy)
 
 
-def baseline_path(session_id):
-    return os.path.join(BASELINE_DIR, re.sub(r"[^A-Za-z0-9_-]", "-", session_id))
-
-
-def forget_baselines_of_dead_sessions():
-    cutoff = time.time() - FORGET_BASELINE_AFTER_SECONDS
-    for name in os.listdir(BASELINE_DIR):
-        baseline = os.path.join(BASELINE_DIR, name)
-        try:
-            if os.path.getmtime(baseline) < cutoff:
-                os.unlink(baseline)
-        except OSError:
-            continue
-
-
-@contextlib.contextmanager
-def locked_baseline(session_id):
-    os.makedirs(BASELINE_DIR, exist_ok=True)
-    path = baseline_path(session_id)
-    if not os.path.exists(path):
-        forget_baselines_of_dead_sessions()
-    with open(path, "a+", encoding="utf-8") as baseline_file:
-        lock_exclusively(baseline_file)
-        yield baseline_file
-
-
-def lock_exclusively(baseline_file):
-    if sys.platform != "win32":
-        fcntl.flock(baseline_file, fcntl.LOCK_EX)
-        return
-    baseline_file.seek(0)
-    with contextlib.suppress(OSError):
-        msvcrt.locking(baseline_file.fileno(), msvcrt.LK_LOCK, 1)
-
-
 def parsed_baselines(stored):
     try:
         baselines = Baselines(**stored)
@@ -112,32 +75,18 @@ def parsed_baselines(stored):
     return baselines if valid else None
 
 
-def read_baselines(baseline_file):
-    baseline_file.seek(0)
-    try:
-        return parsed_baselines(json.loads(baseline_file.read()))
-    except (UnicodeDecodeError, json.JSONDecodeError):
-        return None
-
-
-def write_baselines(baseline_file, baselines):
-    baseline_file.seek(0)
-    baseline_file.truncate()
-    json.dump(baselines._asdict(), baseline_file)
-
-
 def claim_action(session_id, fire, can_copy, tokens=None, added_tokens=0):
-    with locked_baseline(session_id) as baseline_file:
-        stored = read_baselines(baseline_file)
+    with locked_session_file(BASELINE_DIR, session_id) as baseline_file:
+        stored = parsed_baselines(read_json(baseline_file))
         if tokens is None:
             already_this_fire = stored is not None and fire and stored.fire == fire
             seen = stored.seen if stored else 0
             tokens = seen if already_this_fire else seen + added_tokens
         action, baselines = action_for_fire(stored, fire, tokens, can_copy)
-        write_baselines(baseline_file, baselines._replace(seen=tokens))
+        write_json(baseline_file, baselines._replace(seen=tokens)._asdict())
         return action
 
 
 def forget_baseline(session_id):
     with contextlib.suppress(OSError):
-        os.unlink(baseline_path(session_id))
+        os.unlink(session_file_path(BASELINE_DIR, session_id))
