@@ -7,9 +7,9 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
 
-from agent_types import AgentType
-from reminder import SECTIONS_SKIPPED_BY_AGENT_TYPE
 from rule_sections import RuleSection
+
+from agents import AGENTS
 
 ROOT = Path(__file__).resolve().parent.parent
 REMINDER = ROOT / "hooks" / "reminder.py"
@@ -113,13 +113,11 @@ def subagent_rules(home, agent_type):
     return "".join(part for part in all_parts(home, payload) if part)
 
 
-@pytest.mark.parametrize("agent_type", sorted(SECTIONS_SKIPPED_BY_AGENT_TYPE))
-def test_worker_types_skip_their_sections(home, agent_type):
-    sent = subagent_rules(home, agent_type)
-    skipped = SECTIONS_SKIPPED_BY_AGENT_TYPE[agent_type]
-    assert skipped <= {heading.removeprefix("# ") for heading in rule_headings()}
+@pytest.mark.parametrize("agent", AGENTS, ids=lambda agent: agent.name)
+def test_agents_get_only_their_sections(home, agent):
+    sent = subagent_rules(home, agent.name)
     for heading in rule_headings():
-        assert (heading in sent) == (heading.removeprefix("# ") not in skipped)
+        assert (heading in sent) == (heading.removeprefix("# ") in agent.rule_sections)
 
 
 def test_rule_sections_match_headings():
@@ -129,7 +127,7 @@ def test_rule_sections_match_headings():
     assert [f"# {section}" for section in RuleSection] == headings
 
 
-def test_agent_types_name_real_agents():
+def test_agents_name_real_agent_files():
     agents = ROOT / "agents"
     names = {
         line.removeprefix("name: ")
@@ -137,7 +135,7 @@ def test_agent_types_name_real_agents():
         for line in path.read_text().splitlines()
         if line.startswith("name: ")
     }
-    assert {agent_type.removeprefix("misticos:") for agent_type in AgentType} <= names
+    assert {agent.name.removeprefix("misticos:") for agent in AGENTS} == names
 
 
 def test_other_subagents_get_every_section(home):
@@ -145,13 +143,14 @@ def test_other_subagents_get_every_section(home):
     assert all(heading in sent for heading in rule_headings())
 
 
-@pytest.mark.parametrize("agent_type", ["misticos:scout", "misticos:watcher"])
-def test_skipped_agent_types_get_nothing(home, agent_type):
-    payload = {
-        "hook_event_name": "SubagentStart",
-        "agent_id": "a1",
-        "agent_type": agent_type,
-    }
+@pytest.mark.parametrize(
+    "agent",
+    [agent for agent in AGENTS if not agent.rule_sections],
+    ids=lambda agent: agent.name,
+)
+@pytest.mark.parametrize("ids", [{"agent_id": "a1"}, {}], ids=["with-id", "without-id"])
+def test_agents_without_sections_get_nothing(home, agent, ids):
+    payload = {"hook_event_name": "SubagentStart", "agent_type": agent.name, **ids}
     assert all_parts(home, payload) == [None] * PARTS
 
 

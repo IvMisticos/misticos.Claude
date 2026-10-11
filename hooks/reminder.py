@@ -6,7 +6,6 @@
 import sys
 from pathlib import Path
 
-from agent_types import AgentType
 from harnesses import ContextSource, harness_parser
 from hook_io import read_payload, run_hook, write_context
 from reminder_baselines import (
@@ -16,7 +15,6 @@ from reminder_baselines import (
     fire_id,
     forget_baseline,
 )
-from rule_sections import RuleSection
 from rules_copy import (
     GROWN_PREAMBLE,
     SESSION_START_PREAMBLE,
@@ -26,24 +24,9 @@ from rules_copy import (
 )
 from transcript import context_tokens, payload_tokens, transcript_fits_in_tail
 
+from agents import ALL_SECTIONS, rule_sections_for
+
 RULES_PATH = str(Path(__file__).resolve().parent.parent / "INSTRUCTIONS.md")
-ORCHESTRATOR_ONLY_SECTIONS = frozenset(
-    {RuleSection.ISSUE_TRACKING, RuleSection.PULL_REQUESTS, RuleSection.DELEGATION}
-)
-SECTIONS_SKIPPED_BY_AGENT_TYPE = {
-    AgentType.CODER: ORCHESTRATOR_ONLY_SECTIONS | {RuleSection.REVIEWS},
-    AgentType.ENGINEER: ORCHESTRATOR_ONLY_SECTIONS | {RuleSection.REVIEWS},
-    AgentType.REVIEWER: ORCHESTRATOR_ONLY_SECTIONS,
-    AgentType.WITNESS: ORCHESTRATOR_ONLY_SECTIONS
-    | {
-        RuleSection.COMMUNICATION,
-        RuleSection.CODE,
-        RuleSection.ENGINEERING,
-        RuleSection.GIT,
-        RuleSection.REVIEWS,
-        RuleSection.YOUR_BEHAVIOUR,
-    },
-}
 
 
 def message_for_part(action, part, messages, rules):
@@ -87,30 +70,32 @@ def event_name(payload):
     return str(payload.get("hook_event_name"))
 
 
+def is_subagent_start(payload):
+    return bool(
+        payload.get("agent_id")
+        or payload.get("subagent_id")
+        or event_name(payload).lower() == "subagentstart"
+    )
+
+
 def session_start_reminder(rules, payload, options):
-    is_subagent = payload.get("agent_id") or payload.get("subagent_id")
+    is_subagent = is_subagent_start(payload)
     if options.part == 1 and payload.get("session_id") and not is_subagent:
         forget_baseline(payload["session_id"])
-    skipped = (
-        SECTIONS_SKIPPED_BY_AGENT_TYPE.get(payload.get("agent_type"), frozenset())
-        if is_subagent
-        else frozenset()
+    sections = (
+        rule_sections_for(payload.get("agent_type")) if is_subagent else ALL_SECTIONS
     )
-    messages = full_copy_messages(rules, SESSION_START_PREAMBLE, skipped)
+    if not sections:
+        return None
+    messages = full_copy_messages(
+        rules, SESSION_START_PREAMBLE, ALL_SECTIONS - sections
+    )
     if len(messages) > options.entries:
         return pointer_reminder(rules) if options.part == 1 else None
     return message_for_part(COPY, options.part, messages, rules)
 
 
-def is_skipped_subagent(event, payload, options):
-    starts_subagent = event.lower() == "subagentstart"
-    agent_type = payload.get("agent_type")
-    return starts_subagent and agent_type in options.harness.skipped_agent_types
-
-
 def reminder_for(event, payload, options):
-    if is_skipped_subagent(event, payload, options):
-        return None
     rules = rules_at(RULES_PATH, options.harness.model_names)
     if event.lower() in ("sessionstart", "subagentstart"):
         return session_start_reminder(rules, payload, options)
