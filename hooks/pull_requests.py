@@ -106,7 +106,7 @@ def pull_requests_in_entry(entry, creating_calls):
     for block in blocks:
         if block_type(block) in CALL_TYPES:
             yield from pull_requests_linked_in(block)
-            if creates_a_pull_request(block):
+            if creates_a_pull_request(block) and call_id(block):
                 creating_calls.add(call_id(block))
         elif answered_call_id(block) in creating_calls:
             yield from pull_requests_linked_in(block)

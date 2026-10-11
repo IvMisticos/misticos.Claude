@@ -381,3 +381,19 @@ def test_codex_create_result_matches_by_call_id(tmp_path):
     assert list(last_activity_by_pull_request(transcript)) == [
         PullRequest("acme", "apps", 8)
     ]
+
+
+def test_create_call_without_id_reads_no_other_entries(tmp_path):
+    create = {
+        "type": "tool_use",
+        "name": "mcp__github__create_pull_request",
+        "input": {"owner": "acme", "repo": "widgets"},
+    }
+    prose = "Compare with https://github.com/acme/widgets/pull/2"
+    transcript = tmp_path / "transcript.jsonl"
+    write_lines(
+        transcript,
+        assistant_call(create),
+        {"type": "user", "message": {"content": prose}},
+    )
+    assert last_activity_by_pull_request(transcript) == {}
