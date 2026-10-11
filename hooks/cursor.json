@@ -60,6 +60,16 @@
       {
         "command": "\"${CURSOR_PLUGIN_ROOT}/hooks/run.sh\" reply_nags.py --harness cursor"
       }
+    ],
+    "stop": [
+      {
+        "command": "\"${CURSOR_PLUGIN_ROOT}/hooks/run.sh\" review_thread_reminder.py --harness cursor"
+      }
+    ],
+    "subagentStop": [
+      {
+        "command": "\"${CURSOR_PLUGIN_ROOT}/hooks/run.sh\" review_thread_reminder.py --harness cursor"
+      }
     ]
   }
 }
