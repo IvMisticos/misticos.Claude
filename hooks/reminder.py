@@ -6,7 +6,7 @@
 import sys
 from pathlib import Path
 
-from harnesses import harness_parser
+from harnesses import ContextSource, harness_parser
 from hook_io import read_payload, run_hook, write_context
 from reminder_baselines import (
     COPY,
@@ -52,7 +52,7 @@ def growth_reminder(rules, payload, options):
     if not fire and options.part > 1:
         return None
     can_copy = len(messages) <= options.entries and bool(fire or len(messages) == 1)
-    if options.harness.context_from == "payload":
+    if options.harness.context_from == ContextSource.PAYLOAD:
         added = payload_tokens(payload)
         action = claim_action(session_id, fire, can_copy, added_tokens=added)
         return message_for_part(action, options.part, messages, rules)

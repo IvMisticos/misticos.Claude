@@ -1,6 +1,8 @@
 import json
 import os
 
+from harnesses import ContextSource
+
 TRANSCRIPT_TAIL_BYTES = 1 << 20
 CHARS_PER_TOKEN_ESTIMATE = 4
 CONTEXT_USAGE_FIELDS = (
@@ -87,6 +89,6 @@ def transcript_fits_in_tail(transcript_path):
 
 
 def context_tokens(transcript_path, source):
-    if source == "size":
+    if source == ContextSource.SIZE:
         return context_tokens_from_size(transcript_path)
     return latest_context_tokens(transcript_path)
