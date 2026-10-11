@@ -5,7 +5,7 @@ from typing import NamedTuple
 
 SHELL_OPERATOR_CHARACTERS = "();<>|&\n"
 WORD_SEPARATORS = " \t\r"
-LINE_CONTINUATION = "\\\n"
+LINE_CONTINUATION = re.compile(r"(?<!\\)((?:\\\\)*)\\\n")
 FD_BEFORE_REDIRECTION = re.compile(r"(?<![^\s();<>|&])\d+(?=[<>])")
 REPO_FLAGS = frozenset({"-R", "--repo"})
 CREATE_SUBCOMMANDS = frozenset({"create", "new"})
@@ -78,7 +78,7 @@ class CommentEndingBeforeNewline(io.StringIO):
 
 
 def shell_text(text):
-    joined = text.replace(LINE_CONTINUATION, "")
+    joined = LINE_CONTINUATION.sub(r"\1", text)
     return FD_BEFORE_REDIRECTION.sub("", joined)
 
 

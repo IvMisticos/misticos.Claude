@@ -542,6 +542,16 @@ def test_newline_ends_a_gh_command(tmp_path):
     ]
 
 
+def test_escaped_backslash_before_a_newline_keeps_the_newline(tmp_path):
+    transcript = tmp_path / "transcript.jsonl"
+    write_lines(
+        transcript,
+        assistant_call(bash_call("echo a\\\\\ngh pr view 7 -R acme/c")),
+        assistant_call(bash_call("echo b\\\\\\\ngh pr view 8 -R acme/d")),
+    )
+    assert list(activity_in(transcript)) == [PullRequest("acme", "c", 7)]
+
+
 def test_gh_pr_target_comes_after_flags_and_their_values(tmp_path):
     transcript = tmp_path / "transcript.jsonl"
     write_lines(
