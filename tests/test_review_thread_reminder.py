@@ -582,3 +582,14 @@ def test_shell_comments_hide_gh_commands(tmp_path):
         PullRequest("acme", "c", 2),
         PullRequest("acme", "d", 3),
     ]
+
+
+def test_redirections_are_not_gh_arguments(tmp_path):
+    transcript = tmp_path / "transcript.jsonl"
+    write_lines(
+        transcript,
+        assistant_call(bash_call("gh pr comment --body x -R acme/a 2>&1")),
+        assistant_call(bash_call("gh pr view -R acme/b --json url 2>/dev/null")),
+        assistant_call(bash_call("gh pr view 4 -R acme/c >out 2>&1 | head")),
+    )
+    assert list(activity_in(transcript)) == [PullRequest("acme", "c", 4)]

@@ -1,10 +1,12 @@
 import io
+import re
 import shlex
 from typing import NamedTuple
 
 SHELL_OPERATOR_CHARACTERS = "();<>|&\n"
 WORD_SEPARATORS = " \t\r"
 LINE_CONTINUATION = "\\\n"
+FD_BEFORE_REDIRECTION = re.compile(r"(?<![^\s();<>|&])\d+(?=[<>])")
 REPO_FLAGS = frozenset({"-R", "--repo"})
 CREATE_SUBCOMMANDS = frozenset({"create", "new"})
 SHARED_VALUED_FLAGS = frozenset(
@@ -76,7 +78,8 @@ class CommentEndingBeforeNewline(io.StringIO):
 
 
 def shell_text(text):
-    return text.replace(LINE_CONTINUATION, "")
+    joined = text.replace(LINE_CONTINUATION, "")
+    return FD_BEFORE_REDIRECTION.sub("", joined)
 
 
 def words_of(text):
