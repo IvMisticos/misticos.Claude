@@ -1,13 +1,30 @@
 import argparse
+from enum import Enum, auto
 from typing import NamedTuple
+
+
+class ContextSource(Enum):
+    TRANSCRIPT = auto()
+    SIZE = auto()
+    PAYLOAD = auto()
+
+
+class OutputShape(Enum):
+    CLAUDE = auto()
+    CURSOR = auto()
+
+
+class ReplyHistory(Enum):
+    TRANSCRIPT = auto()
+    EVENTS = auto()
 
 
 class Harness(NamedTuple):
     model_names: dict
-    context_from: str
-    output_shape: str
+    context_from: ContextSource
+    output_shape: OutputShape
     skipped_agent_types: frozenset = frozenset()
-    reply_history: str = "events"
+    reply_history: ReplyHistory = ReplyHistory.EVENTS
 
 
 HARNESSES = {
@@ -18,15 +35,15 @@ HARNESSES = {
             "strong": "Opus",
             "lead": "Fable",
         },
-        context_from="transcript",
-        output_shape="claude",
+        context_from=ContextSource.TRANSCRIPT,
+        output_shape=OutputShape.CLAUDE,
         skipped_agent_types=frozenset({"misticos:scout"}),
-        reply_history="transcript",
+        reply_history=ReplyHistory.TRANSCRIPT,
     ),
     "codex": Harness(
         model_names={"fast": "Luna", "strong": "Sol", "lead": "Astra"},
-        context_from="size",
-        output_shape="claude",
+        context_from=ContextSource.SIZE,
+        output_shape=OutputShape.CLAUDE,
     ),
     "cursor": Harness(
         model_names={
@@ -34,8 +51,8 @@ HARNESSES = {
             "strong": "Opus or Sol",
             "lead": "Fable or Astra",
         },
-        context_from="payload",
-        output_shape="cursor",
+        context_from=ContextSource.PAYLOAD,
+        output_shape=OutputShape.CURSOR,
     ),
 }
 

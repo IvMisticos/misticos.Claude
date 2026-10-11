@@ -7,7 +7,7 @@ import os
 import uuid
 from typing import NamedTuple
 
-from harnesses import harness_parser
+from harnesses import ReplyHistory, harness_parser
 from hook_io import read_payload, run_hook, write_context
 from reply_history import (
     EventLog,
@@ -193,7 +193,7 @@ def main():
         return
     nags_for = (
         nags_from_transcript
-        if options.harness.reply_history == "transcript"
+        if options.harness.reply_history == ReplyHistory.TRANSCRIPT
         else nags_from_events
     )
     with locked_session_file(STATE_DIR, session_id) as state_file:

@@ -10,6 +10,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+from harnesses import OutputShape
 from hook_io import read_payload, run_hook, scratchpad_of, write_context
 
 AGENT_ID = re.compile(r"[A-Za-z0-9_-]+")
@@ -53,7 +54,7 @@ def offer_agent_folder(payload):
         return
     folder.mkdir(parents=True, exist_ok=True)
     note = SCRATCH_FOLDER_NOTE.format(folder=folder)
-    write_context("SubagentStart", note, "claude")
+    write_context("SubagentStart", note, OutputShape.CLAUDE)
 
 
 def delete_agent_folder(payload):
