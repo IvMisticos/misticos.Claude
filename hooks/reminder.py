@@ -25,11 +25,13 @@ from rules_copy import (
 from transcript import context_tokens, payload_tokens, transcript_fits_in_tail
 
 RULES_PATH = str(Path(__file__).resolve().parent.parent / "INSTRUCTIONS.md")
-ORCHESTRATOR_SECTIONS = frozenset({"Issue tracking", "Pull requests", "Delegation"})
+ORCHESTRATOR_ONLY_SECTIONS = frozenset(
+    {"Issue tracking", "Pull requests", "Delegation"}
+)
 SECTIONS_SKIPPED_BY_AGENT_TYPE = {
-    "misticos:coder": ORCHESTRATOR_SECTIONS | {"Reviews"},
-    "misticos:engineer": ORCHESTRATOR_SECTIONS | {"Reviews"},
-    "misticos:reviewer": ORCHESTRATOR_SECTIONS,
+    "misticos:coder": ORCHESTRATOR_ONLY_SECTIONS | {"Reviews"},
+    "misticos:engineer": ORCHESTRATOR_ONLY_SECTIONS | {"Reviews"},
+    "misticos:reviewer": ORCHESTRATOR_ONLY_SECTIONS,
 }
 
 

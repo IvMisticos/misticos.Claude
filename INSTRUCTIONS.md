@@ -168,9 +168,7 @@ Run independent tool calls in parallel. Go sequential only where one call's outp
 
 Never run `sleep`. To wait for one condition, run an `until` loop as a background command: its exit notifies you. To watch something that reports repeatedly, use a monitor tool that notifies you on every line. Account for failures in the loop filter.
 
-Every agent works in its own worktree. A worker reports to whoever delegated it when it finishes, gets blocked, or needs a decision, and never asks me directly.
-
-Use temporary scripts and scratch files mid-task, but delete them before you commit or finish.
+Every agent works in its own worktree and reports to its parent when it finishes, gets blocked, or needs a decision.
 
 Commit checkpoints as you go; Git holds the progress. Don't stop early just to prompt to continue.
 
@@ -178,12 +176,14 @@ Questions are not instructions, answer and stop: no editing, committing, or push
 
 # Delegation
 
-Delegate independent, parallel work. Don't delegate what you can finish in a handful of tool calls; prefer a direct grep over a subagent for exploration.
+Do only quick, token-cheap work yourself, such as a single grep with the smallest result to answer a question, or a one-off change. Delegate the rest, in parallel where it is independent.
 
-Run a workflow with a schema for each agent when every step is known and nothing needs your decision. Give the rest to a named teammate, including any workflow item that turns out to need one. Check the live state before you act on a saved result.
+Run a workflow with a schema for each agent for structured, repetitive work where every step is known and nothing needs your decision. Give the rest to a named teammate, including any workflow item that turns out to need one. Check the live state before you act on a saved result.
 
-Give every worker, whether teammate, workflow agent, or project thread, a deliverable that can be implemented, reviewed, and accepted on its own, and close it once that work merges. I read and write only through the agent or project orchestrator I originally started with. That agent answers what it confidently can and brings me every result, blocker, and question, folded into the shortest summary that still holds what I must act on.
+Give every agent a deliverable that can be implemented, reviewed, and accepted on its own, the precise context it needs, and the result you expect. Close the agent once that work merges.
 
-Give a worker the goal, the paths, and the shape of the answer you want, in as few words as that takes. Give the cheap model work where the data is too large to read directly and needs a model to filter it. Split that data so each worker reads under 30k tokens of it. Give the fast model a simple, specific task named in the prompt. Give the strong model open-ended work and anything that needs judgement. The strong model does every review. Never launch a worker on a stronger model than you: cap at it.
+I read and write only through the agent I started with. It answers what it confidently can and brings me the shortest high-level summary and anything I must act on.
 
-Where work has pages or screens, the cheap model screenshots each one and copies every piece of prose off it, in every state. The strong model reviews the final list of all new prose and other important output, such as a public API or screenshots.
+Give the cheap model work where data is large and needs a model to filter it, split so each worker reads under 60k tokens of it. Give the fast model a simple, specific task. Give the strong model open-ended work and anything that needs judgement. Never override an agent's model unless I ask.
+
+Where work changes user-facing visuals or prose, the cheap model captures and saves each new visual in every state, copies all new prose, and checks both against the rest of the project and these rules. The strong model then reviews only what matters most, such as main-page prose, a public API, or key screenshots, not a tooltip few people see. Run this as a workflow when there are many screens.
