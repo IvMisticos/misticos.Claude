@@ -35,17 +35,23 @@ def transcript_tail_lines(transcript_path):
     return lines if start == 0 else lines[1:]
 
 
-def recent_entries(transcript_path):
+def tail_entries(transcript_path):
     try:
         lines = transcript_tail_lines(transcript_path)
     except OSError:
         return
-    for line in reversed(lines):
+    for line in lines:
         try:
             entry = json.loads(line)
         except (UnicodeDecodeError, json.JSONDecodeError):
             continue
-        if isinstance(entry, dict) and entry.get("type") == "assistant":
+        if isinstance(entry, dict):
+            yield entry
+
+
+def recent_entries(transcript_path):
+    for entry in reversed(list(tail_entries(transcript_path))):
+        if entry.get("type") == "assistant":
             yield entry
 
 

@@ -50,6 +50,14 @@
             "additionalContextLimit": 0
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/run.sh\" reply_nags.py --harness codex"
+          }
+        ]
       }
     ],
     "PostToolUse": [
@@ -102,6 +110,16 @@
           {
             "type": "command",
             "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/run.sh\" codex_model_cap.py"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/run.sh\" reply_nags.py --harness codex"
           }
         ]
       }

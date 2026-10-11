@@ -7,6 +7,7 @@ class Harness(NamedTuple):
     context_from: str
     output_shape: str
     skipped_agent_types: frozenset = frozenset()
+    reply_history: str = "events"
 
 
 HARNESSES = {
@@ -20,6 +21,7 @@ HARNESSES = {
         context_from="transcript",
         output_shape="claude",
         skipped_agent_types=frozenset({"misticos:scout"}),
+        reply_history="transcript",
     ),
     "codex": Harness(
         model_names={"fast": "Luna", "strong": "Sol", "lead": "Astra"},

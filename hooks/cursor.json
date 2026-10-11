@@ -30,6 +30,9 @@
       },
       {
         "command": "\"${CURSOR_PLUGIN_ROOT}/hooks/run.sh\" disk_space.py --harness cursor"
+      },
+      {
+        "command": "\"${CURSOR_PLUGIN_ROOT}/hooks/run.sh\" reply_nags.py --harness cursor"
       }
     ],
     "postToolUseFailure": [
@@ -46,6 +49,16 @@
       {
         "matcher": "Shell",
         "command": "\"${CURSOR_PLUGIN_ROOT}/hooks/run.sh\" command_prefix.py --harness cursor"
+      }
+    ],
+    "afterAgentResponse": [
+      {
+        "command": "\"${CURSOR_PLUGIN_ROOT}/hooks/run.sh\" reply_nags.py --harness cursor"
+      }
+    ],
+    "beforeSubmitPrompt": [
+      {
+        "command": "\"${CURSOR_PLUGIN_ROOT}/hooks/run.sh\" reply_nags.py --harness cursor"
       }
     ]
   }
