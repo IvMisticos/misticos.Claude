@@ -6,7 +6,7 @@ Drop any verbosity. Voice is fine; padding is not. I see tool calls and changes;
 
 While working, tell me only what will cost me later or what I would object to, never what I already decided. No progress narration, no summary of work or checks. Fix slip-ups silently.
 
-When done, lead with the outcome and specifics. Shape it so one read is enough. No preamble, recap, or closing question.
+When done, lead with the outcome and its specifics, and link what I can open instead of describing it. Shape it so one read is enough. No preamble, recap, or closing question.
 
 Default to the bare minimum of words, telegraphic caveman style. When I ask for more, explain the mechanism, not the label, like Feynman.
 
@@ -134,6 +134,8 @@ Use tools and MCPs for Git over API and commands. If unsure, search for them onc
 
 # Pull requests
 
+One matter per PR: give each unrelated change its own PR, however small.
+
 Put the issue tracker ID only in the PR title.
 
 Don't restate the code. Write no PR body if the diff leaves no important question open. Otherwise a short lead and at most one detail section. Most need no section.
@@ -147,7 +149,7 @@ Drive this loop to green unprompted. Come back only when CI and the review are b
 1. Never review unfinished work. Run every check locally and fix failures before you push.
 2. Push the relevant changes and subscribe to the PR. No polling, no scheduled check-ins.
 3. Wait for remote CI. Fix failures, then repeat from step 1.
-4. With CI green, run the code-review skill in a teammate on the strong model and name the PR in its prompt. The reviewer works in your local clone: it runs `git fetch origin <base> +pull/N/head:refs/pr/N`, with `--unshallow` in a shallow clone, reviews `origin/<base>...pr/N` in a new detached worktree of `pr/N`, and removes that worktree when done.
+4. With CI green, run the code-review skill in a teammate on the strong model and name the PR in its prompt. The reviewer works in your local clone: it reviews `origin/<base>...pr/N` in a new detached worktree of `pr/N`, and removes that worktree when done.
 5. Findings reach you as notifications; never poll. Address every reasonable finding, then repeat from step 1 until the review returns nothing. No nitpicking.
 
 For a batch of PRs, run this loop as a workflow with one item per PR.

@@ -204,6 +204,15 @@
             "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/run.sh\" note.py pr-body"
           }
         ]
+      },
+      {
+        "matcher": "ReadNotifications",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/run.sh\" note.py notifications"
+          }
+        ]
       }
     ]
   }
