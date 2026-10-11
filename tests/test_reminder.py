@@ -8,6 +8,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
 
 from reminder import SECTIONS_SKIPPED_BY_AGENT_TYPE
+from rule_sections import RuleSection
 
 ROOT = Path(__file__).resolve().parent.parent
 REMINDER = ROOT / "hooks" / "reminder.py"
@@ -118,6 +119,11 @@ def test_worker_types_skip_their_sections(home, agent_type):
     assert skipped <= {heading.removeprefix("# ") for heading in rule_headings()}
     for heading in rule_headings():
         assert (heading in sent) == (heading.removeprefix("# ") not in skipped)
+
+
+def test_rule_sections_name_real_headings():
+    headings = RULES.read_text().splitlines()
+    assert all(f"# {section}" in headings for section in RuleSection)
 
 
 def test_other_subagents_get_every_section(home):
