@@ -37,6 +37,19 @@ def run_json_hook(hook, payload, *arguments, **run_options):
     return json.loads(output) if output else None
 
 
+def json_lines(entries):
+    return "".join(json.dumps(entry) + "\n" for entry in entries)
+
+
+def write_json_lines(path, *entries):
+    path.write_text(json_lines(entries))
+
+
+def append_json_lines(path, *entries):
+    with path.open("a") as lines:
+        lines.write(json_lines(entries))
+
+
 @pytest.fixture
 def home(tmp_path):
     home = tmp_path / "home"

@@ -1,9 +1,8 @@
-import json
 import sys
 from pathlib import Path
 
 import pytest
-from conftest import home_environment, run_json_hook
+from conftest import append_json_lines, home_environment, run_json_hook
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
 
@@ -41,8 +40,7 @@ def transcript_at(tmp_path, tokens):
         "type": "assistant",
         "message": {"model": "claude-opus-5-5", "usage": {"input_tokens": tokens}},
     }
-    with transcript.open("a") as lines:
-        lines.write(json.dumps(entry) + "\n")
+    append_json_lines(transcript, entry)
     return transcript
 
 

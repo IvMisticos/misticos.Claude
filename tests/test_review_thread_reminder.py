@@ -4,7 +4,7 @@ import time
 from pathlib import Path
 
 import pytest
-from conftest import run_json_hook
+from conftest import append_json_lines, run_json_hook, write_json_lines
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
 
@@ -68,18 +68,13 @@ def gh_path(fake_bin, responses):
 @pytest.fixture
 def transcript(tmp_path):
     transcript = tmp_path / "transcript.jsonl"
-    write_lines(transcript, tool_use(PULL_REQUEST))
+    write_json_lines(transcript, tool_use(PULL_REQUEST))
     return transcript
 
 
 def add_activity(transcript):
     event = f'<event>{{"pr":"{PULL_REQUEST}"}}</event>'
-    with transcript.open("a") as lines:
-        lines.write(json.dumps({"type": "user", "message": {"content": event}}) + "\n")
-
-
-def write_lines(path, *entries):
-    path.write_text("".join(json.dumps(entry) + "\n" for entry in entries))
+    append_json_lines(transcript, {"type": "user", "message": {"content": event}})
 
 
 def tool_use(pull_request):
@@ -192,7 +187,7 @@ def test_gh_failure_retries_a_pull_request_found_in_a_create_result(
     home, gh_path, responses, tmp_path
 ):
     transcript = tmp_path / "transcript.jsonl"
-    write_lines(
+    write_json_lines(
         transcript,
         assistant_call(bash_call("gh pr create --fill", "b1")),
         tool_result("b1", "https://github.com/acme/widgets/pull/7\n"),
@@ -226,9 +221,9 @@ def test_continuing_after_a_block_stays_silent_and_keeps_the_thread_new(
 def test_subagent_checks_its_own_transcript(home, gh_path, responses, tmp_path):
     answer_graphql(responses, Thread("T1", [1]))
     parent = tmp_path / "parent.jsonl"
-    write_lines(parent, tool_use(PULL_REQUEST))
+    write_json_lines(parent, tool_use(PULL_REQUEST))
     own = tmp_path / "agent.jsonl"
-    write_lines(own, {"type": "assistant", "message": {"content": []}})
+    write_json_lines(own, {"type": "assistant", "message": {"content": []}})
     payload = stop(
         parent, hook_event_name="SubagentStop", agent_transcript_path=str(own)
     )
@@ -282,9 +277,9 @@ def test_stop_reads_only_lines_added_since_the_last_stop(
 ):
     answer_graphql(responses, Thread("T1", [1]))
     transcript = tmp_path / "transcript.jsonl"
-    write_lines(transcript, same_length_filler(tool_use(PULL_REQUEST)))
+    write_json_lines(transcript, same_length_filler(tool_use(PULL_REQUEST)))
     assert run_hook(home, gh_path, stop(transcript)) is None
-    write_lines(transcript, tool_use(PULL_REQUEST))
+    write_json_lines(transcript, tool_use(PULL_REQUEST))
     assert run_hook(home, gh_path, stop(transcript)) is None
     add_activity(transcript)
     assert run_hook(home, gh_path, stop(transcript)) == blocked()
@@ -296,10 +291,10 @@ def test_shrunk_transcript_checks_its_activity_again(
     answer_graphql(responses, Thread("T1", [1]))
     transcript = tmp_path / "transcript.jsonl"
     filler = same_length_filler(tool_use(PULL_REQUEST))
-    write_lines(transcript, filler, filler, tool_use(PULL_REQUEST))
+    write_json_lines(transcript, filler, filler, tool_use(PULL_REQUEST))
     assert run_hook(home, gh_path, stop(transcript)) == blocked()
     answer_graphql(responses, Thread("T1", [1, 2]))
-    write_lines(transcript, tool_use(PULL_REQUEST))
+    write_json_lines(transcript, tool_use(PULL_REQUEST))
     assert run_hook(home, gh_path, stop(transcript)) == blocked()
 
 
@@ -411,7 +406,7 @@ def test_finds_pull_requests_the_session_worked_on(tmp_path):
         "output": "https://github.com/acme/apps/pull/8\n",
     }
     transcript = tmp_path / "transcript.jsonl"
-    write_lines(
+    write_json_lines(
         transcript,
         tool_use(PULL_REQUEST),
         assistant_call(create),
@@ -468,7 +463,7 @@ def test_ignores_pull_requests_the_session_only_mentioned(tmp_path):
         "input": {"content": f'see {link} and {{"pr":"acme/widgets#3"}}'},
     }
     transcript = tmp_path / "transcript.jsonl"
-    write_lines(
+    write_json_lines(
         transcript,
         assistant_call(listing),
         tool_result("l1", json.dumps([listed])),
@@ -499,7 +494,7 @@ def test_codex_create_result_matches_by_call_id(tmp_path):
         "output": json.dumps({"url": "https://github.com/acme/apps/pull/8"}),
     }
     transcript = tmp_path / "transcript.jsonl"
-    write_lines(
+    write_json_lines(
         transcript,
         {"type": "response_item", "payload": create},
         {"type": "response_item", "payload": created},
@@ -515,7 +510,7 @@ def test_create_call_without_id_reads_no_other_entries(tmp_path):
     }
     prose = "Compare with https://github.com/acme/widgets/pull/2"
     transcript = tmp_path / "transcript.jsonl"
-    write_lines(
+    write_json_lines(
         transcript,
         assistant_call(create),
         {"type": "user", "message": {"content": prose}},
@@ -525,7 +520,7 @@ def test_create_call_without_id_reads_no_other_entries(tmp_path):
 
 def test_newline_ends_a_gh_command(tmp_path):
     transcript = tmp_path / "transcript.jsonl"
-    write_lines(
+    write_json_lines(
         transcript,
         assistant_call(bash_call("gh pr view 1 -R acme/a\ngh pr view 2 -R acme/b")),
         assistant_call(bash_call("gh auth status\ngh pr create --fill", "b1")),
@@ -542,7 +537,7 @@ def test_newline_ends_a_gh_command(tmp_path):
 
 def test_escaped_backslash_before_a_newline_keeps_the_newline(tmp_path):
     transcript = tmp_path / "transcript.jsonl"
-    write_lines(
+    write_json_lines(
         transcript,
         assistant_call(bash_call("echo a\\\\\ngh pr view 7 -R acme/c")),
         assistant_call(bash_call("echo b\\\\\\\ngh pr view 8 -R acme/d")),
@@ -552,7 +547,7 @@ def test_escaped_backslash_before_a_newline_keeps_the_newline(tmp_path):
 
 def test_gh_pr_target_comes_after_flags_and_their_values(tmp_path):
     transcript = tmp_path / "transcript.jsonl"
-    write_lines(
+    write_json_lines(
         transcript,
         assistant_call(bash_call("gh pr view --json state 5 -R acme/a")),
         assistant_call(bash_call("gh pr merge -s --body 1 6 -R acme/b")),
@@ -576,7 +571,7 @@ def test_gh_pr_target_comes_after_flags_and_their_values(tmp_path):
 
 def test_shell_comments_hide_gh_commands(tmp_path):
     transcript = tmp_path / "transcript.jsonl"
-    write_lines(
+    write_json_lines(
         transcript,
         assistant_call(
             bash_call("# don't gh pr close 9 -R acme/a\ngh pr view 1 -R acme/b")
@@ -594,7 +589,7 @@ def test_shell_comments_hide_gh_commands(tmp_path):
 
 def test_redirections_are_not_gh_arguments(tmp_path):
     transcript = tmp_path / "transcript.jsonl"
-    write_lines(
+    write_json_lines(
         transcript,
         assistant_call(bash_call("gh pr comment --body x -R acme/a 2>&1")),
         assistant_call(bash_call("gh pr view -R acme/b --json url 2>/dev/null")),

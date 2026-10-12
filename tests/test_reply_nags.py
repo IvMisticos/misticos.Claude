@@ -1,9 +1,8 @@
-import json
 import sys
 from pathlib import Path
 
 import pytest
-from conftest import home_environment, run_json_hook
+from conftest import append_json_lines, home_environment, run_json_hook
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
 
@@ -56,8 +55,7 @@ class Transcript:
 
     def add(self, entry):
         self.count += 1
-        with self.path.open("a") as lines:
-            lines.write(json.dumps({"uuid": f"u{self.count}", **entry}) + "\n")
+        append_json_lines(self.path, {"uuid": f"u{self.count}", **entry})
 
     def human(self, text="hi"):
         self.add(

@@ -3,7 +3,7 @@ import time
 from pathlib import Path
 
 import pytest
-from conftest import run_json_hook
+from conftest import run_json_hook, write_json_lines
 
 AGENT_SCRATCH = Path(__file__).resolve().parent.parent / "hooks" / "agent_scratch.py"
 SHELL_TASK = {"id": "b1", "type": "shell", "status": "running", "command": "make"}
@@ -153,7 +153,7 @@ def test_agent_reminded_about_review_threads_keeps_its_folder(
     pull_request = {"owner": "acme", "repo": "widgets", "pullNumber": 7}
     call = {"type": "tool_use", "name": "pull_request_read", "input": pull_request}
     transcript = tmp_path / "agent.jsonl"
-    transcript.write_text(json.dumps({"message": {"content": [call]}}) + "\n")
+    write_json_lines(transcript, {"message": {"content": [call]}})
     payload = {
         "hook_event_name": "SubagentStop",
         "session_id": "s1",
