@@ -19,11 +19,9 @@ project_file_changes = {}
 async def start_server(name, root):
     await ensure_installed(name)
     spec = LANGUAGE_SERVERS[name]
-    server = LanguageServer(
+    return await LanguageServer.start(
         name, spec["command"], spec["extensions"], root, toolchain_environment()
     )
-    await server.start()
-    return server
 
 
 async def server_for(path):

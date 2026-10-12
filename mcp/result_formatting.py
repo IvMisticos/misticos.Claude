@@ -1,9 +1,25 @@
+from collections.abc import Sequence
+from pathlib import Path
 from typing import NamedTuple
 
+from lsp_types import (
+    CallHierarchyItem,
+    Diagnostic,
+    Hover,
+    Location,
+    LocationLink,
+    MarkedString,
+    MarkupContent,
+    Position,
+    Range,
+    Symbol,
+)
 from text_positions import from_uri, lines_of, position_key, utf16_offset_to_index
 
+CallSiteKey = tuple[str, int, int]
 
-def location_line(location):
+
+def location_line(location: Location | LocationLink) -> str:
     uri = location.get("targetUri") or location.get("uri")
     if uri is None:
         return "unknown location"
@@ -11,7 +27,7 @@ def location_line(location):
     return range_place(from_uri(uri), range_)
 
 
-def position_text(path, position):
+def position_text(path: Path, position: Position) -> str:
     try:
         line_text = lines_of(path)[position["line"]]
     except (OSError, UnicodeDecodeError, IndexError):
@@ -19,18 +35,20 @@ def position_text(path, position):
     return f"{position['line'] + 1}:{utf16_offset_to_index(line_text, position['character']) + 1}"
 
 
-def one_based(position):
+def one_based(position: Position) -> str:
     return f"{position['line'] + 1}:{position['character'] + 1}"
 
 
-def locations_text(result):
+def locations_text(
+    result: Location | LocationLink | list[Location] | list[LocationLink] | None,
+) -> str:
     if not result:
         return "no results"
     items = result if isinstance(result, list) else [result]
     return "\n".join(location_line(item) for item in items)
 
 
-def hover_text(result):
+def hover_text(result: Hover | None) -> str:
     if not result:
         return "no hover information"
     contents = result.get("contents")
@@ -41,19 +59,19 @@ def hover_text(result):
     return "\n".join(hover_part_text(part) for part in contents)
 
 
-def hover_part_text(part):
+def hover_part_text(part: MarkedString | MarkupContent) -> str:
     return part if isinstance(part, str) else part.get("value", "")
 
 
-SHOWN_SEVERITIES = {1: "error", 2: "warning", 3: "info"}
+SHOWN_SEVERITIES: dict[int, str] = {1: "error", 2: "warning", 3: "info"}
 DEFAULT_SEVERITY = 1
 
 
-def severity_of(diagnostic):
+def severity_of(diagnostic: Diagnostic) -> int:
     return diagnostic.get("severity", DEFAULT_SEVERITY)
 
 
-def diagnostics_text(path, diagnostics):
+def diagnostics_text(path: Path, diagnostics: list[Diagnostic]) -> str:
     shown = sorted(
         (
             diagnostic
@@ -66,21 +84,22 @@ def diagnostics_text(path, diagnostics):
     return "\n".join(lines) or "no errors or warnings"
 
 
-def diagnostic_line(path, diagnostic):
+def diagnostic_line(path: Path, diagnostic: Diagnostic) -> str:
     severity = SHOWN_SEVERITIES[severity_of(diagnostic)]
-    code = f" {diagnostic['code']}" if diagnostic.get("code") is not None else ""
+    code = diagnostic.get("code")
+    code_text = f" {code}" if code is not None else ""
     start = place(path, diagnostic["range"]["start"])
-    return f"{start} {severity}{code}: {diagnostic['message']}"
+    return f"{start} {severity}{code_text}: {diagnostic['message']}"
 
 
 class Call(NamedTuple):
-    function: dict
+    function: CallHierarchyItem
     call_site_uri: str
-    call_site_ranges: list
+    call_site_ranges: list[Range]
 
 
-def calls_text(calls):
-    call_sites_by_function = {}
+def calls_text(calls: list[Call]) -> str:
+    call_sites_by_function: dict[str, dict[CallSiteKey, str]] = {}
     for call in calls:
         call_sites = call_sites_by_function.setdefault(function_line(call.function), {})
         call_sites.update(call_site_places(call))
@@ -91,7 +110,7 @@ def calls_text(calls):
     return "\n".join(blocks) or "no calls"
 
 
-def call_site_places(call):
+def call_site_places(call: Call) -> dict[CallSiteKey, str]:
     path = from_uri(call.call_site_uri)
     return {
         (str(path), *position_key(range_["start"])): place(path, range_["start"])
@@ -99,42 +118,42 @@ def call_site_places(call):
     }
 
 
-def call_block(function, call_sites):
+def call_block(function: str, call_sites: dict[CallSiteKey, str]) -> str:
     lines = [f"  called at {call_sites[site]}" for site in sorted(call_sites)]
     return "\n".join([function, *lines])
 
 
-def function_line(function):
+def function_line(function: CallHierarchyItem) -> str:
     definition = place(from_uri(function["uri"]), function["selectionRange"]["start"])
-    return f"{function['name']} ({symbol_kind(function.get('kind'))}) {definition}"
+    return f"{function['name']} ({symbol_kind(function['kind'])}) {definition}"
 
 
-def range_place(path, range_):
+def range_place(path: Path, range_: Range | None) -> str:
     if range_ is None:
         return str(path)
     return place(path, range_["start"])
 
 
-def place(path, position):
+def place(path: Path, position: Position) -> str:
     return f"{path}:{position_text(path, position)}"
 
 
-def symbols_text(result):
+def symbols_text(result: Sequence[Symbol] | None) -> str:
     lines = symbol_lines(result or [], 0)
     return "\n".join(lines) or "no symbols"
 
 
-def symbol_lines(symbols, indent):
+def symbol_lines(symbols: Sequence[Symbol], indent: int) -> list[str]:
     lines = []
     for symbol in symbols:
         lines.append(
-            f"{'  ' * indent}{symbol['name']} ({symbol_kind(symbol.get('kind'))}) {symbol_place(symbol)}"
+            f"{'  ' * indent}{symbol['name']} ({symbol_kind(symbol['kind'])}) {symbol_place(symbol)}"
         )
         lines.extend(symbol_lines(symbol.get("children") or [], indent + 1))
     return lines
 
 
-def symbol_place(symbol):
+def symbol_place(symbol: Symbol) -> str:
     location = symbol.get("location") or {}
     path = from_uri(location["uri"]) if "uri" in location else None
     range_ = symbol.get("selectionRange") or location.get("range")
@@ -143,7 +162,7 @@ def symbol_place(symbol):
     return range_place(path, range_)
 
 
-SYMBOL_KINDS = {
+SYMBOL_KINDS: dict[int, str] = {
     1: "file",
     2: "module",
     3: "namespace",
@@ -173,5 +192,5 @@ SYMBOL_KINDS = {
 }
 
 
-def symbol_kind(kind):
+def symbol_kind(kind: int) -> str:
     return SYMBOL_KINDS.get(kind, "symbol")
