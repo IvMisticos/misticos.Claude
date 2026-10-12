@@ -6,6 +6,7 @@ set -euo pipefail
 shopt -s nocasematch
 
 location_options=()
+config_options=()
 subcommand=""
 subcommand_arguments=()
 global_options_change_identity=false
@@ -115,16 +116,20 @@ commit_changes_author() {
 
 read_global_options() {
   local word
+  subcommand=""
+  subcommand_arguments=()
   while [ $# -gt 0 ]; do
     word=$1
     shift
     case $word in
       -c | --config-env)
+        config_options+=("$word" "${1-}")
         word=${1-}
         if is_identity_key "${word%%=*}"; then global_options_change_identity=true; fi
         shift
         ;;
       --config-env=*)
+        config_options+=("$word")
         word=${word#--config-env=}
         if is_identity_key "${word%%=*}"; then global_options_change_identity=true; fi
         ;;
@@ -141,6 +146,37 @@ read_global_options() {
         return
         ;;
     esac
+  done
+}
+
+may_be_alias() {
+  [ -n "$subcommand" ] && [[ $subcommand != config && $subcommand != commit ]]
+}
+
+alias_definition() {
+  "$git" ${config_options[@]+"${config_options[@]}"} ${location_options[@]+"${location_options[@]}"} \
+    config --get "alias.$subcommand" 2>/dev/null
+}
+
+alias_words() {
+  local definition
+  definition=$(alias_definition) || return 1
+  [[ $definition != '!'* ]] || return 1
+  printf '%s' "$definition" | xargs -r printf '%s\0'
+}
+
+expand_alias() {
+  local words=() word
+  while IFS= read -r -d '' word; do words+=("$word"); done < <(alias_words)
+  [ ${#words[@]} -gt 0 ] || return 1
+  read_global_options "${words[@]}" ${subcommand_arguments[@]+"${subcommand_arguments[@]}"}
+}
+
+expand_aliases() {
+  local expanded=" "
+  while may_be_alias && [[ $expanded != *" $subcommand "* ]]; do
+    expanded+="$subcommand "
+    expand_alias || return 0
   done
 }
 
@@ -178,6 +214,7 @@ git=$(real_tool git)
 
 if [ -z "${ALLOW_GIT_IDENTITY_CHANGE-}" ]; then
   read_global_options "$@"
+  expand_aliases
   identity_changes=false
   creates_a_repository || ! environment_changes_identity || identity_changes=true
   arguments_change_identity && identity_changes=true

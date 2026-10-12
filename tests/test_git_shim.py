@@ -10,6 +10,7 @@ if [ "$1 $2" = "-C $HARNESS_PROJECT_DIR" ] && [ "$3" = rev-parse ]; then
   exit
 fi
 for word in "$@"; do
+  [[ $word == alias.* ]] && exit 1
   if [ "$word" = rev-parse ]; then
     [ -n "$FAKE_TARGET_GIT_DIR" ] || exit 128
     echo "$FAKE_TARGET_GIT_DIR"
@@ -201,3 +202,65 @@ def test_runs_identity_changes_in_a_repository_named_by_git_dir(tmp_path):
         check=False,
     )
     assert result.returncode == 0
+
+
+@pytest.fixture
+def run_real_git(tmp_path, home):
+    project_dir = tmp_path / "real-project"
+    environment = {
+        **without_session_variables(os.environ),
+        "HOME": str(home),
+        "PATH": "/usr/bin:/bin",
+    }
+    subprocess.run(["git", "init", "-q", project_dir], env=environment, check=True)
+
+    def run(*arguments):
+        return subprocess.run(
+            [SHIMS / "git", *arguments],
+            cwd=project_dir,
+            env={
+                **environment,
+                "PATH": f"{SHIMS}:/usr/bin:/bin",
+                "HARNESS_PROJECT_DIR": str(project_dir),
+            },
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+    return run
+
+
+def denied(result):
+    return result.returncode == 1 and "keep the git identity" in result.stderr
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    [
+        ["-c", "alias.k=config user.name x", "k"],
+        ["-c", "alias.k=config --global user.name x", "-C", "/", "k"],
+        ["-c", "alias.k=-c user.email=x commit", "k", "-m", "a"],
+        ["-c", "alias.k=j", "-c", "alias.j=config 'user.name' x", "k"],
+        ["-c", "alias.commit=status", "commit", "--author=x <x@example.com>"],
+    ],
+)
+def test_denies_identity_changes_through_aliases(run_real_git, arguments):
+    assert denied(run_real_git(*arguments))
+
+
+def test_denies_identity_changes_through_stored_aliases(run_real_git):
+    assert run_real_git("config", "alias.k", "config user.name x").returncode == 0
+    assert denied(run_real_git("k"))
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    [
+        ["-c", "alias.k=config core.pager cat", "k"],
+        ["-c", "alias.k=k", "k"],
+        ["-c", "alias.k=!true", "k"],
+    ],
+)
+def test_runs_aliases_that_keep_the_identity(run_real_git, arguments):
+    assert not denied(run_real_git(*arguments))
