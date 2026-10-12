@@ -4,7 +4,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
 
 import pytest
-from gh_commands import GhPrCall, gh_api_words, gh_pr_call
+from gh_commands import GhPrCall, gh_api_words, gh_argument_lists, gh_pr_call
 from pull_requests import pull_request_of_gh_pr_call
 
 
@@ -40,3 +40,61 @@ def test_flag_values_before_the_subcommand_are_skipped(arguments):
 def test_flag_values_before_api_are_skipped():
     words = gh_api_words(["--jq", ".url", "api", "repos/o/r/pulls/1"])
     assert words == ["repos/o/r/pulls/1"]
+
+
+@pytest.mark.parametrize(
+    ("command", "argument_lists"),
+    [
+        (
+            "gh pr view 1 # gh pr close 1\ngh pr view 2",
+            [["pr", "view", "1"], ["pr", "view", "2"]],
+        ),
+        ("# gh pr close 1\ngh pr view 2", [["pr", "view", "2"]]),
+        ("gh pr view 1;# x\ngh pr view 2", [["pr", "view", "1"], ["pr", "view", "2"]]),
+        ("gh pr comment 1 --body a#b", [["pr", "comment", "1", "--body", "a#b"]]),
+        ('gh pr comment 1 --body "# x"', [["pr", "comment", "1", "--body", "# x"]]),
+        ("gh pr comment 1 --body \\#x", [["pr", "comment", "1", "--body", "#x"]]),
+        (
+            "gh pr view 1 # it's open\ngh pr view 2",
+            [["pr", "view", "1"], ["pr", "view", "2"]],
+        ),
+    ],
+)
+def test_comments_end_at_the_line_break(command, argument_lists):
+    assert gh_argument_lists(command) == argument_lists
+
+
+@pytest.mark.parametrize(
+    ("command", "argument_lists"),
+    [
+        (
+            "gh pr view 1 # note \\\ngh pr close 2",
+            [["pr", "view", "1"], ["pr", "close", "2"]],
+        ),
+        (
+            "gh pr comment 1 --body $'it\\'s # done' ; gh pr close 2",
+            [["pr", "comment", "1", "--body", "it's # done"], ["pr", "close", "2"]],
+        ),
+        (
+            'gh pr comment 1 --body "a \\"#\\" \\\nb" -R o/r',
+            [["pr", "comment", "1", "--body", 'a "#" b', "-R", "o/r"]],
+        ),
+        ("gh pr view 1 \\\n  -R o/r", [["pr", "view", "1", "-R", "o/r"]]),
+        (
+            'gh pr comment 1 --body "a 2>b" -R o/r',
+            [["pr", "comment", "1", "--body", "a 2>b", "-R", "o/r"]],
+        ),
+        (
+            "gh pr view 1 2>/dev/null; gh pr view 2",
+            [["pr", "view", "1"], ["pr", "view", "2"]],
+        ),
+    ],
+)
+def test_quotes_and_line_continuations_follow_bash(command, argument_lists):
+    assert gh_argument_lists(command) == argument_lists
+
+
+@pytest.mark.parametrize("body", ['""', '";"', "'&&'", '"|"', r"\;", '"\n"'])
+def test_quoted_operators_stay_inside_the_gh_call(body):
+    command = f"gh pr comment 1 --body {body} -R o/r"
+    assert gh_argument_lists(command)[0][-2:] == ["-R", "o/r"]

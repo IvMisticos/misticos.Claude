@@ -1,12 +1,7 @@
-import io
-import re
-import shlex
 from typing import NamedTuple
 
-SHELL_OPERATOR_CHARACTERS = "();<>|&\n"
-WORD_SEPARATORS = " \t\r"
-LINE_CONTINUATION = re.compile(r"(?<!\\)((?:\\\\)*)\\\n")
-FD_BEFORE_REDIRECTION = re.compile(r"(?<![^\s();<>|&])\d+(?=[<>])")
+from shell_words import ShellOperator, shell_tokens
+
 REPO_FLAGS = frozenset({"-R", "--repo"})
 CREATE_SUBCOMMANDS = frozenset({"create", "new"})
 SHARED_VALUED_FLAGS = frozenset(
@@ -68,46 +63,17 @@ class GhPrCall(NamedTuple):
         return self.subcommand in CREATE_SUBCOMMANDS
 
 
-class CommentEndingBeforeNewline(io.StringIO):
-    def readline(self, size=-1):
-        line = super().readline(size)
-        if not line.endswith("\n"):
-            return line
-        self.seek(self.tell() - 1)
-        return line.removesuffix("\n")
-
-
-def shell_text(text):
-    joined = LINE_CONTINUATION.sub(r"\1", text)
-    return FD_BEFORE_REDIRECTION.sub("", joined)
-
-
-def words_of(text):
-    lexer = shlex.shlex(
-        CommentEndingBeforeNewline(shell_text(text)),
-        posix=True,
-        punctuation_chars=SHELL_OPERATOR_CHARACTERS,
-    )
-    lexer.whitespace = WORD_SEPARATORS
-    lexer.whitespace_split = True
-    try:
-        return list(lexer)
-    except ValueError:
-        return []
-
-
-def command_words(command):
+def command_tokens(command):
     if isinstance(command, str):
-        return words_of(command)
+        return shell_tokens(command)
     if isinstance(command, list):
         return [
-            word for part in command if isinstance(part, str) for word in words_of(part)
+            token
+            for part in command
+            if isinstance(part, str)
+            for token in shell_tokens(part)
         ]
     return []
-
-
-def is_shell_operator(word):
-    return set(word) <= set(SHELL_OPERATOR_CHARACTERS)
 
 
 def is_gh(word):
@@ -117,12 +83,12 @@ def is_gh(word):
 def gh_argument_lists(command):
     argument_lists = []
     current = None
-    for word in command_words(command):
-        if is_shell_operator(word):
+    for token in command_tokens(command):
+        if isinstance(token, ShellOperator):
             current = None
         elif current is not None:
-            current.append(word)
-        elif is_gh(word):
+            current.append(token)
+        elif is_gh(token):
             current = []
             argument_lists.append(current)
     return argument_lists
