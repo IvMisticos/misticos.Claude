@@ -1,12 +1,7 @@
-import io
-import re
-import shlex
 from typing import NamedTuple
 
-SHELL_OPERATOR_CHARACTERS = "();<>|&\n"
-WORD_SEPARATORS = " \t\r"
-LINE_CONTINUATION = re.compile(r"(?<!\\)((?:\\\\)*)\\\n")
-FD_BEFORE_REDIRECTION = re.compile(r"(?<![^\s();<>|&])\d+(?=[<>])")
+from shell_words import ShellOperator, shell_tokens
+
 REPO_FLAGS = frozenset({"-R", "--repo"})
 CREATE_SUBCOMMANDS = frozenset({"create", "new"})
 SHARED_VALUED_FLAGS = frozenset(
@@ -68,46 +63,17 @@ class GhPrCall(NamedTuple):
         return self.subcommand in CREATE_SUBCOMMANDS
 
 
-class CommentEndingBeforeNewline(io.StringIO):
-    def readline(self, size=-1):
-        line = super().readline(size)
-        if not line.endswith("\n"):
-            return line
-        self.seek(self.tell() - 1)
-        return line.removesuffix("\n")
-
-
-def shell_text(text):
-    joined = LINE_CONTINUATION.sub(r"\1", text)
-    return FD_BEFORE_REDIRECTION.sub("", joined)
-
-
-def words_of(text):
-    lexer = shlex.shlex(
-        CommentEndingBeforeNewline(shell_text(text)),
-        posix=True,
-        punctuation_chars=SHELL_OPERATOR_CHARACTERS,
-    )
-    lexer.whitespace = WORD_SEPARATORS
-    lexer.whitespace_split = True
-    try:
-        return list(lexer)
-    except ValueError:
-        return []
-
-
-def command_words(command):
+def command_tokens(command):
     if isinstance(command, str):
-        return words_of(command)
+        return shell_tokens(command)
     if isinstance(command, list):
         return [
-            word for part in command if isinstance(part, str) for word in words_of(part)
+            token
+            for part in command
+            if isinstance(part, str)
+            for token in shell_tokens(part)
         ]
     return []
-
-
-def is_shell_operator(word):
-    return set(word) <= set(SHELL_OPERATOR_CHARACTERS)
 
 
 def is_gh(word):
@@ -117,12 +83,12 @@ def is_gh(word):
 def gh_argument_lists(command):
     argument_lists = []
     current = None
-    for word in command_words(command):
-        if is_shell_operator(word):
+    for token in command_tokens(command):
+        if isinstance(token, ShellOperator):
             current = None
         elif current is not None:
-            current.append(word)
-        elif is_gh(word):
+            current.append(token)
+        elif is_gh(token):
             current = []
             argument_lists.append(current)
     return argument_lists
@@ -164,14 +130,30 @@ def pr_target(subcommand, following):
     return next(positionals(following, flags_with_values), None)
 
 
+def takes_value_before_command(word):
+    if word.startswith("--"):
+        return "=" not in word
+    return len(word) == 2 and is_flag(word)
+
+
+def command_indexes(words):
+    value_expected = False
+    for index, word in enumerate(words):
+        if value_expected:
+            value_expected = False
+        elif takes_value_before_command(word):
+            value_expected = True
+        elif not is_flag(word):
+            yield index
+
+
 def gh_pr_call(arguments):
     repo, words = without_repo_flags(arguments)
-    if words[:1] != ["pr"]:
+    indexes = command_indexes(words)
+    pr_at = next(indexes, None)
+    if pr_at is None or words[pr_at] != "pr":
         return None
-    subcommand_at = next(
-        (index for index, word in enumerate(words) if index and not is_flag(word)),
-        None,
-    )
+    subcommand_at = next(indexes, None)
     if subcommand_at is None:
         return None
     subcommand = words[subcommand_at]
@@ -180,4 +162,7 @@ def gh_pr_call(arguments):
 
 
 def gh_api_words(arguments):
-    return arguments[1:] if arguments[:1] == ["api"] else []
+    api_at = next(command_indexes(arguments), None)
+    if api_at is None or arguments[api_at] != "api":
+        return []
+    return arguments[api_at + 1 :]
