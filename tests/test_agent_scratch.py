@@ -3,7 +3,12 @@ import time
 from pathlib import Path
 
 import pytest
-from conftest import run_json_hook, write_json_lines
+from conftest import (
+    ReviewThread,
+    graphql_review_threads,
+    run_json_hook,
+    write_json_lines,
+)
 
 AGENT_SCRATCH = Path(__file__).resolve().parent.parent / "hooks" / "agent_scratch.py"
 SHELL_TASK = {"id": "b1", "type": "shell", "status": "running", "command": "make"}
@@ -126,24 +131,7 @@ def test_ignores_a_missing_or_relative_scratchpad(tmp_path, scratchpad_dir):
     assert list(tmp_path.iterdir()) == []
 
 
-UNRESOLVED_THREAD = {
-    "data": {
-        "repository": {
-            "pullRequest": {
-                "state": "OPEN",
-                "reviewThreads": {
-                    "nodes": [
-                        {
-                            "id": "T1",
-                            "isResolved": False,
-                            "comments": {"nodes": [{"databaseId": 1}]},
-                        }
-                    ]
-                },
-            }
-        }
-    }
-}
+UNRESOLVED_THREAD = graphql_review_threads(ReviewThread("T1", [1]))
 
 
 def test_agent_reminded_about_review_threads_keeps_its_folder(

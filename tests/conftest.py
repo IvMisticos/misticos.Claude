@@ -13,6 +13,34 @@ echo "ran $*"
 """
 
 
+class ReviewThread:
+    def __init__(self, thread_id, comment_ids, resolved=False):
+        self.id = thread_id
+        self.comment_ids = comment_ids
+        self.resolved = resolved
+
+    def as_graphql(self):
+        last_comment = {"databaseId": self.comment_ids[-1]}
+        return {
+            "id": self.id,
+            "isResolved": self.resolved,
+            "comments": {"nodes": [last_comment]},
+        }
+
+    def as_remote(self):
+        return {
+            "resolved": self.resolved,
+            "outdated": False,
+            "comment_ids": self.comment_ids,
+        }
+
+
+def graphql_review_threads(*threads, state="OPEN"):
+    nodes = [thread.as_graphql() for thread in threads]
+    pull_request = {"state": state, "reviewThreads": {"nodes": nodes}}
+    return {"data": {"repository": {"pullRequest": pull_request}}}
+
+
 def without_session_variables(environment):
     return {
         name: value
