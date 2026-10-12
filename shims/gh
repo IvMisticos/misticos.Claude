@@ -81,6 +81,10 @@ record_api_short_flags() {
   while [ -n "$letters" ]; do
     letter=${letters:0:1}
     letters=${letters:1}
+    if [[ $letters == =* ]]; then
+      record_api_flag "-$letter" "${letters:1}"
+      return
+    fi
     if api_short_flag_takes_value "$letter"; then
       if [ -n "$letters" ]; then
         record_api_flag "-$letter" "$letters"
