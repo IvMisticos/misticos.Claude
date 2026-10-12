@@ -119,6 +119,7 @@ def test_quoted_operators_stay_inside_the_gh_call(body):
             [["pr", "view", "3"]],
         ),
         ("cat <<< x\ngh pr view 1", [["pr", "view", "1"]]),
+        ("cat <<EOF; gh pr view 1\nbody\nEOF", [["pr", "view", "1"]]),
         (
             'x=$(cat <<EOF\nbody\nEOF)\ngh pr create --body "$x"',
             [["pr", "create", "--body", "$x"]],
@@ -145,3 +146,26 @@ def test_heredoc_bodies_are_not_commands(command, argument_lists):
 def test_calls_behind_broken_quotes_or_nested_subshells_are_found(command):
     [arguments] = gh_argument_lists(command)
     assert gh_pr_call(arguments).creates_a_pull_request()
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "bash -lc 'gh pr view 1' && sh -c \"gh pr view 1\"",
+        ["bash", "-lc", "gh pr view 1"],
+        ["gh", "pr", "view", "1"],
+    ],
+)
+def test_calls_inside_shell_command_strings_are_found(command):
+    assert set(map(tuple, gh_argument_lists(command))) == {("pr", "view", "1")}
+
+
+@pytest.mark.parametrize(
+    ("command", "argument_lists"),
+    [
+        ("cat <<EOF\n$(gh pr view 1)\nEOF", [["pr", "view", "1"]]),
+        ("cat <<'EOF'\n$(gh pr view 1)\nEOF", []),
+    ],
+)
+def test_substitutions_run_only_in_unquoted_heredocs(command, argument_lists):
+    assert gh_argument_lists(command) == argument_lists

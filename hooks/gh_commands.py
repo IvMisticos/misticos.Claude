@@ -1,6 +1,7 @@
+import shlex
 from typing import NamedTuple
 
-from shell_words import ShellOperator, shell_tokens
+from bash_commands import command_words
 
 REPO_FLAGS = frozenset({"-R", "--repo"})
 CREATE_SUBCOMMANDS = frozenset({"create", "new"})
@@ -63,17 +64,12 @@ class GhPrCall(NamedTuple):
         return self.subcommand in CREATE_SUBCOMMANDS
 
 
-def command_tokens(command):
+def shell_text(command):
     if isinstance(command, str):
-        return shell_tokens(command)
+        return command
     if isinstance(command, list):
-        return [
-            token
-            for part in command
-            if isinstance(part, str)
-            for token in shell_tokens(part)
-        ]
-    return []
+        return shlex.join(part for part in command if isinstance(part, str))
+    return ""
 
 
 def is_gh(word):
@@ -81,17 +77,9 @@ def is_gh(word):
 
 
 def gh_argument_lists(command):
-    argument_lists = []
-    current = None
-    for token in command_tokens(command):
-        if isinstance(token, ShellOperator):
-            current = None
-        elif current is not None:
-            current.append(token)
-        elif is_gh(token):
-            current = []
-            argument_lists.append(current)
-    return argument_lists
+    return [
+        words[1:] for words in command_words(shell_text(command)) if is_gh(words[0])
+    ]
 
 
 def without_repo_flags(arguments):
