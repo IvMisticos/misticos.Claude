@@ -6,6 +6,7 @@ from collections.abc import Callable
 from typing import Literal, Required, TypedDict
 
 from harnesses import OutputShape
+from json_values import json_object
 
 
 class PreToolUseDecision(TypedDict, total=False):
@@ -44,11 +45,7 @@ PreToolUseDecider = Callable[[dict], PreToolUseDecision | None]
 
 
 def read_payload():
-    try:
-        payload = json.loads(sys.stdin.read() or "{}")
-    except json.JSONDecodeError:
-        return {}
-    return payload if isinstance(payload, dict) else {}
+    return json_object(sys.stdin.read()) or {}
 
 
 def scratchpad_of(payload):

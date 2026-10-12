@@ -8,6 +8,7 @@ from typing import NamedTuple
 
 from harnesses import ReplyHistory, harness_parser
 from hook_io import read_payload, run_hook, write_context
+from json_values import dict_or_empty
 from plugin_paths import DATA_ROOT
 from reply_history import (
     EventLog,
@@ -24,7 +25,6 @@ from session_state import (
     read_json,
     write_json,
 )
-from transcript import dict_or_empty
 
 PROSE_LIMIT = 300
 FIRST_NAG_AT_MESSAGES = 2

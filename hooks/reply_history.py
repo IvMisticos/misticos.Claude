@@ -1,7 +1,8 @@
 from typing import NamedTuple
 
+from json_values import dict_or_empty
 from prose import prose_length
-from transcript import dict_or_empty, is_conversation_turn, tail_entries
+from transcript import is_conversation_turn, tail_entries
 
 
 class Prompt(NamedTuple):

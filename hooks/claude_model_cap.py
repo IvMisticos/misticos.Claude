@@ -9,9 +9,10 @@ import re
 from pathlib import Path
 
 from hook_io import PreToolUseDecision, denied, run_pre_tool_use
+from json_values import dict_or_empty
 from model_cap import outranks, project_folders, tier_rank
 from plugin_paths import PLUGIN_ROOT
-from transcript import dict_or_empty, recent_entries
+from transcript import recent_entries
 
 INHERIT = "inherit"
 TRUTHY_FLAGS = ("1", "true", "yes", "on")

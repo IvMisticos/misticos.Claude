@@ -3,6 +3,7 @@ import json
 
 from disk_cleanup import cleared_caches
 from disks import BYTES_PER_MIB, disks, total_free
+from json_values import json_object
 from plugin_paths import DATA_ROOT
 
 CLEAN_UP_BELOW_BYTES = 5 << 30
@@ -13,10 +14,8 @@ CLEANUP_RECORD = DATA_ROOT / "disk-cleanup.json"
 
 def read_most_free_since_cleanup(record):
     try:
-        stored = json.loads(record.read_text())
-    except (OSError, ValueError):
-        return {}
-    if not isinstance(stored, dict):
+        stored = json_object(record.read_bytes()) or {}
+    except OSError:
         return {}
     return {device: free for device, free in stored.items() if isinstance(free, int)}
 
