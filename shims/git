@@ -9,7 +9,6 @@ location_options=()
 subcommand=""
 subcommand_arguments=()
 global_options_change_identity=false
-changes_global_identity=false
 
 deny() {
   echo "git: keep the git identity the harness set. Read it with git config --get." \
@@ -100,9 +99,11 @@ config_sets_identity_key() {
 
 config_changes_identity() {
   config_reads "$@" && return 1
-  config_changes_user_section "$@" || config_unsets_identity_key "$@" || config_sets_identity_key "$@" || return 1
-  config_writes_globally "$@" && changes_global_identity=true
-  return 0
+  config_changes_user_section "$@" || config_unsets_identity_key "$@" || config_sets_identity_key "$@"
+}
+
+config_changes_global_identity() {
+  config_changes_identity "$@" && config_writes_globally "$@"
 }
 
 commit_changes_author() {
@@ -144,13 +145,20 @@ read_global_options() {
   done
 }
 
-arguments_change_identity() {
-  $global_options_change_identity && return 0
+subcommand_changes_identity() {
   case $subcommand in
     config) config_changes_identity ${subcommand_arguments[@]+"${subcommand_arguments[@]}"} ;;
     commit) commit_changes_author ${subcommand_arguments[@]+"${subcommand_arguments[@]}"} ;;
     *) return 1 ;;
   esac
+}
+
+subcommand_changes_global_identity() {
+  [[ $subcommand == config ]] && config_changes_global_identity ${subcommand_arguments[@]+"${subcommand_arguments[@]}"}
+}
+
+arguments_change_identity() {
+  $global_options_change_identity || subcommand_changes_identity
 }
 
 creates_a_repository() {
@@ -178,11 +186,11 @@ git=$(real_tool git)
 
 if [ -z "${ALLOW_GIT_IDENTITY_CHANGE-}" ]; then
   read_global_options "$@"
+  subcommand_changes_global_identity && deny
   identity_changes=false
   creates_a_repository || ! environment_changes_identity || identity_changes=true
   arguments_change_identity && identity_changes=true
   if $identity_changes; then
-    $changes_global_identity && deny
     targets_project_repository && deny
   fi
 fi
