@@ -21,7 +21,8 @@ class RoleFile(NamedTuple):
 
 
 class CodexLayer(NamedTuple):
-    role_models: dict[str, str | None]
+    folder: Path
+    declared_role_files: dict[str, Path]
     default_subagent_model: str | None
 
 
@@ -29,7 +30,7 @@ def read_toml(path):
     try:
         with open(path, "rb") as toml_file:
             return tomllib.load(toml_file)
-    except (OSError, tomllib.TOMLDecodeError):
+    except (OSError, ValueError):
         return {}
 
 
@@ -53,10 +54,12 @@ def config_folders(cwd):
 
 
 def declared_role_files(folder, agents):
+    declared = {}
     for table_key, role in agents.items():
         config_file = role.get("config_file") if isinstance(role, dict) else None
         if isinstance(config_file, str) and (folder / config_file).is_file():
-            yield table_key, folder / config_file
+            declared[table_key] = folder / config_file
+    return declared
 
 
 def discovered_role_files(folder):
@@ -64,14 +67,14 @@ def discovered_role_files(folder):
     return map(Path, glob.glob(pattern, recursive=True))
 
 
-def layer_role_models(folder, agents):
+def layer_role_models(layer):
     role_models = {}
     declared_files = set()
-    for table_key, role_file in declared_role_files(folder, agents):
+    for table_key, role_file in layer.declared_role_files.items():
         declared_files.add(role_file.resolve())
         role = parsed_role_file(role_file)
         role_models.setdefault(role.name or table_key, role.model)
-    for role_file in discovered_role_files(folder):
+    for role_file in discovered_role_files(layer.folder):
         if role_file.resolve() in declared_files:
             continue
         role = parsed_role_file(role_file)
@@ -84,7 +87,7 @@ def parsed_layer(folder):
     agents = read_toml(folder / "config.toml").get("agents")
     agents = agents if isinstance(agents, dict) else {}
     default_model = text_or_none(agents.get("default_subagent_model"))
-    return CodexLayer(layer_role_models(folder, agents), default_model)
+    return CodexLayer(folder, declared_role_files(folder, agents), default_model)
 
 
 def codex_layers(cwd):
@@ -92,8 +95,11 @@ def codex_layers(cwd):
 
 
 def role_model(role_name, layers):
-    models = (layer.role_models for layer in layers if role_name in layer.role_models)
-    return next(models, {}).get(role_name)
+    for layer in layers:
+        role_models = layer_role_models(layer)
+        if role_name in role_models:
+            return role_models[role_name]
+    return None
 
 
 def default_subagent_model(layers):

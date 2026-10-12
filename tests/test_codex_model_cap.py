@@ -56,3 +56,26 @@ def test_default_subagent_model_is_capped(codex):
     (codex / "config.toml").write_text('[agents]\ndefault_subagent_model = "astra"\n')
     capped = decision(codex.parent, message="go")
     assert capped["updatedInput"]["model"] == CALLER
+
+
+@pytest.fixture
+def user_agents(tmp_path, codex):
+    agents = tmp_path / "home" / "agents"
+    agents.mkdir(parents=True)
+    (agents / "bad.toml").write_bytes(b'name = "\xff"\n')
+    return agents
+
+
+def test_non_utf8_role_file_still_caps_the_requested_model(codex, user_agents):
+    payload = {
+        "model": "gpt-5-luna",
+        "cwd": str(codex.parent),
+        "tool_input": {"model": "gpt-5-sol", "task_name": "t"},
+    }
+    assert cap_decision(payload)["updatedInput"]["model"] == "gpt-5-luna"
+
+
+def test_non_utf8_role_file_still_finds_other_roles(codex, user_agents):
+    (user_agents / "w.toml").write_text('name = "worker"\nmodel = "gpt-5-astra"\n')
+    denied = decision(codex.parent, agent_type="worker", message="go")
+    assert denied["permissionDecision"] == "deny"
