@@ -3,16 +3,23 @@ import json
 import os
 import subprocess
 import sys
+from typing import NamedTuple
 
 from text_positions import lsp_position, read_text, to_uri
 
 QUIET_SECONDS_BEFORE_READY = 2.0
 MAX_STARTUP_SECONDS = 90.0
 REQUEST_TIMEOUT_SECONDS = 60.0
+FIRST_VERSION = 1
 
 
 class LanguageServerExited(RuntimeError):
     pass
+
+
+class OpenedDocument(NamedTuple):
+    version: int
+    text: str
 
 
 class LanguageServer:
@@ -181,27 +188,32 @@ class LanguageServer:
     def open_document(self, path):
         text = read_text(path)
         uri = to_uri(path)
-        version, opened_text = self.opened.get(uri, (0, None))
-        if text == opened_text:
-            return text
-        self.opened[uri] = (version + 1, text)
-        if version == 0:
-            document = {
-                "uri": uri,
-                "languageId": self.language_ids[path.suffix],
-                "version": 1,
-                "text": text,
-            }
-            self.notify("textDocument/didOpen", {"textDocument": document})
-            return text
+        opened = self.opened.get(uri)
+        if opened is None:
+            self.did_open(uri, self.language_ids[path.suffix], text)
+        elif opened.text != text:
+            self.did_change(uri, opened.version + 1, text)
+        return text
+
+    def did_open(self, uri, language_id, text):
+        self.opened[uri] = OpenedDocument(FIRST_VERSION, text)
+        document = {
+            "uri": uri,
+            "languageId": language_id,
+            "version": FIRST_VERSION,
+            "text": text,
+        }
+        self.notify("textDocument/didOpen", {"textDocument": document})
+
+    def did_change(self, uri, version, text):
+        self.opened[uri] = OpenedDocument(version, text)
         self.notify(
             "textDocument/didChange",
             {
-                "textDocument": {"uri": uri, "version": version + 1},
+                "textDocument": {"uri": uri, "version": version},
                 "contentChanges": [{"text": text}],
             },
         )
-        return text
 
     def close_document(self, uri):
         if self.opened.pop(uri, None) is not None:
