@@ -72,7 +72,7 @@ def finish_agent(payload):
     delete_agent_folder(payload)
 
 
-def delete_every_idle_agent_folder(payload):
+def delete_agent_folders_when_idle(payload):
     root = agent_folders_root(payload)
     if root and payload.get("background_tasks") == []:
         shutil.rmtree(root, ignore_errors=True)
@@ -103,7 +103,7 @@ def delete_agent_folders_after_session(payload):
 HANDLERS = {
     "SubagentStart": offer_agent_folder,
     "SubagentStop": finish_agent,
-    "Stop": delete_every_idle_agent_folder,
+    "Stop": delete_agent_folders_when_idle,
     "SessionEnd": delete_agent_folders_after_session,
 }
 
