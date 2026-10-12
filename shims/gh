@@ -147,7 +147,9 @@ writes_a_pull_request() {
 }
 
 runs_a_pull_request_mutation() {
-  [[ $endpoint == graphql || $endpoint == */graphql ]] || return 1
+  local path=${endpoint%%[?#]*}
+  path=${path%/}
+  [[ $path == graphql || $path == */graphql ]] || return 1
   $reads_query_from_file && return 0
   [[ $* =~ (create|update|merge|enqueue)PullRequest|enablePullRequestAutoMerge ]]
 }
