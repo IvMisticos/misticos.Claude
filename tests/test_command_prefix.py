@@ -4,7 +4,7 @@ import subprocess
 import sys
 
 import pytest
-from conftest import FAKE_GH, ROOT, SHIMS, without_session_variables
+from conftest import FAKE_GH, ROOT, SHIMS, run_json_hook, without_session_variables
 
 COMMAND_PREFIX = ROOT / "hooks" / "command_prefix.py"
 SESSION_ENVIRONMENT_SCRIPT = ROOT / "hooks" / "session_environment.sh"
@@ -25,16 +25,8 @@ def hook_environment(project):
 
 
 def hook_output(environment, tool_input, *options):
-    payload = json.dumps({"tool_name": "Bash", "tool_input": tool_input})
-    output = subprocess.run(
-        [sys.executable, COMMAND_PREFIX, *options],
-        input=payload,
-        env=environment,
-        capture_output=True,
-        text=True,
-        check=True,
-    ).stdout
-    return json.loads(output) if output else None
+    payload = {"tool_name": "Bash", "tool_input": tool_input}
+    return run_json_hook(COMMAND_PREFIX, payload, *options, env=environment)
 
 
 def codex_command(environment, command):

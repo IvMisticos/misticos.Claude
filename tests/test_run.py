@@ -35,13 +35,6 @@ SCRIPT
 
 
 @pytest.fixture
-def home(tmp_path):
-    home = tmp_path / "home"
-    home.mkdir()
-    return home
-
-
-@pytest.fixture
 def environment(fake_bin, home):
     bin_dir = fake_bin("curl", FAKE_CURL)
     for tool in TOOLS:

@@ -21,6 +21,7 @@ from reply_history import (
 from session_state import (
     STATE_ROOT,
     locked_session_file,
+    parsed_record,
     read_json,
     write_json,
 )
@@ -83,11 +84,8 @@ class NagState(NamedTuple):
 
 
 def parsed_memory(stored):
-    try:
-        memory = NagMemory(**dict_or_empty(stored))
-    except TypeError:
-        return NagMemory()
-    valid = (
+    memory = parsed_record(NagMemory, stored)
+    valid = memory is not None and (
         isinstance(memory.seen_reply, str)
         and isinstance(memory.window, str)
         and isinstance(memory.window_replies, int)
@@ -97,11 +95,9 @@ def parsed_memory(stored):
 
 
 def parsed_pending_nags(stored):
-    try:
-        nags = DueNags(**dict_or_empty(stored))
-    except TypeError:
-        return DueNags()
-    return nags if all(isinstance(nag, str) for nag in nags) else DueNags()
+    nags = parsed_record(DueNags, stored)
+    valid = nags is not None and all(isinstance(nag, str) for nag in nags)
+    return nags if valid else DueNags()
 
 
 def parsed_state(stored):

@@ -30,7 +30,7 @@ def watched_paths(payload):
 
 
 def is_low(disk):
-    return disk.free < min(LOW_SPACE_BYTES, disk.total * LOW_SPACE_SHARE)
+    return disk.has_free_below(LOW_SPACE_BYTES, LOW_SPACE_SHARE)
 
 
 def disk_warning(payload):

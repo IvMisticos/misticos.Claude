@@ -21,17 +21,28 @@ def scratchpad_of(payload):
     return None
 
 
+def hook_specific_output(event, fields):
+    return {"hookSpecificOutput": {"hookEventName": event, **fields}}
+
+
+def pre_tool_use_output(decision):
+    return hook_specific_output("PreToolUse", decision)
+
+
+def allowed_with(updated_input):
+    return {"permissionDecision": "allow", "updatedInput": updated_input}
+
+
+def denied(reason):
+    return {"permissionDecision": "deny", "permissionDecisionReason": reason}
+
+
 def hook_output(event, context, shape):
     match shape:
         case OutputShape.CURSOR:
             return {"additional_context": context}
         case OutputShape.CLAUDE:
-            return {
-                "hookSpecificOutput": {
-                    "hookEventName": event,
-                    "additionalContext": context,
-                }
-            }
+            return hook_specific_output(event, {"additionalContext": context})
 
 
 def write_context(event, context, shape=OutputShape.CLAUDE):
@@ -53,8 +64,7 @@ def write_block(reason, shape=OutputShape.CLAUDE):
 def run_pre_tool_use(decide):
     decision = decide(read_payload())
     if decision:
-        output = {"hookEventName": "PreToolUse", **decision}
-        json.dump({"hookSpecificOutput": output}, sys.stdout)
+        json.dump(pre_tool_use_output(decision), sys.stdout)
 
 
 def run_hook(main):

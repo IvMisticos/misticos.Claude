@@ -8,7 +8,7 @@ import os
 import re
 from pathlib import Path
 
-from hook_io import run_pre_tool_use
+from hook_io import denied, run_pre_tool_use
 from model_cap import outranks, project_folders, tier_rank
 from transcript import dict_or_empty, recent_entries
 
@@ -107,13 +107,10 @@ def forced_decision(caller):
     forced_model = os.environ.get(SUBAGENT_MODEL_VARIABLE)
     if not outranks(forced_model, caller):
         return None
-    return {
-        "permissionDecision": "deny",
-        "permissionDecisionReason": (
-            f"CLAUDE_CODE_SUBAGENT_MODEL_FORCE runs every subagent on "
-            f"{forced_model}, above your {caller}. Do the work yourself."
-        ),
-    }
+    return denied(
+        f"CLAUDE_CODE_SUBAGENT_MODEL_FORCE runs every subagent on "
+        f"{forced_model}, above your {caller}. Do the work yourself."
+    )
 
 
 def requested_model_decision(tool_input, caller):

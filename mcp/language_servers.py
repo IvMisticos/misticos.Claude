@@ -4,6 +4,9 @@ import shutil
 import sys
 from pathlib import Path
 
+SOLUTION_SUFFIXES = (".sln", ".slnx", ".slnf")
+PROJECT_SUFFIXES = (".csproj",)
+
 LANGUAGE_SERVERS = {
     "typescript": {
         "command": ["tsgo", "--lsp", "-stdio"],
@@ -25,10 +28,7 @@ LANGUAGE_SERVERS = {
         "install": ["dotnet", "tool", "install", "-g", "csharp-ls"],
         "extensions": {".cs": "csharp"},
         "config_files": [
-            "*.csproj",
-            "*.sln",
-            "*.slnx",
-            "*.slnf",
+            *(f"*{suffix}" for suffix in (*PROJECT_SUFFIXES, *SOLUTION_SUFFIXES)),
             "*.props",
             "*.targets",
             "global.json",

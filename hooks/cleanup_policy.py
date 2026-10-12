@@ -47,7 +47,7 @@ def most_free_since_cleanup(record, disks):
 
 
 def needs_cleanup(disk, most_free_since_cleanup):
-    if disk.free >= min(CLEAN_UP_BELOW_BYTES, disk.total * CLEAN_UP_BELOW_SHARE):
+    if not disk.has_free_below(CLEAN_UP_BELOW_BYTES, CLEAN_UP_BELOW_SHARE):
         return False
     most_free = most_free_since_cleanup.get(disk.device)
     if most_free is None:

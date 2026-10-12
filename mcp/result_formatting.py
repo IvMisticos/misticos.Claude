@@ -8,10 +8,7 @@ def location_line(location):
     if uri is None:
         return "unknown location"
     range_ = location.get("targetSelectionRange") or location.get("range")
-    path = from_uri(uri)
-    if range_ is None:
-        return str(path)
-    return place(path, range_["start"])
+    return range_place(from_uri(uri), range_)
 
 
 def position_text(path, position):
@@ -39,16 +36,21 @@ def hover_text(result):
     contents = result.get("contents")
     if not contents:
         return "no hover information"
-    if isinstance(contents, str):
-        return contents
-    if isinstance(contents, dict):
-        return contents.get("value", "")
-    return "\n".join(
-        part if isinstance(part, str) else part.get("value", "") for part in contents
-    )
+    if isinstance(contents, (str, dict)):
+        return hover_part_text(contents)
+    return "\n".join(hover_part_text(part) for part in contents)
+
+
+def hover_part_text(part):
+    return part if isinstance(part, str) else part.get("value", "")
 
 
 SHOWN_SEVERITIES = {1: "error", 2: "warning", 3: "info"}
+DEFAULT_SEVERITY = 1
+
+
+def severity_of(diagnostic):
+    return diagnostic.get("severity", DEFAULT_SEVERITY)
 
 
 def diagnostics_text(path, diagnostics):
@@ -56,7 +58,7 @@ def diagnostics_text(path, diagnostics):
         (
             diagnostic
             for diagnostic in diagnostics
-            if diagnostic.get("severity", 1) in SHOWN_SEVERITIES
+            if severity_of(diagnostic) in SHOWN_SEVERITIES
         ),
         key=lambda diagnostic: position_key(diagnostic["range"]["start"]),
     )
@@ -65,7 +67,7 @@ def diagnostics_text(path, diagnostics):
 
 
 def diagnostic_line(path, diagnostic):
-    severity = SHOWN_SEVERITIES[diagnostic.get("severity", 1)]
+    severity = SHOWN_SEVERITIES[severity_of(diagnostic)]
     code = f" {diagnostic['code']}" if diagnostic.get("code") is not None else ""
     start = place(path, diagnostic["range"]["start"])
     return f"{start} {severity}{code}: {diagnostic['message']}"
@@ -107,6 +109,12 @@ def function_line(function):
     return f"{function['name']} ({symbol_kind(function.get('kind'))}) {definition}"
 
 
+def range_place(path, range_):
+    if range_ is None:
+        return str(path)
+    return place(path, range_["start"])
+
+
 def place(path, position):
     return f"{path}:{position_text(path, position)}"
 
@@ -130,11 +138,9 @@ def symbol_place(symbol):
     location = symbol.get("location") or {}
     path = from_uri(location["uri"]) if "uri" in location else None
     range_ = symbol.get("selectionRange") or location.get("range")
-    if range_ is None:
-        return str(path or "")
     if path is None:
-        return one_based(range_["start"])
-    return place(path, range_["start"])
+        return "" if range_ is None else one_based(range_["start"])
+    return range_place(path, range_)
 
 
 SYMBOL_KINDS = {

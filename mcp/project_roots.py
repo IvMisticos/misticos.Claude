@@ -1,10 +1,8 @@
 import subprocess
 from pathlib import Path
 
+from language_servers import PROJECT_SUFFIXES, SOLUTION_SUFFIXES
 from project_files import files_under
-
-SOLUTION_SUFFIXES = (".sln", ".slnx", ".slnf")
-PROJECT_SUFFIXES = (".csproj",)
 
 
 def git_root(path):
