@@ -8,10 +8,7 @@ def location_line(location):
     if uri is None:
         return "unknown location"
     range_ = location.get("targetSelectionRange") or location.get("range")
-    path = from_uri(uri)
-    if range_ is None:
-        return str(path)
-    return place(path, range_["start"])
+    return range_place(from_uri(uri), range_)
 
 
 def position_text(path, position):
@@ -107,6 +104,12 @@ def function_line(function):
     return f"{function['name']} ({symbol_kind(function.get('kind'))}) {definition}"
 
 
+def range_place(path, range_):
+    if range_ is None:
+        return str(path)
+    return place(path, range_["start"])
+
+
 def place(path, position):
     return f"{path}:{position_text(path, position)}"
 
@@ -130,11 +133,9 @@ def symbol_place(symbol):
     location = symbol.get("location") or {}
     path = from_uri(location["uri"]) if "uri" in location else None
     range_ = symbol.get("selectionRange") or location.get("range")
-    if range_ is None:
-        return str(path or "")
     if path is None:
-        return one_based(range_["start"])
-    return place(path, range_["start"])
+        return "" if range_ is None else one_based(range_["start"])
+    return range_place(path, range_)
 
 
 SYMBOL_KINDS = {
