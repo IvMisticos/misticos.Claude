@@ -3,8 +3,8 @@ import os
 from enum import StrEnum
 from typing import NamedTuple
 
+from plugin_paths import DATA_ROOT
 from session_state import (
-    STATE_ROOT,
     locked_session_file,
     parsed_record,
     read_json,
@@ -14,7 +14,7 @@ from session_state import (
 
 FULL_COPY_EVERY_TOKENS = 100_000
 POINTER_EVERY_TOKENS = 25_000
-BASELINE_DIR = os.path.join(STATE_ROOT, "reminder")
+BASELINE_DIR = DATA_ROOT / "reminder"
 
 
 class Action(StrEnum):

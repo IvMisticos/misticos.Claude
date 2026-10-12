@@ -1,16 +1,14 @@
 import contextlib
 import json
-from pathlib import Path
 
 from disk_cleanup import cleared_caches
 from disks import BYTES_PER_MIB, disks, total_free
+from plugin_paths import DATA_ROOT
 
 CLEAN_UP_BELOW_BYTES = 5 << 30
 CLEAN_UP_BELOW_SHARE = 0.25
 CLEAN_UP_AGAIN_AFTER_BYTES = 1 << 30
-CLEANUP_RECORD = (
-    Path.home() / ".claude" / "hooks" / "data" / "misticos.Claude" / "disk-cleanup.json"
-)
+CLEANUP_RECORD = DATA_ROOT / "disk-cleanup.json"
 
 
 def read_most_free_since_cleanup(record):

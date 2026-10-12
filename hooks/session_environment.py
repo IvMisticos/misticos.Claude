@@ -7,9 +7,10 @@ import os
 import shlex
 from pathlib import Path
 
-HOOKS_DIR = Path(__file__).resolve().parent
-SHIMS_DIR = HOOKS_DIR.parent / "shims"
-SESSION_ENVIRONMENT_SCRIPT = HOOKS_DIR / "session_environment.sh"
+from plugin_paths import PLUGIN_ROOT
+
+SHIMS_DIR = PLUGIN_ROOT / "shims"
+SESSION_ENVIRONMENT_SCRIPT = PLUGIN_ROOT / "hooks" / "session_environment.sh"
 
 
 def project_dir():

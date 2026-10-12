@@ -13,7 +13,6 @@ if sys.platform == "win32":
 else:
     import fcntl
 
-STATE_ROOT = os.path.expanduser("~/.claude/hooks/data/misticos.Claude")
 FORGET_AFTER_SECONDS = 7 * 24 * 60 * 60
 
 

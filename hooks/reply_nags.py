@@ -3,12 +3,12 @@
 # requires-python = ">=3.11"
 # ///
 
-import os
 import uuid
 from typing import NamedTuple
 
 from harnesses import ReplyHistory, harness_parser
 from hook_io import read_payload, run_hook, write_context
+from plugin_paths import DATA_ROOT
 from reply_history import (
     EventLog,
     Reply,
@@ -19,7 +19,6 @@ from reply_history import (
     without_trailing_prompts,
 )
 from session_state import (
-    STATE_ROOT,
     locked_session_file,
     parsed_record,
     read_json,
@@ -30,7 +29,7 @@ from transcript import dict_or_empty
 PROSE_LIMIT = 300
 FIRST_NAG_AT_MESSAGES = 2
 MESSAGES_BETWEEN_NAGS = 6
-STATE_DIR = os.path.join(STATE_ROOT, "reply-nags")
+STATE_DIR = DATA_ROOT / "reply-nags"
 LONG_REPLY = (
     "One of your recent messages had at least {length} characters outside "
     "code and links. Don't resend it, but from now on keep your messages "

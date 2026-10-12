@@ -10,6 +10,7 @@ from pathlib import Path
 
 from hook_io import PreToolUseDecision, denied, run_pre_tool_use
 from model_cap import outranks, project_folders, tier_rank
+from plugin_paths import PLUGIN_ROOT
 from transcript import dict_or_empty, recent_entries
 
 INHERIT = "inherit"
@@ -18,7 +19,7 @@ FRONTMATTER = re.compile(r"---\s*\n([\s\S]*?)---\s*\n?")
 CLAUDE_ALIASES = ("haiku", "sonnet", "opus", "fable")
 SUBAGENT_MODEL_VARIABLE = "CLAUDE_CODE_SUBAGENT_MODEL"
 PLUGIN_NAME = "misticos"
-PLUGIN_AGENTS_DIR = Path(__file__).resolve().parent.parent / "agents"
+PLUGIN_AGENTS_DIR = PLUGIN_ROOT / "agents"
 
 
 def with_model(tool_input, model) -> PreToolUseDecision:

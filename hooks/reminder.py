@@ -4,10 +4,10 @@
 # ///
 
 import sys
-from pathlib import Path
 
 from harnesses import ContextSource, harness_parser
 from hook_io import read_payload, run_hook, write_context
+from plugin_paths import PLUGIN_ROOT
 from reminder_baselines import (
     Action,
     claim_action,
@@ -25,7 +25,7 @@ from transcript import context_tokens, payload_tokens, transcript_fits_in_tail
 
 from agents import ALL_SECTIONS, rule_sections_for
 
-RULES_PATH = str(Path(__file__).resolve().parent.parent / "INSTRUCTIONS.md")
+RULES_PATH = str(PLUGIN_ROOT / "INSTRUCTIONS.md")
 
 
 def message_for_part(action, part, messages, rules):

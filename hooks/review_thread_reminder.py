@@ -3,17 +3,17 @@
 # requires-python = ">=3.11"
 # ///
 
-import os
 from typing import NamedTuple
 
 from harnesses import harness_parser
 from hook_io import read_payload, run_hook, write_block
+from plugin_paths import DATA_ROOT
 from pull_requests import last_activity_by_pull_request
 from review_threads import gh_installed, review_states, thread_source
-from session_state import STATE_ROOT, locked_session_file, read_record, write_record
+from session_state import locked_session_file, read_record, write_record
 from transcript import positioned_entries, transcript_part_from
 
-STATE_DIR = os.path.join(STATE_ROOT, "review-threads")
+STATE_DIR = DATA_ROOT / "review-threads"
 SUBAGENT_STOP = "subagentstop"
 
 
