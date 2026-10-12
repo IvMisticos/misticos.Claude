@@ -137,7 +137,17 @@ def test_new_comment_on_a_seen_thread_blocks_again(
     assert run_hook(home, gh_path, stop(transcript)) == blocked()
 
 
-@pytest.mark.parametrize("stored", ["not json", '{"unknown": 1}', "[1]"])
+@pytest.mark.parametrize(
+    "stored",
+    [
+        "not json",
+        '{"unknown": 1}',
+        "[1]",
+        '{"seen": [], "skipped": [], "checked": {}}',
+        '{"seen": {}, "skipped": [], "checked": {"acme/widgets#7": "x"}}',
+        '{"seen": {}, "skipped": [1], "checked": {}, "scanned": "0"}',
+    ],
+)
 def test_unreadable_state_starts_over(home, gh_path, responses, transcript, stored):
     state = home / ".claude/hooks/data/misticos.Claude/review-threads/s1"
     state.parent.mkdir(parents=True)

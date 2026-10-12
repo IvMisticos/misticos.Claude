@@ -18,9 +18,9 @@ SUBAGENT_STOP = "subagentstop"
 
 
 class Memory(NamedTuple):
-    seen: dict
-    skipped: tuple
-    checked: dict
+    seen: dict[str, int]
+    skipped: tuple[str, ...]
+    checked: dict[str, int]
     scanned: int = 0
 
 

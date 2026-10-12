@@ -76,30 +76,9 @@ def action_for_fire(
     return next_action(baselines, fire, tokens, can_copy)
 
 
-def parsed_action(stored) -> Action | None:
-    try:
-        return Action(stored)
-    except ValueError:
-        return None
-
-
-def parsed_baselines(stored) -> Baselines | None:
-    baselines = parsed_record(Baselines, stored)
-    if baselines is None:
-        return None
-    action = parsed_action(baselines.action)
-    counts = (baselines.pointed_at, baselines.copied_at, baselines.seen)
-    valid = (
-        all(isinstance(count, int) for count in counts)
-        and isinstance(baselines.fire, str)
-        and action is not None
-    )
-    return baselines._replace(action=action) if valid else None
-
-
 def claim_action(session_id, fire, can_copy, tokens=None, added_tokens=0) -> Action:
     with locked_session_file(BASELINE_DIR, session_id) as baseline_file:
-        stored = parsed_baselines(read_json(baseline_file))
+        stored = parsed_record(Baselines, read_json(baseline_file))
         if tokens is None:
             already_this_fire = stored is not None and fire and stored.fire == fire
             seen = stored.seen if stored else 0

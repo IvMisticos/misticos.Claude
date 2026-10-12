@@ -83,29 +83,12 @@ class NagState(NamedTuple):
         }
 
 
-def parsed_memory(stored):
-    memory = parsed_record(NagMemory, stored)
-    valid = memory is not None and (
-        isinstance(memory.seen_reply, str)
-        and isinstance(memory.window, str)
-        and isinstance(memory.window_replies, int)
-        and isinstance(memory.nagged_at, int)
-    )
-    return memory if valid else NagMemory()
-
-
-def parsed_pending_nags(stored):
-    nags = parsed_record(DueNags, stored)
-    valid = nags is not None and all(isinstance(nag, str) for nag in nags)
-    return nags if valid else DueNags()
-
-
 def parsed_state(stored):
     stored = dict_or_empty(stored)
     return NagState(
-        parsed_memory(stored.get("memory")),
+        parsed_record(NagMemory, stored.get("memory")) or NagMemory(),
         parsed_event_log(stored.get("log")),
-        parsed_pending_nags(stored.get("pending_nags")),
+        parsed_record(DueNags, stored.get("pending_nags")) or DueNags(),
     )
 
 

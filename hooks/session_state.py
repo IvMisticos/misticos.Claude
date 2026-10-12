@@ -1,9 +1,12 @@
+import builtins
 import contextlib
 import json
 import os
 import re
 import sys
 import time
+import typing
+from enum import Enum
 
 if sys.platform == "win32":
     import msvcrt
@@ -63,10 +66,37 @@ def write_json(state_file, value):
     json.dump(value, state_file)
 
 
+def parsed_field(field_type, stored):
+    match typing.get_origin(field_type), typing.get_args(field_type):
+        case (builtins.dict, (key_type, value_type)) if isinstance(stored, dict):
+            return {
+                parsed_field(key_type, key): parsed_field(value_type, value)
+                for key, value in stored.items()
+            }
+        case (builtins.tuple, (item_type, builtins.Ellipsis)) if isinstance(
+            stored, list
+        ):
+            return tuple(parsed_field(item_type, item) for item in stored)
+        case (None, ()) if issubclass(field_type, Enum):
+            return field_type(stored)
+        case (None, ()) if type(stored) is field_type:
+            return stored
+    raise ValueError(f"stored {stored!r} is not a {field_type}")
+
+
 def parsed_record(record_type, stored):
+    if not isinstance(stored, dict):
+        return None
+    field_types = typing.get_type_hints(record_type)
+    if not stored.keys() <= field_types.keys():
+        return None
     try:
-        return record_type(**stored)
-    except TypeError:
+        fields = {
+            name: parsed_field(field_types[name], value)
+            for name, value in stored.items()
+        }
+        return record_type(**fields)
+    except (ValueError, TypeError):
         return None
 
 
