@@ -121,12 +121,12 @@ read_global_options() {
     case $word in
       -c | --config-env)
         word=${1-}
-        is_identity_key "${word%%=*}" && global_options_change_identity=true
+        if is_identity_key "${word%%=*}"; then global_options_change_identity=true; fi
         shift
         ;;
       --config-env=*)
         word=${word#--config-env=}
-        is_identity_key "${word%%=*}" && global_options_change_identity=true
+        if is_identity_key "${word%%=*}"; then global_options_change_identity=true; fi
         ;;
       -C | --git-dir | --work-tree)
         location_options+=("$word" "${1-}")

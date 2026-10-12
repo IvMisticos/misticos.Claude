@@ -93,6 +93,7 @@ def test_denies_identity_environment(run_git, environment):
         ["log", "--author=x"],
         ["commit", "-m", "set user.name"],
         ["-c", "core.pager=cat", "log"],
+        ["--config-env=core.pager=PAGER"],
     ],
 )
 def test_runs_other_commands(run_git, arguments):
