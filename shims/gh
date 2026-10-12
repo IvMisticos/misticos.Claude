@@ -10,12 +10,19 @@ deny() {
   exit 1
 }
 
+takes_no_value() {
+  case $1 in
+    -h | --help | -i | --include | --paginate | --silent | --slurp | --verbose) return 0 ;;
+  esac
+  return 1
+}
+
 command_path() {
   local word value_expected=false found=0
   for word in "$@"; do
     if $value_expected; then
       value_expected=false
-    elif [[ $word == --*=* ]]; then
+    elif [[ $word == --*=* ]] || takes_no_value "$word"; then
       continue
     elif [[ $word == --* || $word == -? ]]; then
       value_expected=true
@@ -36,7 +43,7 @@ writes_a_pull_request() {
 }
 
 names_pull_requests() {
-  [[ $* == */pulls* ]]
+  [[ $1 == */pulls* ]]
 }
 
 runs_a_pull_request_mutation() {
@@ -69,9 +76,10 @@ api_method() {
 }
 
 api_writes_pull_requests() {
-  local method
+  local endpoint=$1 method
+  shift
   runs_a_pull_request_mutation "$@" && return 0
-  names_pull_requests "$@" || return 1
+  names_pull_requests "$endpoint" || return 1
   method=$(api_method "$@")
   [[ $method == POST || $method == PUT || $method == PATCH ]]
 }
@@ -81,7 +89,7 @@ gh=$(real_tool gh)
 if [ -z "${ALLOW_GH_PULL_REQUEST_WRITE-}" ]; then
   mapfile -t command < <(command_path "$@")
   writes_a_pull_request "${command[@]}" && deny
-  [ "${command[0]-}" = api ] && api_writes_pull_requests "$@" && deny
+  [ "${command[0]-}" = api ] && api_writes_pull_requests "${command[1]-}" "$@" && deny
 fi
 
 exec "$gh" "$@"
