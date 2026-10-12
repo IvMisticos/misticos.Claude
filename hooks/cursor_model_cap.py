@@ -29,10 +29,9 @@ def spawn_decision(payload):
 def main():
     try:
         payload = read_payload()
-        decision = spawn_decision(payload)
-    except Exception:
-        decision = ALLOW
-    json.dump(decision, sys.stdout)
+    except (OSError, UnicodeDecodeError):
+        payload = {}
+    json.dump(spawn_decision(payload), sys.stdout)
 
 
 if __name__ == "__main__":

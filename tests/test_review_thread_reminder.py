@@ -14,7 +14,11 @@ from conftest import (
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
 
-from pull_requests import PullRequest, last_activity_by_pull_request
+from pull_requests import (
+    PullRequest,
+    last_activity_by_pull_request,
+    pull_requests_in_result,
+)
 from review_threads import output_by, started
 from transcript import TranscriptPart, positioned_entries, transcript_part_from
 
@@ -329,9 +333,14 @@ def test_cursor_gets_a_follow_up_message(home, gh_path, responses, transcript):
 
 
 @pytest.mark.parametrize(
-    "fields", [{"loop_count": 1}, {"loop_count": 0, "status": "aborted"}]
+    "fields",
+    [
+        {"loop_count": 1},
+        {"loop_count": 0, "status": "aborted"},
+        {"loop_count": 0, "status": "error"},
+    ],
 )
-def test_cursor_stays_silent_after_a_follow_up_or_abort(
+def test_cursor_stays_silent_after_a_follow_up_abort_or_error(
     home, gh_path, responses, transcript, fields
 ):
     answer_graphql(responses, ReviewThread("T1", [1]))
@@ -578,3 +587,8 @@ def test_redirections_are_not_gh_arguments(tmp_path):
         assistant_call(bash_call("gh pr view 4 -R acme/c >out 2>&1 | head")),
     )
     assert list(activity_in(transcript)) == [PullRequest("acme", "c", 4)]
+
+
+def test_result_of_an_unknown_use_has_no_pull_requests():
+    result = {"text": "https://github.com/acme/a/pull/1"}
+    assert list(pull_requests_in_result(result, "unknown")) == []
