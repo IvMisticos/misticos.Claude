@@ -164,14 +164,30 @@ def pr_target(subcommand, following):
     return next(positionals(following, flags_with_values), None)
 
 
+def takes_value_before_command(word):
+    if word.startswith("--"):
+        return "=" not in word
+    return len(word) == 2 and is_flag(word)
+
+
+def command_indexes(words):
+    value_expected = False
+    for index, word in enumerate(words):
+        if value_expected:
+            value_expected = False
+        elif takes_value_before_command(word):
+            value_expected = True
+        elif not is_flag(word):
+            yield index
+
+
 def gh_pr_call(arguments):
     repo, words = without_repo_flags(arguments)
-    if words[:1] != ["pr"]:
+    indexes = command_indexes(words)
+    pr_at = next(indexes, None)
+    if pr_at is None or words[pr_at] != "pr":
         return None
-    subcommand_at = next(
-        (index for index, word in enumerate(words) if index and not is_flag(word)),
-        None,
-    )
+    subcommand_at = next(indexes, None)
     if subcommand_at is None:
         return None
     subcommand = words[subcommand_at]
@@ -180,4 +196,7 @@ def gh_pr_call(arguments):
 
 
 def gh_api_words(arguments):
-    return arguments[1:] if arguments[:1] == ["api"] else []
+    api_at = next(command_indexes(arguments), None)
+    if api_at is None or arguments[api_at] != "api":
+        return []
+    return arguments[api_at + 1 :]
