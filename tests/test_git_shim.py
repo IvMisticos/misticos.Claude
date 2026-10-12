@@ -61,6 +61,12 @@ def run_git(shim_runner, project):
         ["-C", "repo", "config", "user.name", "x"],
         ["-c", "user.name=x", "commit", "-m", "a"],
         ["--config-env=user.email=EMAIL", "commit", "-m", "a"],
+        ["config", "author.name", "x"],
+        ["config", "--global", "committer.email", "x@example.com"],
+        ["config", "--unset", "Author.Email"],
+        ["-c", "Author.Name=x", "commit", "-m", "a"],
+        ["config", "--remove-section", "committer"],
+        ["-c", "committer.name=x", "commit", "-m", "a"],
         ["commit", "--author=x <x@example.com>", "-m", "a"],
     ],
 )
@@ -77,6 +83,10 @@ def test_denies_identity_arguments(run_git, arguments):
         {"GIT_CONFIG_PARAMETERS": "'User.Email=x'"},
         {"GIT_CONFIG_COUNT": "1", "GIT_CONFIG_KEY_0": "USER.NAME"},
         {"GIT_CONFIG_COUNT": "1", "GIT_CONFIG_KEY_0": "user.name"},
+        {"GIT_CONFIG_PARAMETERS": "'author.email=x'"},
+        {"GIT_CONFIG_PARAMETERS": "'core.pager'='cat' 'user.name'='x'"},
+        {"GIT_CONFIG_PARAMETERS": "'User.Email'='x'"},
+        {"GIT_CONFIG_COUNT": "1", "GIT_CONFIG_KEY_0": "committer.name"},
         {"GIT_AUTHOR_NAME": "x", "HARNESS_GIT_IDENTITY": "y|||"},
     ],
 )
