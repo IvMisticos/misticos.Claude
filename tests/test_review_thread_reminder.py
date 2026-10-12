@@ -333,9 +333,14 @@ def test_cursor_gets_a_follow_up_message(home, gh_path, responses, transcript):
 
 
 @pytest.mark.parametrize(
-    "fields", [{"loop_count": 1}, {"loop_count": 0, "status": "aborted"}]
+    "fields",
+    [
+        {"loop_count": 1},
+        {"loop_count": 0, "status": "aborted"},
+        {"loop_count": 0, "status": "error"},
+    ],
 )
-def test_cursor_stays_silent_after_a_follow_up_or_abort(
+def test_cursor_stays_silent_after_a_follow_up_abort_or_error(
     home, gh_path, responses, transcript, fields
 ):
     answer_graphql(responses, ReviewThread("T1", [1]))

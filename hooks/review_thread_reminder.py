@@ -34,7 +34,7 @@ def follows_own_block(payload):
     )
 
 
-def stopped_on_purpose(payload):
+def ended_without_completing(payload):
     return payload.get("status", "completed") != "completed"
 
 
@@ -147,7 +147,7 @@ def new_activity(part, memory):
 
 
 def review_reminder(payload):
-    if follows_own_block(payload) or stopped_on_purpose(payload):
+    if follows_own_block(payload) or ended_without_completing(payload):
         return None
     key = memory_key(payload)
     transcript_path = own_transcript(payload)
