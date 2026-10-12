@@ -4,6 +4,11 @@ SHELL_OPERATOR_CHARACTERS = "();<>|&\n"
 REDIRECTION_CHARACTERS = "<>"
 WORD_SEPARATORS = " \t\r"
 LINE_CONTINUATION = "\\\n"
+HEREDOC_OPERATOR = "<<"
+HERESTRING_OPERATOR = "<<<"
+TAB_STRIPPING_MARK = "-"
+ARITHMETIC_OPENING = "(("
+SUBSTITUTION_CLOSING = ")"
 DOUBLE_QUOTE_ESCAPES = frozenset('$`"\\')
 ANSI_C_ESCAPES = {"n": "\n", "t": "\t", "r": "\r", "\\": "\\", "'": "'", '"': '"'}
 
@@ -16,11 +21,26 @@ class ShellOperator(NamedTuple):
     text: str
 
 
+class Heredoc(NamedTuple):
+    strips_tabs: bool
+    delimiter: str | None = None
+
+    def content_of(self, line):
+        return line.lstrip("\t") if self.strips_tabs else line
+
+    def closes_substitution_in(self, content):
+        if self.delimiter is None:
+            return False
+        return content.startswith(self.delimiter + SUBSTITUTION_CLOSING)
+
+
 class ShellWords:
     def __init__(self, text):
         self.text = text
         self.index = 0
         self.word = None
+        self.heredocs = []
+        self.open_parentheses = 0
 
     def __iter__(self):
         while self.index < len(self.text):
@@ -32,6 +52,9 @@ class ShellWords:
         if character in WORD_SEPARATORS:
             self.index += 1
             return self.finished_word()
+        if self.text.startswith(ARITHMETIC_OPENING, self.index):
+            self.append(self.arithmetic())
+            return []
         if character in SHELL_OPERATOR_CHARACTERS:
             return self.operator_tokens()
         if character == "#" and self.word is None:
@@ -45,7 +68,11 @@ class ShellWords:
 
     def finished_word(self):
         word, self.word = self.word, None
-        return [] if word is None else [word]
+        if word is None:
+            return []
+        if self.heredocs and self.heredocs[-1].delimiter is None:
+            self.heredocs[-1] = self.heredocs[-1]._replace(delimiter=word)
+        return [word]
 
     def append(self, part):
         self.word = (self.word or "") + part
@@ -61,9 +88,61 @@ class ShellWords:
             self.word = None
         tokens = self.finished_word()
         start = self.index
-        while self.at_any_of(SHELL_OPERATOR_CHARACTERS):
+        while self.at_any_of(SHELL_OPERATOR_CHARACTERS) and not self.ends_a_line():
             self.index += 1
-        return [*tokens, ShellOperator(self.text[start : self.index])]
+        self.track_parentheses(self.text[start : self.index])
+        if self.ends_a_line():
+            self.index += 1
+            self.skip_heredoc_bodies()
+        operator = self.text[start : self.index]
+        if operator.endswith(HEREDOC_OPERATOR) and not operator.endswith(
+            HERESTRING_OPERATOR
+        ):
+            self.start_heredoc()
+        return [*tokens, ShellOperator(operator)]
+
+    def track_parentheses(self, operator):
+        opened = self.open_parentheses + operator.count("(") - operator.count(")")
+        self.open_parentheses = max(opened, 0)
+
+    def arithmetic(self):
+        start = self.index
+        depth = 0
+        while self.index < len(self.text):
+            character = self.text[self.index]
+            self.index += 1
+            depth += {"(": 1, ")": -1}.get(character, 0)
+            if depth == 0:
+                break
+        return self.text[start : self.index]
+
+    def ends_a_line(self):
+        return self.at_any_of("\n") and bool(self.heredocs)
+
+    def start_heredoc(self):
+        strips_tabs = self.text.startswith(TAB_STRIPPING_MARK, self.index)
+        self.index += len(TAB_STRIPPING_MARK) if strips_tabs else 0
+        self.heredocs.append(Heredoc(strips_tabs))
+
+    def skip_heredoc_bodies(self):
+        for heredoc in self.heredocs:
+            self.skip_heredoc_body(heredoc)
+        self.heredocs = []
+
+    def skip_heredoc_body(self, heredoc):
+        while self.index < len(self.text):
+            line = self.rest_of_line()
+            content = heredoc.content_of(line)
+            if self.open_parentheses and heredoc.closes_substitution_in(content):
+                self.index += len(line) - len(content) + len(heredoc.delimiter)
+                return
+            self.index += len(line) + 1
+            if content == heredoc.delimiter:
+                return
+
+    def rest_of_line(self):
+        end = self.text.find("\n", self.index)
+        return self.text[self.index : len(self.text) if end < 0 else end]
 
     def at_any_of(self, characters):
         return self.index < len(self.text) and self.text[self.index] in characters
