@@ -1,5 +1,6 @@
+import re
 import subprocess
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 
 from language_servers import PROJECT_SUFFIXES, SOLUTION_SUFFIXES
 from project_files import files_under
@@ -39,17 +40,23 @@ def nearest_file_with(path, suffixes, repo):
     return None
 
 
+QUOTED = re.compile(r'"([^"]+)"')
+
+
+def quoted_file_names(text):
+    return {PureWindowsPath(quoted).name for quoted in QUOTED.findall(text)}
+
+
 def solution_mentioning(project_file, repo):
     for solution in map(Path, files_under(repo)):
         if solution.suffix not in SOLUTION_SUFFIXES:
             continue
         try:
-            if project_file.name in solution.read_text(
-                encoding="utf-8", errors="replace"
-            ):
-                return solution.parent
+            text = solution.read_text(encoding="utf-8", errors="replace")
         except OSError:
             continue
+        if project_file.name in quoted_file_names(text):
+            return solution.parent
     return None
 
 
