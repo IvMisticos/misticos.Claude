@@ -55,6 +55,24 @@ def scratchpad_of(payload):
     return None
 
 
+def event_name_of(payload):
+    event = payload.get("hook_event_name")
+    return event if isinstance(event, str) else ""
+
+
+def session_id_of(payload):
+    session_id = payload.get("session_id") or payload.get("conversation_id")
+    return session_id if isinstance(session_id, str) else None
+
+
+def is_subagent(payload):
+    return bool(payload.get("agent_id") or payload.get("subagent_id"))
+
+
+def cwd_of(payload):
+    return payload.get("cwd") or os.getcwd()
+
+
 def pre_tool_use_output(decision: PreToolUseDecision) -> ClaudeOutput:
     return {"hookSpecificOutput": {"hookEventName": "PreToolUse", **decision}}
 

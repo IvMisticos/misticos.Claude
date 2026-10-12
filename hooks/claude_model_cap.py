@@ -8,7 +8,7 @@ import os
 import re
 from pathlib import Path
 
-from hook_io import PreToolUseDecision, denied, run_pre_tool_use
+from hook_io import PreToolUseDecision, cwd_of, denied, run_pre_tool_use
 from json_values import dict_or_empty
 from model_cap import outranks, project_folders, tier_rank
 from plugin_paths import PLUGIN_ROOT
@@ -151,8 +151,7 @@ def cap_decision(payload):
     main_model = latest_model(payload.get("transcript_path") or "")
     caller = caller_model(payload, main_model)
     if payload.get("tool_name") in ("Agent", "Task"):
-        cwd = payload.get("cwd") or os.getcwd()
-        return agent_decision(tool_input, cwd, caller)
+        return agent_decision(tool_input, cwd_of(payload), caller)
     return session_decision(tool_input, main_model, caller)
 
 
