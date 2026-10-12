@@ -27,16 +27,19 @@ def file_with_suffix(directory, suffixes):
         return None
 
 
+def directories_up_to(path, repo):
+    parents = list(path.parents)
+    if repo not in parents:
+        return []
+    return parents[: parents.index(repo) + 1]
+
+
 def nearest_file_with(path, suffixes, repo):
-    if repo not in path.parents:
-        return None
-    for directory in path.parents:
-        match = file_with_suffix(directory, suffixes)
-        if match is not None:
-            return match
-        if directory == repo:
-            return None
-    return None
+    matches = (
+        file_with_suffix(directory, suffixes)
+        for directory in directories_up_to(path, repo)
+    )
+    return next((match for match in matches if match is not None), None)
 
 
 def solution_mentioning(project_file, repo):
