@@ -18,13 +18,6 @@ CLAUDE_ARGUMENTS = ["--harness", "claude"]
 PARTS = 4
 
 
-@pytest.fixture
-def home(tmp_path):
-    home = tmp_path / "home"
-    home.mkdir()
-    return home
-
-
 def reminder(home, part, payload, arguments=CLAUDE_ARGUMENTS):
     result = subprocess.run(
         [sys.executable, str(REMINDER), str(part), str(PARTS), *arguments],

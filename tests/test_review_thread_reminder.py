@@ -54,13 +54,6 @@ class Thread:
 
 
 @pytest.fixture
-def home(tmp_path):
-    home = tmp_path / "home"
-    home.mkdir()
-    return home
-
-
-@pytest.fixture
 def responses(tmp_path):
     responses = tmp_path / "responses"
     responses.mkdir()

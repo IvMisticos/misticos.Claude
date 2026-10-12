@@ -156,15 +156,13 @@ UNRESOLVED_THREAD = {
 
 
 def test_agent_reminded_about_review_threads_keeps_its_folder(
-    scratchpad, tmp_path, fake_bin
+    scratchpad, tmp_path, fake_bin, home
 ):
     gh_bin = fake_bin("gh", f"#!/bin/bash\necho '{json.dumps(UNRESOLVED_THREAD)}'\n")
     pull_request = {"owner": "acme", "repo": "widgets", "pullNumber": 7}
     call = {"type": "tool_use", "name": "pull_request_read", "input": pull_request}
     transcript = tmp_path / "agent.jsonl"
     transcript.write_text(json.dumps({"message": {"content": [call]}}) + "\n")
-    home = tmp_path / "home"
-    home.mkdir()
     payload = {
         "hook_event_name": "SubagentStop",
         "session_id": "s1",

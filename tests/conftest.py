@@ -20,6 +20,13 @@ def without_session_variables(environment):
 
 
 @pytest.fixture
+def home(tmp_path):
+    home = tmp_path / "home"
+    home.mkdir()
+    return home
+
+
+@pytest.fixture
 def fake_bin(tmp_path):
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()

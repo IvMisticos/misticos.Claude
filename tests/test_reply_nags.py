@@ -41,13 +41,6 @@ def test_log_starts_at_the_reviewed_prompt():
     assert [type(item) for item in log.history] == [Prompt, Reply, Prompt]
 
 
-@pytest.fixture
-def home(tmp_path):
-    home = tmp_path / "home"
-    home.mkdir()
-    return home
-
-
 def run_hook(home, payload, *arguments):
     result = subprocess.run(
         [sys.executable, str(REPLY_NAGS), *arguments],
