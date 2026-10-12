@@ -119,6 +119,14 @@ def test_quoted_operators_stay_inside_the_gh_call(body):
             [["pr", "view", "3"]],
         ),
         ("cat <<< x\ngh pr view 1", [["pr", "view", "1"]]),
+        (
+            'x=$(cat <<EOF\nbody\nEOF)\ngh pr create --body "$x"',
+            [["pr", "create", "--body", "$x"]],
+        ),
+        (
+            "x=$(cat <<-EOF\n\tgh pr close 9\n\tEOF\n)\ngh pr view 2",
+            [["pr", "view", "2"]],
+        ),
         ("echo $((1<<2))\ngh pr view 2", [["pr", "view", "2"]]),
         ("((x = 1 << 2))\ngh pr view 2", [["pr", "view", "2"]]),
     ],
