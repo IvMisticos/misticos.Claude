@@ -86,9 +86,10 @@ def diagnostics_text(path: Path, diagnostics: list[Diagnostic]) -> str:
 
 def diagnostic_line(path: Path, diagnostic: Diagnostic) -> str:
     severity = SHOWN_SEVERITIES[severity_of(diagnostic)]
-    code = f" {diagnostic['code']}" if diagnostic.get("code") is not None else ""
+    code = diagnostic.get("code")
+    code_text = f" {code}" if code is not None else ""
     start = place(path, diagnostic["range"]["start"])
-    return f"{start} {severity}{code}: {diagnostic['message']}"
+    return f"{start} {severity}{code_text}: {diagnostic['message']}"
 
 
 class Call(NamedTuple):
@@ -124,7 +125,7 @@ def call_block(function: str, call_sites: dict[CallSiteKey, str]) -> str:
 
 def function_line(function: CallHierarchyItem) -> str:
     definition = place(from_uri(function["uri"]), function["selectionRange"]["start"])
-    return f"{function['name']} ({symbol_kind(function.get('kind'))}) {definition}"
+    return f"{function['name']} ({symbol_kind(function['kind'])}) {definition}"
 
 
 def range_place(path: Path, range_: Range | None) -> str:
@@ -146,7 +147,7 @@ def symbol_lines(symbols: Sequence[Symbol], indent: int) -> list[str]:
     lines = []
     for symbol in symbols:
         lines.append(
-            f"{'  ' * indent}{symbol['name']} ({symbol_kind(symbol.get('kind'))}) {symbol_place(symbol)}"
+            f"{'  ' * indent}{symbol['name']} ({symbol_kind(symbol['kind'])}) {symbol_place(symbol)}"
         )
         lines.extend(symbol_lines(symbol.get("children") or [], indent + 1))
     return lines
@@ -191,5 +192,5 @@ SYMBOL_KINDS: dict[int, str] = {
 }
 
 
-def symbol_kind(kind: int | None) -> str:
+def symbol_kind(kind: int) -> str:
     return SYMBOL_KINDS.get(kind, "symbol")
