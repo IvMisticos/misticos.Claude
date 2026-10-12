@@ -63,11 +63,16 @@ def write_json(state_file, value):
     json.dump(value, state_file)
 
 
-def read_record(state_file, empty_record):
+def parsed_record(record_type, stored):
     try:
-        return type(empty_record)(**read_json(state_file))
-    except (TypeError, ValueError, KeyError):
-        return empty_record
+        return record_type(**stored)
+    except TypeError:
+        return None
+
+
+def read_record(state_file, empty_record):
+    record = parsed_record(type(empty_record), read_json(state_file))
+    return empty_record if record is None else record
 
 
 def write_record(state_file, record):
