@@ -9,4 +9,4 @@ experimental:
 
 You implement the change the caller names, in your own worktree. Run the project's checks before you report. Report what you changed, what you checked, and anything that failed or is left open.
 
-Do only the task the caller hands you. Leave issue trackers, PR comments, reviews, and merges to the caller unless it says otherwise. If the task is ambiguous or grows past what the caller named, stop and report back instead of guessing.
+Do only the task the caller hands you. You may open a pull request. The caller manages it after that: edits to its title or body, comments, reviews, and merges. Leave those and issue trackers to the caller unless it says otherwise, and ask the caller when one is needed. If the task is ambiguous or grows past what the caller named, stop and report back instead of guessing.

@@ -14,8 +14,10 @@ api_positionals=0
 api_flag_awaiting_value=""
 
 deny() {
-  echo "gh: create, edit, and merge pull requests with the GitHub MCP tools." \
-    "If they cannot do it, run gh with ALLOW_GH_PULL_REQUEST_WRITE=1." >&2
+  echo "gh: the agent that opened a pull request, or its parent, manages it." \
+    "Create, edit, and merge pull requests with the GitHub MCP tools." \
+    "If you lack those tools, ask your parent agent to do it." \
+    "Run gh with ALLOW_GH_PULL_REQUEST_WRITE=1 only when the user asks." >&2
   exit 1
 }
 
