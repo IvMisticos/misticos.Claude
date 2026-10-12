@@ -61,10 +61,14 @@ def write_block(reason, shape=OutputShape.CLAUDE):
     json.dump(block_output(reason, shape), sys.stdout)
 
 
-def run_pre_tool_use(decide):
+def write_pre_tool_use_decision(decide):
     decision = decide(read_payload())
     if decision:
         json.dump(pre_tool_use_output(decision), sys.stdout)
+
+
+def run_pre_tool_use(decide):
+    run_hook(lambda: write_pre_tool_use_decision(decide))
 
 
 def run_hook(main):
