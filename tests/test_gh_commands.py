@@ -129,6 +129,10 @@ def test_quoted_operators_stay_inside_the_gh_call(body):
         ),
         ("echo $((1<<2))\ngh pr view 2", [["pr", "view", "2"]]),
         ("((x = 1 << 2))\ngh pr view 2", [["pr", "view", "2"]]),
+        (
+            "case $x in a) gh pr view 1;; esac\ncat <<E\nE) item's\nE\ngh pr view 2",
+            [["pr", "view", "1"], ["pr", "view", "2"]],
+        ),
     ],
 )
 def test_heredoc_bodies_are_not_commands(command, argument_lists):

@@ -102,7 +102,8 @@ class ShellWords:
         return [*tokens, ShellOperator(operator)]
 
     def track_parentheses(self, operator):
-        self.open_parentheses += operator.count("(") - operator.count(")")
+        opened = self.open_parentheses + operator.count("(") - operator.count(")")
+        self.open_parentheses = max(opened, 0)
 
     def arithmetic(self):
         start = self.index
