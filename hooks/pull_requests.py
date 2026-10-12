@@ -1,10 +1,9 @@
-import json
 import re
 from enum import Enum, auto
 from typing import NamedTuple
 
 from gh_commands import gh_api_words, gh_argument_lists, gh_pr_call
-from transcript import dict_or_empty
+from json_values import dict_or_empty, json_object
 
 NAME = r"[\w.-]+"
 LINK_END = r"(?=[/?#]|$)"
@@ -67,15 +66,6 @@ def pull_request_in_arguments(arguments):
     return None
 
 
-def embedded_json(text):
-    if not text.startswith(("{", "[")):
-        return None
-    try:
-        return json.loads(text)
-    except json.JSONDecodeError:
-        return None
-
-
 def nested_values(value):
     yield value
     if isinstance(value, dict):
@@ -107,7 +97,7 @@ def call_name(call):
 def call_arguments(call):
     for field in ARGUMENT_FIELDS:
         value = call.get(field)
-        arguments = embedded_json(value) if isinstance(value, str) else value
+        arguments = json_object(value) if isinstance(value, str) else value
         if isinstance(arguments, dict):
             return arguments
     return {}
@@ -187,7 +177,7 @@ def pull_requests_in_result(result, use):
             return pull_requests_linked_in(nested_texts(result))
         case ResultUse.NOTIFICATIONS:
             return pull_request_events_in(nested_texts(result))
-        case None:
+        case _:
             return []
 
 

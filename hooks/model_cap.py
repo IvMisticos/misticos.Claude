@@ -1,11 +1,11 @@
 import re
 
 TIER_LEVELS = (
-    {"haiku"},
-    {"sonnet", "luna"},
-    {"terra"},
-    {"opus", "opusplan", "sol"},
-    {"fable", "best", "astra"},
+    ("haiku",),
+    ("sonnet", "luna"),
+    ("terra",),
+    ("opus", "opusplan", "sol"),
+    ("fable", "best", "astra"),
 )
 
 DATE_DIGITS = 8
@@ -17,12 +17,17 @@ def model_words(model):
 
 def tier_rank(model):
     words = model_words(model)
-    return next((rank for rank, level in enumerate(TIER_LEVELS) if level & words), None)
+    return next(
+        (rank for rank, level in enumerate(TIER_LEVELS) if words.intersection(level)),
+        None,
+    )
 
 
 def tier_name(model):
     words = model_words(model)
-    return next((word for level in TIER_LEVELS for word in level & words), None)
+    return next(
+        (word for level in TIER_LEVELS for word in level if word in words), None
+    )
 
 
 def version(model):

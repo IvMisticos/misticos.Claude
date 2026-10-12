@@ -3,24 +3,30 @@
 # requires-python = ">=3.11"
 # ///
 
-import os
 from typing import NamedTuple
 
 from harnesses import harness_parser
-from hook_io import read_payload, run_hook, write_block
+from hook_io import (
+    event_name_of,
+    read_payload,
+    run_hook,
+    session_id_of,
+    write_block,
+)
+from plugin_paths import DATA_ROOT
 from pull_requests import last_activity_by_pull_request
 from review_threads import gh_installed, review_states, thread_source
-from session_state import STATE_ROOT, locked_session_file, read_record, write_record
+from session_state import locked_session_file, read_record, write_record
 from transcript import positioned_entries, transcript_part_from
 
-STATE_DIR = os.path.join(STATE_ROOT, "review-threads")
+STATE_DIR = DATA_ROOT / "review-threads"
 SUBAGENT_STOP = "subagentstop"
 
 
 class Memory(NamedTuple):
-    seen: dict
-    skipped: tuple
-    checked: dict
+    seen: dict[str, int]
+    skipped: tuple[str, ...]
+    checked: dict[str, int]
     scanned: int = 0
 
 
@@ -34,21 +40,20 @@ def follows_own_block(payload):
     )
 
 
-def stopped_on_purpose(payload):
+def ended_without_completing(payload):
     return payload.get("status", "completed") != "completed"
 
 
 def own_transcript(payload):
-    event = str(payload.get("hook_event_name") or "").lower()
-    if event == SUBAGENT_STOP:
+    if event_name_of(payload).lower() == SUBAGENT_STOP:
         return payload.get("agent_transcript_path")
     return payload.get("transcript_path")
 
 
 def memory_key(payload):
-    session_id = payload.get("session_id") or payload.get("conversation_id")
+    session_id = session_id_of(payload)
     agent_id = payload.get("agent_id")
-    if not isinstance(session_id, str):
+    if session_id is None:
         return None
     if isinstance(agent_id, str) and agent_id:
         return f"{session_id}-{agent_id}"
@@ -116,13 +121,16 @@ def matching_offsets(memory, part):
     return memory
 
 
-def claim_unseen_threads(key, part, activity, states):
+def scanned_memory(memory, part, activity, states):
     scanned = next_scan_start(part, activity, states)
+    return updated_memory(matching_offsets(memory, part), states, activity, scanned)
+
+
+def remember_scan(key, part, activity, states):
     with locked_session_file(STATE_DIR, key) as state_file:
-        memory = matching_offsets(read_record(state_file, EMPTY_MEMORY), part)
-        changed = threads_with_new_comments(open_threads(states), memory.seen)
-        write_record(state_file, updated_memory(memory, states, activity, scanned))
-    return changed
+        memory_before = read_record(state_file, EMPTY_MEMORY)
+        write_record(state_file, scanned_memory(memory_before, part, activity, states))
+    return memory_before
 
 
 def reminder(changed):
@@ -147,7 +155,7 @@ def new_activity(part, memory):
 
 
 def review_reminder(payload):
-    if follows_own_block(payload) or stopped_on_purpose(payload):
+    if follows_own_block(payload) or ended_without_completing(payload):
         return None
     key = memory_key(payload)
     transcript_path = own_transcript(payload)
@@ -157,7 +165,8 @@ def review_reminder(payload):
     part = transcript_part_from(transcript_path, memory.scanned)
     activity = new_activity(part, matching_offsets(memory, part))
     states = review_states(list(activity), thread_source())
-    changed = claim_unseen_threads(key, part, activity, states)
+    memory_before_scan = remember_scan(key, part, activity, states)
+    changed = threads_with_new_comments(open_threads(states), memory_before_scan.seen)
     return reminder(changed) if changed else None
 
 

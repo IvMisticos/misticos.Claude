@@ -11,7 +11,14 @@ import sys
 from pathlib import Path
 
 from harnesses import OutputShape
-from hook_io import read_payload, run_hook, scratchpad_of, write_block, write_context
+from hook_io import (
+    event_name_of,
+    read_payload,
+    run_hook,
+    scratchpad_of,
+    write_block,
+    write_context,
+)
 from review_thread_reminder import review_reminder
 
 AGENT_ID = re.compile(r"[A-Za-z0-9_-]+")
@@ -72,7 +79,7 @@ def finish_agent(payload):
     delete_agent_folder(payload)
 
 
-def delete_every_idle_agent_folder(payload):
+def delete_agent_folders_when_idle(payload):
     root = agent_folders_root(payload)
     if root and payload.get("background_tasks") == []:
         shutil.rmtree(root, ignore_errors=True)
@@ -103,14 +110,14 @@ def delete_agent_folders_after_session(payload):
 HANDLERS = {
     "SubagentStart": offer_agent_folder,
     "SubagentStop": finish_agent,
-    "Stop": delete_every_idle_agent_folder,
+    "Stop": delete_agent_folders_when_idle,
     "SessionEnd": delete_agent_folders_after_session,
 }
 
 
 def main():
     payload = read_payload()
-    handle = HANDLERS.get(payload.get("hook_event_name"))
+    handle = HANDLERS.get(event_name_of(payload))
     if handle:
         handle(payload)
 

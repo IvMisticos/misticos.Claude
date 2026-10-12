@@ -7,19 +7,40 @@ import glob
 import os
 import tomllib
 from pathlib import Path
+from typing import NamedTuple
 
-from hook_io import allowed_with, denied, run_pre_tool_use
+from hook_io import allowed_with, cwd_of, denied, run_pre_tool_use
 from model_cap import outranks, project_folders
 
 DEFAULT_ROLE = "default"
+
+
+class RoleFile(NamedTuple):
+    name: str | None
+    model: str | None
+
+
+class CodexLayer(NamedTuple):
+    folder: Path
+    declared_role_files: dict[str, Path]
+    default_subagent_model: str | None
 
 
 def read_toml(path):
     try:
         with open(path, "rb") as toml_file:
             return tomllib.load(toml_file)
-    except (OSError, tomllib.TOMLDecodeError):
+    except (OSError, ValueError):
         return {}
+
+
+def text_or_none(value):
+    return value if isinstance(value, str) and value else None
+
+
+def parsed_role_file(path):
+    table = read_toml(path)
+    return RoleFile(text_or_none(table.get("name")), text_or_none(table.get("model")))
 
 
 def config_folders(cwd):
@@ -32,16 +53,13 @@ def config_folders(cwd):
     return [*project_layers, user_layer]
 
 
-def agents_table(folder):
-    agents = read_toml(folder / "config.toml").get("agents")
-    return agents if isinstance(agents, dict) else {}
-
-
-def declared_role_files(folder):
-    for table_key, role in agents_table(folder).items():
+def declared_role_files(folder, agents):
+    declared = {}
+    for table_key, role in agents.items():
         config_file = role.get("config_file") if isinstance(role, dict) else None
-        if config_file and (folder / config_file).is_file():
-            yield table_key, folder / config_file
+        if isinstance(config_file, str) and (folder / config_file).is_file():
+            declared[table_key] = folder / config_file
+    return declared
 
 
 def discovered_role_files(folder):
@@ -49,31 +67,44 @@ def discovered_role_files(folder):
     return map(Path, glob.glob(pattern, recursive=True))
 
 
-def layer_roles(folder):
-    roles = {}
+def layer_role_models(layer):
+    role_models = {}
     declared_files = set()
-    for table_key, role_file in declared_role_files(folder):
+    for table_key, role_file in layer.declared_role_files.items():
         declared_files.add(role_file.resolve())
-        roles.setdefault(read_toml(role_file).get("name") or table_key, role_file)
-    for role_file in discovered_role_files(folder):
-        role_name = read_toml(role_file).get("name")
-        if role_name and role_file.resolve() not in declared_files:
-            roles.setdefault(role_name, role_file)
-    return roles
+        role = parsed_role_file(role_file)
+        role_models.setdefault(role.name or table_key, role.model)
+    for role_file in discovered_role_files(layer.folder):
+        if role_file.resolve() in declared_files:
+            continue
+        role = parsed_role_file(role_file)
+        if role.name:
+            role_models.setdefault(role.name, role.model)
+    return role_models
 
 
-def role_model(role_name, cwd):
-    role_files = (layer_roles(folder).get(role_name) for folder in config_folders(cwd))
-    role_file = next((role_file for role_file in role_files if role_file), None)
-    return read_toml(role_file).get("model") if role_file else None
+def parsed_layer(folder):
+    agents = read_toml(folder / "config.toml").get("agents")
+    agents = agents if isinstance(agents, dict) else {}
+    default_model = text_or_none(agents.get("default_subagent_model"))
+    return CodexLayer(folder, declared_role_files(folder, agents), default_model)
 
 
-def default_subagent_model(cwd):
-    for folder in config_folders(cwd):
-        model = agents_table(folder).get("default_subagent_model")
-        if model:
-            return model
+def codex_layers(cwd):
+    return [parsed_layer(folder) for folder in config_folders(cwd)]
+
+
+def role_model(role_name, layers):
+    for layer in layers:
+        role_models = layer_role_models(layer)
+        if role_name in role_models:
+            return role_models[role_name]
     return None
+
+
+def default_subagent_model(layers):
+    models = (layer.default_subagent_model for layer in layers)
+    return next(filter(None, models), None)
 
 
 def forks_full_history(spawn, is_v2):
@@ -90,11 +121,11 @@ def applies_role(spawn, named_role):
     return is_v2 and bool(named_role)
 
 
-def role_decision(spawn, cwd, caller):
+def role_decision(spawn, layers, caller):
     named_role = str(spawn.get("agent_type") or "").strip()
     role_name = named_role or DEFAULT_ROLE
     fixed_model = (
-        role_model(role_name, cwd) if applies_role(spawn, named_role) else None
+        role_model(role_name, layers) if applies_role(spawn, named_role) else None
     )
     if not outranks(fixed_model, caller):
         return None
@@ -104,8 +135,8 @@ def role_decision(spawn, cwd, caller):
     )
 
 
-def request_decision(spawn, cwd, caller):
-    requested = spawn.get("model") or default_subagent_model(cwd)
+def request_decision(spawn, layers, caller):
+    requested = spawn.get("model") or default_subagent_model(layers)
     if not outranks(requested, caller):
         return None
     return allowed_with({**spawn, "model": caller})
@@ -114,8 +145,10 @@ def request_decision(spawn, cwd, caller):
 def cap_decision(payload):
     caller = payload.get("model")
     spawn = payload.get("tool_input") or {}
-    cwd = payload.get("cwd") or os.getcwd()
-    return role_decision(spawn, cwd, caller) or request_decision(spawn, cwd, caller)
+    layers = codex_layers(cwd_of(payload))
+    return role_decision(spawn, layers, caller) or request_decision(
+        spawn, layers, caller
+    )
 
 
 if __name__ == "__main__":

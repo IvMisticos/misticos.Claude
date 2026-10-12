@@ -5,7 +5,7 @@
 
 import sys
 
-from hook_io import read_payload, run_hook, write_context
+from hook_io import event_name_of, read_payload, run_hook, write_context
 
 NOTES = {
     "agent-roles": (
@@ -28,7 +28,7 @@ NOTES = {
 
 def main():
     note = NOTES[sys.argv[1]]
-    event = read_payload().get("hook_event_name")
+    event = event_name_of(read_payload())
     if event:
         write_context(event, note)
 

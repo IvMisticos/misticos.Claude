@@ -160,6 +160,11 @@ def test_subagent_growth_gets_nothing(home, tmp_path):
 
 def test_cursor_shape(home):
     cursor = ["--harness", "cursor"]
-    payload = {"hook_event_name": "sessionStart", "conversation_id": "c1"}
+    payload = {"hook_event_name": "sessionStart", "session_id": "c1"}
     output = reminder(home, 1, payload, cursor)
     assert output["additional_context"]
+
+
+def test_session_start_with_a_non_text_session_id_still_sends_the_rules(home):
+    payload = {"hook_event_name": "SessionStart", "session_id": 1}
+    assert context(reminder(home, 1, payload))
