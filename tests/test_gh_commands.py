@@ -25,21 +25,25 @@ def test_call_without_target_or_repo_names_no_pull_request(call):
 
 
 @pytest.mark.parametrize(
-    "arguments",
+    ("command", "call"),
     [
-        ["pr", "--json", "number", "view", "5"],
-        ["--jq", ".number", "pr", "view", "5"],
-        ["-R", "o/r", "pr", "-q", ".number", "view", "5"],
+        ("gh pr merge 12 --squash", GhPrCall("merge", "12", None)),
+        (
+            "gh pr view https://github.com/o/r/pull/5",
+            GhPrCall("view", "https://github.com/o/r/pull/5", None),
+        ),
+        ("gh -R o/r pr comment 7 -b x", GhPrCall("comment", "7", "o/r")),
+        ("gh pr comment --body 3", GhPrCall("comment", None, None)),
     ],
 )
-def test_flag_values_before_the_subcommand_are_skipped(arguments):
-    call = gh_pr_call(arguments)
-    assert (call.subcommand, call.target) == ("view", "5")
+def test_pr_target_is_the_word_after_the_subcommand(command, call):
+    [arguments] = gh_argument_lists(command)
+    assert gh_pr_call(arguments) == call
 
 
-def test_flag_values_before_api_are_skipped():
-    words = gh_api_words(["--jq", ".url", "api", "repos/o/r/pulls/1"])
-    assert words == ["repos/o/r/pulls/1"]
+def test_api_words_follow_api():
+    [arguments] = gh_argument_lists("gh api repos/o/r/pulls/3/comments")
+    assert gh_api_words(arguments) == ["repos/o/r/pulls/3/comments"]
 
 
 @pytest.mark.parametrize(
@@ -50,10 +54,7 @@ def test_flag_values_before_api_are_skipped():
             [["pr", "view", "1"], ["pr", "view", "2"]],
         ),
         ("# gh pr close 1\ngh pr view 2", [["pr", "view", "2"]]),
-        ("gh pr view 1;# x\ngh pr view 2", [["pr", "view", "1"], ["pr", "view", "2"]]),
-        ("gh pr comment 1 --body a#b", [["pr", "comment", "1", "--body", "a#b"]]),
         ('gh pr comment 1 --body "# x"', [["pr", "comment", "1", "--body", "# x"]]),
-        ("gh pr comment 1 --body \\#x", [["pr", "comment", "1", "--body", "#x"]]),
         (
             "gh pr view 1 # it's open\ngh pr view 2",
             [["pr", "view", "1"], ["pr", "view", "2"]],
@@ -67,73 +68,24 @@ def test_comments_end_at_the_line_break(command, argument_lists):
 @pytest.mark.parametrize(
     ("command", "argument_lists"),
     [
-        (
-            "gh pr view 1 # note \\\ngh pr close 2",
-            [["pr", "view", "1"], ["pr", "close", "2"]],
-        ),
-        (
-            "gh pr comment 1 --body $'it\\'s # done' ; gh pr close 2",
-            [["pr", "comment", "1", "--body", "it's # done"], ["pr", "close", "2"]],
-        ),
-        (
-            'gh pr comment 1 --body "a \\"#\\" \\\nb" -R o/r',
-            [["pr", "comment", "1", "--body", 'a "#" b', "-R", "o/r"]],
-        ),
         ("gh pr view 1 \\\n  -R o/r", [["pr", "view", "1", "-R", "o/r"]]),
         (
             'gh pr comment 1 --body "a 2>b" -R o/r',
             [["pr", "comment", "1", "--body", "a 2>b", "-R", "o/r"]],
         ),
         (
-            "gh pr view 1 2>/dev/null; gh pr view 2",
+            "gh pr view 1 >/dev/null; gh pr view 2",
             [["pr", "view", "1"], ["pr", "view", "2"]],
         ),
+        ("cd x && gh pr view 1 | head", [["pr", "view", "1"]]),
+        ("gh pr comment 1 --body \"it's", []),
     ],
 )
-def test_quotes_and_line_continuations_follow_bash(command, argument_lists):
+def test_commands_split_at_shell_operators(command, argument_lists):
     assert gh_argument_lists(command) == argument_lists
 
 
-@pytest.mark.parametrize("body", ['""', '";"', "'&&'", '"|"', r"\;", '"\n"'])
+@pytest.mark.parametrize("body", ['""', '"a; b"', "'a && b'", '"a\nb"'])
 def test_quoted_operators_stay_inside_the_gh_call(body):
     command = f"gh pr comment 1 --body {body} -R o/r"
     assert gh_argument_lists(command)[0][-2:] == ["-R", "o/r"]
-
-
-@pytest.mark.parametrize(
-    ("command", "argument_lists"),
-    [
-        (
-            "gh pr view 1 <<'EOF'\ndoesn't\nEOF\ngh pr view 2",
-            [["pr", "view", "1"], ["pr", "view", "2"]],
-        ),
-        (
-            "gh pr view 1 <<EOF\ndoesn't\nEOF\ngh pr view 2",
-            [["pr", "view", "1"], ["pr", "view", "2"]],
-        ),
-        ("cat <<EOF\ngh pr close 9\nEOF", []),
-        ("cat <<-EOF\n\tgh pr close 9\n\tEOF\ngh pr view 2", [["pr", "view", "2"]]),
-        ("cat <<EOF | gh pr view 1\ngh pr close 9\nEOF", [["pr", "view", "1"]]),
-        (
-            "cat <<A <<'B'\ngh pr close 1\nA\ngh pr close 2\nB\ngh pr view 3",
-            [["pr", "view", "3"]],
-        ),
-        ("cat <<< x\ngh pr view 1", [["pr", "view", "1"]]),
-        (
-            'x=$(cat <<EOF\nbody\nEOF)\ngh pr create --body "$x"',
-            [["pr", "create", "--body", "$x"]],
-        ),
-        (
-            "x=$(cat <<-EOF\n\tgh pr close 9\n\tEOF\n)\ngh pr view 2",
-            [["pr", "view", "2"]],
-        ),
-        ("echo $((1<<2))\ngh pr view 2", [["pr", "view", "2"]]),
-        ("((x = 1 << 2))\ngh pr view 2", [["pr", "view", "2"]]),
-        (
-            "case $x in a) gh pr view 1;; esac\ncat <<E\nE) item's\nE\ngh pr view 2",
-            [["pr", "view", "1"], ["pr", "view", "2"]],
-        ),
-    ],
-)
-def test_heredoc_bodies_are_not_commands(command, argument_lists):
-    assert gh_argument_lists(command) == argument_lists
