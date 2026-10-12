@@ -36,13 +36,13 @@ def hover_text(result):
     contents = result.get("contents")
     if not contents:
         return "no hover information"
-    if isinstance(contents, str):
-        return contents
-    if isinstance(contents, dict):
-        return contents.get("value", "")
-    return "\n".join(
-        part if isinstance(part, str) else part.get("value", "") for part in contents
-    )
+    if isinstance(contents, (str, dict)):
+        return hover_part_text(contents)
+    return "\n".join(hover_part_text(part) for part in contents)
+
+
+def hover_part_text(part):
+    return part if isinstance(part, str) else part.get("value", "")
 
 
 SHOWN_SEVERITIES = {1: "error", 2: "warning", 3: "info"}
