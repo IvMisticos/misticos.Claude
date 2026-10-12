@@ -36,15 +36,11 @@ def watched_paths(payload):
     return (cwd, os.path.expanduser("~"), *temp_dirs, "/tmp", *scratchpad)
 
 
-def is_low(disk):
-    return disk.has_free_below(LOW_SPACE_BYTES, LOW_SPACE_SHARE)
-
-
 def disk_warning(payload):
     low_space = [
         RUNNING_LOW.format(free=disk.free // BYTES_PER_MIB, path=disk.path)
         for disk in disks(watched_paths(payload))
-        if is_low(disk)
+        if disk.has_free_below(LOW_SPACE_BYTES, LOW_SPACE_SHARE)
     ]
     if low_space:
         return " ".join([*low_space, FREE_SPACE_NOW, HOW_TO_CLEAN_UP])
