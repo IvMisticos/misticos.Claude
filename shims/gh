@@ -24,6 +24,8 @@ find_command() {
   for word in "$@"; do
     if $value_expected; then
       value_expected=false
+    elif [ -z "$word" ]; then
+      continue
     elif [ "$word" = -- ]; then
       return
     elif [[ $word == --*=* ]]; then
