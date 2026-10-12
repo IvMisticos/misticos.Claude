@@ -61,8 +61,8 @@ VALUED_FLAGS_BY_TARGETED_SUBCOMMAND = {
 
 class GhPrCall(NamedTuple):
     subcommand: str
-    target: str
-    repo: str
+    target: str | None
+    repo: str | None
 
     def creates_a_pull_request(self):
         return self.subcommand in CREATE_SUBCOMMANDS
@@ -129,19 +129,19 @@ def gh_argument_lists(command):
 
 
 def without_repo_flags(arguments):
-    repo = ""
+    repo = None
     remaining = []
     words = iter(arguments)
     for word in words:
         if word in REPO_FLAGS:
-            repo = next(words, "")
+            repo = next(words, None)
         elif word.startswith("--repo="):
             repo = word.removeprefix("--repo=")
         elif word.startswith("-R"):
             repo = word.removeprefix("-R")
         else:
             remaining.append(word)
-    return repo, remaining
+    return repo or None, remaining
 
 
 def is_flag(word):
@@ -160,8 +160,8 @@ def positionals(words, flags_with_values):
 def pr_target(subcommand, following):
     flags_with_values = VALUED_FLAGS_BY_TARGETED_SUBCOMMAND.get(subcommand)
     if flags_with_values is None:
-        return ""
-    return next(positionals(following, flags_with_values), "")
+        return None
+    return next(positionals(following, flags_with_values), None)
 
 
 def gh_pr_call(arguments):

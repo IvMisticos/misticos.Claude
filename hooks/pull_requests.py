@@ -119,11 +119,11 @@ def gh_calls(call):
 
 
 def pull_request_of_gh_pr_call(pr_call):
-    if not pr_call:
+    if not pr_call or pr_call.target is None:
         return None
     if targeted := targeted_pull_request(pr_call.target):
         return targeted
-    repo = REPO.fullmatch(pr_call.repo)
+    repo = pr_call.repo and REPO.fullmatch(pr_call.repo)
     if repo and pr_call.target.isdigit():
         return PullRequest(repo[1], repo[2], int(pr_call.target))
     return None
