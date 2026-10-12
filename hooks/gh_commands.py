@@ -1,9 +1,11 @@
+import re
 import shlex
 from typing import NamedTuple
 
 COMMAND_SEPARATORS = "();<>|&\n"
 WORD_SEPARATORS = " \t\r"
 LINE_CONTINUATION = "\\\n"
+REDIRECTED_FILE_DESCRIPTOR = re.compile(r"(?<!\S)\d+(?=[<>])")
 REPO_FLAGS = frozenset({"-R", "--repo"})
 CREATE_SUBCOMMANDS = frozenset({"create", "new"})
 
@@ -19,8 +21,9 @@ class GhPrCall(NamedTuple):
 
 def shell_tokens(command):
     joined_lines = command.replace(LINE_CONTINUATION, "")
+    without_descriptors = REDIRECTED_FILE_DESCRIPTOR.sub("", joined_lines)
     lexer = shlex.shlex(
-        joined_lines,
+        without_descriptors,
         posix=True,
         punctuation_chars=COMMAND_SEPARATORS,
     )

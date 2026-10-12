@@ -62,8 +62,8 @@ def test_hash_is_an_ordinary_character(command, argument_lists):
     [
         ("gh pr view 1 \\\n  -R o/r", [["pr", "view", "1", "-R", "o/r"]]),
         (
-            'gh pr comment 1 --body "a 2>b" -R o/r',
-            [["pr", "comment", "1", "--body", "a 2>b", "-R", "o/r"]],
+            'gh pr comment 1 --body "a > b" -R o/r',
+            [["pr", "comment", "1", "--body", "a > b", "-R", "o/r"]],
         ),
         (
             "gh pr view 1 >/dev/null; gh pr view 2",
@@ -74,6 +74,23 @@ def test_hash_is_an_ordinary_character(command, argument_lists):
     ],
 )
 def test_commands_split_at_shell_operators(command, argument_lists):
+    assert gh_argument_lists(command) == argument_lists
+
+
+@pytest.mark.parametrize(
+    ("command", "argument_lists"),
+    [
+        (
+            "gh pr view 1 2>/dev/null; gh pr view 2",
+            [["pr", "view", "1"], ["pr", "view", "2"]],
+        ),
+        ("gh pr checks -R o/r 2>&1 | tail", [["pr", "checks", "-R", "o/r"]]),
+        ("gh -R o/r pr list 2>/dev/null", [["-R", "o/r", "pr", "list"]]),
+        ("gh -R o/r pr status 2>&1", [["-R", "o/r", "pr", "status"]]),
+        ("gh pr view 4 >out", [["pr", "view", "4"]]),
+    ],
+)
+def test_file_descriptors_are_not_arguments(command, argument_lists):
     assert gh_argument_lists(command) == argument_lists
 
 
