@@ -38,6 +38,12 @@ def run_gh(shim_runner):
             "-f",
             "query=mutation { enablePullRequestAutoMerge(input: {}) }",
         ],
+        ["-R", "o/r", "pr", "create", "--fill"],
+        ["--repo", "o/r", "pr", "merge", "1"],
+        ["--repo=o/r", "pr", "edit", "1", "--body", "x"],
+        ["-Ro/r", "pr", "merge", "1"],
+        ["pr", "--body", "x", "merge", "1"],
+        ["--jq", ".url", "api", "-X", "POST", "repos/o/r/pulls"],
     ],
 )
 def test_denies_pull_request_writes(run_gh, arguments):
@@ -56,6 +62,7 @@ def test_denies_pull_request_writes(run_gh, arguments):
         ["api", "repos/o/r/issues/1/comments", "-f", "body=createPullRequest fails"],
         ["api", "graphql", "-f", "query=query { viewer { login } }"],
         ["issue", "create", "--title", "pr merge"],
+        ["-R", "o/r", "pr", "view", "1"],
     ],
 )
 def test_runs_other_commands(run_gh, arguments):

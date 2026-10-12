@@ -10,26 +10,29 @@ deny() {
   exit 1
 }
 
-pr_subcommand() {
-  local word skip_next=false
+command_path() {
+  local word value_expected=false found=0
   for word in "$@"; do
-    if $skip_next; then
-      skip_next=false
-    elif [[ $word == -R || $word == --repo ]]; then
-      skip_next=true
+    if $value_expected; then
+      value_expected=false
+    elif [[ $word == --*=* ]]; then
+      continue
+    elif [[ $word == --* || $word == -? ]]; then
+      value_expected=true
     elif [[ $word != -* ]]; then
       printf '%s\n' "$word"
-      return
+      found=$((found + 1))
+      [ "$found" -lt 2 ] || return 0
     fi
   done
 }
 
 writes_a_pull_request() {
-  local subcommand
   [ "${1-}" = pr ] || return 1
-  shift
-  subcommand=$(pr_subcommand "$@")
-  [[ $subcommand == create || $subcommand == new || $subcommand == edit || $subcommand == merge ]]
+  case ${2-} in
+    create | new | edit | merge) return 0 ;;
+  esac
+  return 1
 }
 
 names_pull_requests() {
@@ -67,8 +70,6 @@ api_method() {
 
 api_writes_pull_requests() {
   local method
-  [ "${1-}" = api ] || return 1
-  shift
   runs_a_pull_request_mutation "$@" && return 0
   names_pull_requests "$@" || return 1
   method=$(api_method "$@")
@@ -78,8 +79,9 @@ api_writes_pull_requests() {
 gh=$(real_tool gh)
 
 if [ -z "${ALLOW_GH_PULL_REQUEST_WRITE-}" ]; then
-  writes_a_pull_request "$@" && deny
-  api_writes_pull_requests "$@" && deny
+  mapfile -t command < <(command_path "$@")
+  writes_a_pull_request "${command[@]}" && deny
+  [ "${command[0]-}" = api ] && api_writes_pull_requests "$@" && deny
 fi
 
 exec "$gh" "$@"
