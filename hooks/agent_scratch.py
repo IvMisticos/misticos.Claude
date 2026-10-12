@@ -11,7 +11,14 @@ import sys
 from pathlib import Path
 
 from harnesses import OutputShape
-from hook_io import read_payload, run_hook, scratchpad_of, write_block, write_context
+from hook_io import (
+    event_name_of,
+    read_payload,
+    run_hook,
+    scratchpad_of,
+    write_block,
+    write_context,
+)
 from review_thread_reminder import review_reminder
 
 AGENT_ID = re.compile(r"[A-Za-z0-9_-]+")
@@ -110,8 +117,7 @@ HANDLERS = {
 
 def main():
     payload = read_payload()
-    event = payload.get("hook_event_name")
-    handle = HANDLERS.get(event) if isinstance(event, str) else None
+    handle = HANDLERS.get(event_name_of(payload))
     if handle:
         handle(payload)
 
