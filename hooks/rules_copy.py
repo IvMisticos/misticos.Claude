@@ -1,7 +1,7 @@
-import collections
 import os
 import re
 import sys
+from typing import NamedTuple
 
 MAX_INJECTED_CHARS = 10_000
 OVERRIDE = (
@@ -34,10 +34,15 @@ LATER_PART_PREAMBLE = (
 )
 MODEL_TIER = re.compile(r"\bthe (cheap|fast|strong|lead) model\b", re.IGNORECASE)
 BLOCK_BREAKS = (r"(?=\n\n# )", r"(?=\n\n)", r"(?=\n)")
-Rules = collections.namedtuple("Rules", "path name model_names")
 
 
-def rules_at(path, model_names):
+class Rules(NamedTuple):
+    path: str
+    name: str
+    model_names: dict[str, str]
+
+
+def rules_at(path: str, model_names: dict[str, str]) -> Rules:
     expanded = os.path.expanduser(path)
     return Rules(expanded, os.path.basename(expanded), model_names)
 
