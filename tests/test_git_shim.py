@@ -156,6 +156,7 @@ def test_runs_identity_changes_outside_the_project(
     [
         ["config", "--global", "user.name", "x"],
         ["-c", "user.name=x", "config", "--global", "user.email", "x@example.com"],
+        ["--config-env=user.name=VAR", "config", "--global", "user.email", "y"],
     ],
 )
 def test_denies_global_identity_changes_outside_the_project(
