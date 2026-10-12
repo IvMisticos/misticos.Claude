@@ -45,6 +45,11 @@ def run_gh(shim_runner):
         ["pr", "--body", "x", "merge", "1"],
         ["--jq", ".url", "api", "-X", "POST", "repos/o/r/pulls"],
         ["api", "--paginate", "repos/o/r/pulls", "-f", "title=x"],
+        ["api", "-X", "POST", "-f", "title=x", "--", "repos/o/r/pulls"],
+        ["api", "-iX", "POST", "repos/o/r/pulls", "-f", "title=x"],
+        ["api", "-iXPOST", "repos/o/r/pulls"],
+        ["api", "-if", "title=x", "repos/o/r/pulls"],
+        ["api", "--some-new-switch", "repos/o/r/pulls", "-f", "title=x"],
     ],
 )
 def test_denies_pull_request_writes(run_gh, arguments):
@@ -64,6 +69,15 @@ def test_denies_pull_request_writes(run_gh, arguments):
         ["api", "graphql", "-f", "query=query { viewer { login } }"],
         ["issue", "create", "--title", "pr merge"],
         ["-R", "o/r", "pr", "view", "1"],
+        [],
+        [
+            "api",
+            "-q",
+            "graphql",
+            "repos/o/r/issues/1/comments",
+            "-f",
+            "body=mergePullRequest",
+        ],
         ["api", "repos/o/r/issues", "-f", "body=see /pulls/1"],
         ["api", "-H", "Accept: x/pulls", "repos/o/r/issues", "-f", "title=x"],
     ],

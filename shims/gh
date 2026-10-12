@@ -4,92 +4,154 @@ set -euo pipefail
 
 . "$(dirname "$0")/lib/real_tool.sh"
 
+command=""
+subcommand=""
+endpoint=""
+method=""
+sends_fields=false
+api_positionals=0
+api_flag_awaiting_value=""
+
 deny() {
   echo "gh: create, edit, and merge pull requests with the GitHub MCP tools." \
     "If they cannot do it, run gh with ALLOW_GH_PULL_REQUEST_WRITE=1." >&2
   exit 1
 }
 
-takes_no_value() {
-  case $1 in
-    -h | --help | -i | --include | --paginate | --silent | --slurp | --verbose) return 0 ;;
-  esac
-  return 1
-}
-
-command_path() {
-  local word value_expected=false found=0
+find_command() {
+  local word value_expected=false
   for word in "$@"; do
     if $value_expected; then
       value_expected=false
-    elif [[ $word == --*=* ]] || takes_no_value "$word"; then
+    elif [ "$word" = -- ]; then
+      return
+    elif [[ $word == --*=* ]]; then
       continue
     elif [[ $word == --* || $word == -? ]]; then
       value_expected=true
+    elif [[ $word != -* ]] && [ -z "$command" ]; then
+      command=$word
     elif [[ $word != -* ]]; then
-      printf '%s\n' "$word"
-      found=$((found + 1))
-      [ "$found" -lt 2 ] || return 0
+      subcommand=$word
+      return
     fi
   done
 }
 
-writes_a_pull_request() {
-  [ "${1-}" = pr ] || return 1
-  case ${2-} in
-    create | new | edit | merge) return 0 ;;
+api_long_flag_takes_value() {
+  case $1 in
+    --cache | --field | --header | --hostname | --input | --jq | --method | --preview | --raw-field | --template) return 0 ;;
   esac
   return 1
 }
 
-names_pull_requests() {
-  [[ $1 == */pulls* ]]
-}
-
-runs_a_pull_request_mutation() {
-  local word
-  [[ $* =~ (create|merge|enqueue)PullRequest|enablePullRequestAutoMerge ]] || return 1
-  for word in "$@"; do
-    [[ $word == graphql || $word == */graphql ]] && return 0
-  done
+api_short_flag_takes_value() {
+  case $1 in
+    X | f | F | H | q | t | p) return 0 ;;
+  esac
   return 1
 }
 
-api_method() {
-  local method="" fields_given=false
-  while [ $# -gt 0 ]; do
-    case $1 in
-      -X | --method) method=${2-} ;;
-      --method=*) method=${1#--method=} ;;
-      -X?*) method=${1#-X} ;;
-      -f* | -F* | --field | --raw-field | --input | --field=* | --raw-field=* | --input=*) fields_given=true ;;
-    esac
-    shift
+record_api_flag() {
+  local flag=$1 value=$2
+  case $flag in
+    -X | --method) method=$value ;;
+    -f | -F | --raw-field | --field | --input) sends_fields=true ;;
+  esac
+  return 0
+}
+
+record_api_positional() {
+  api_positionals=$((api_positionals + 1))
+  [ "$api_positionals" -eq 2 ] && endpoint=$1
+  return 0
+}
+
+record_api_short_flags() {
+  local letters=${1#-} letter
+  while [ -n "$letters" ]; do
+    letter=${letters:0:1}
+    letters=${letters:1}
+    if api_short_flag_takes_value "$letter"; then
+      if [ -n "$letters" ]; then
+        record_api_flag "-$letter" "$letters"
+      else
+        api_flag_awaiting_value="-$letter"
+      fi
+      return
+    fi
   done
+}
+
+record_api_word() {
+  local word=$1
+  if [[ $word == --*=* ]]; then
+    record_api_flag "${word%%=*}" "${word#*=}"
+  elif [[ $word == --* ]]; then
+    api_long_flag_takes_value "$word" && api_flag_awaiting_value=$word
+  elif [[ $word == -?* ]]; then
+    record_api_short_flags "$word"
+  else
+    record_api_positional "$word"
+  fi
+  return 0
+}
+
+parse_api_arguments() {
+  local word options_ended=false
+  for word in "$@"; do
+    if [ -n "$api_flag_awaiting_value" ]; then
+      record_api_flag "$api_flag_awaiting_value" "$word"
+      api_flag_awaiting_value=""
+    elif $options_ended; then
+      record_api_positional "$word"
+    elif [ "$word" = -- ]; then
+      options_ended=true
+    else
+      record_api_word "$word"
+    fi
+  done
+}
+
+http_method() {
   if [ -n "$method" ]; then
     printf '%s\n' "$method" | tr '[:lower:]' '[:upper:]'
-  elif $fields_given; then
+  elif $sends_fields; then
     echo POST
   else
     echo GET
   fi
 }
 
+writes_a_pull_request() {
+  [ "$command" = pr ] || return 1
+  case $subcommand in
+    create | new | edit | merge) return 0 ;;
+  esac
+  return 1
+}
+
+runs_a_pull_request_mutation() {
+  [[ $endpoint == graphql || $endpoint == */graphql ]] || return 1
+  [[ $* =~ (create|merge|enqueue)PullRequest|enablePullRequestAutoMerge ]]
+}
+
 api_writes_pull_requests() {
-  local endpoint=$1 method
-  shift
+  local http
+  [ "$command" = api ] || return 1
+  parse_api_arguments "$@"
   runs_a_pull_request_mutation "$@" && return 0
-  names_pull_requests "$endpoint" || return 1
-  method=$(api_method "$@")
-  [[ $method == POST || $method == PUT || $method == PATCH ]]
+  [[ $endpoint == */pulls* ]] || return 1
+  http=$(http_method)
+  [[ $http == POST || $http == PUT || $http == PATCH ]]
 }
 
 gh=$(real_tool gh)
 
 if [ -z "${ALLOW_GH_PULL_REQUEST_WRITE-}" ]; then
-  mapfile -t command < <(command_path "$@")
-  writes_a_pull_request "${command[@]}" && deny
-  [ "${command[0]-}" = api ] && api_writes_pull_requests "${command[1]-}" "$@" && deny
+  find_command "$@"
+  writes_a_pull_request && deny
+  api_writes_pull_requests "$@" && deny
 fi
 
 exec "$gh" "$@"
