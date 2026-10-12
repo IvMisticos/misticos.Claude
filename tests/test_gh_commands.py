@@ -98,3 +98,28 @@ def test_quotes_and_line_continuations_follow_bash(command, argument_lists):
 def test_quoted_operators_stay_inside_the_gh_call(body):
     command = f"gh pr comment 1 --body {body} -R o/r"
     assert gh_argument_lists(command)[0][-2:] == ["-R", "o/r"]
+
+
+@pytest.mark.parametrize(
+    ("command", "argument_lists"),
+    [
+        (
+            "gh pr view 1 <<'EOF'\ndoesn't\nEOF\ngh pr view 2",
+            [["pr", "view", "1"], ["pr", "view", "2"]],
+        ),
+        (
+            "gh pr view 1 <<EOF\ndoesn't\nEOF\ngh pr view 2",
+            [["pr", "view", "1"], ["pr", "view", "2"]],
+        ),
+        ("cat <<EOF\ngh pr close 9\nEOF", []),
+        ("cat <<-EOF\n\tgh pr close 9\n\tEOF\ngh pr view 2", [["pr", "view", "2"]]),
+        ("cat <<EOF | gh pr view 1\ngh pr close 9\nEOF", [["pr", "view", "1"]]),
+        (
+            "cat <<A <<'B'\ngh pr close 1\nA\ngh pr close 2\nB\ngh pr view 3",
+            [["pr", "view", "3"]],
+        ),
+        ("cat <<< x\ngh pr view 1", [["pr", "view", "1"]]),
+    ],
+)
+def test_heredoc_bodies_are_not_commands(command, argument_lists):
+    assert gh_argument_lists(command) == argument_lists
