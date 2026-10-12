@@ -110,7 +110,8 @@ HANDLERS = {
 
 def main():
     payload = read_payload()
-    handle = HANDLERS.get(payload.get("hook_event_name"))
+    event = payload.get("hook_event_name")
+    handle = HANDLERS.get(event) if isinstance(event, str) else None
     if handle:
         handle(payload)
 

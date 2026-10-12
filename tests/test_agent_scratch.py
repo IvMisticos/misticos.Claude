@@ -1,4 +1,6 @@
 import json
+import subprocess
+import sys
 import time
 from pathlib import Path
 
@@ -129,6 +131,20 @@ def test_ignores_a_missing_or_relative_scratchpad(tmp_path, scratchpad_dir):
     )
     assert output is None
     assert list(tmp_path.iterdir()) == []
+
+
+@pytest.mark.parametrize("event", [["Stop"], {"name": "Stop"}, 1])
+def test_ignores_an_event_name_that_is_not_text(scratchpad, event):
+    payload = {"hook_event_name": event, "scratchpad_dir": str(scratchpad)}
+    result = subprocess.run(
+        [sys.executable, AGENT_SCRATCH],
+        input=json.dumps(payload),
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert (result.stdout, result.stderr) == ("", "")
+    assert contents(scratchpad / "agents") == ["a1", "a2"]
 
 
 UNRESOLVED_THREAD = graphql_review_threads(ReviewThread("T1", [1]))
