@@ -16,7 +16,14 @@ def git_root(path):
         ).stdout.strip()
         return Path(output)
     except (subprocess.CalledProcessError, FileNotFoundError):
-        return Path.cwd()
+        return directory_outside_git(path)
+
+
+def directory_outside_git(path):
+    working_directory = Path.cwd()
+    if working_directory in path.parents:
+        return working_directory
+    return path.parent
 
 
 def file_with_suffix(directory, suffixes):
