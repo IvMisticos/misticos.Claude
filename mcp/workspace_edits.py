@@ -8,20 +8,23 @@ from text_positions import (
 
 
 def apply_workspace_edit(edit):
-    document_changes = edit.get("documentChanges") or []
+    document_changes = edit.get("documentChanges")
+    if document_changes is None:
+        edits_by_uri = (edit.get("changes") or {}).items()
+    else:
+        edits_by_uri = text_edits_by_uri(document_changes)
+    return [apply_text_edits(from_uri(uri), edits) for uri, edits in edits_by_uri]
+
+
+def text_edits_by_uri(document_changes):
     for change in document_changes:
         if "textDocument" not in change:
             raise ValueError(
                 f"the language server wants a file operation ({change.get('kind')}) that this tool does not apply; nothing was written"
             )
-    edits_by_uri = [
-        *(edit.get("changes") or {}).items(),
-        *(
-            (change["textDocument"]["uri"], change["edits"])
-            for change in document_changes
-        ),
+    return [
+        (change["textDocument"]["uri"], change["edits"]) for change in document_changes
     ]
-    return [apply_text_edits(from_uri(uri), edits) for uri, edits in edits_by_uri]
 
 
 def apply_text_edits(path, edits):
