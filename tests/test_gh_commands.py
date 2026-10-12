@@ -49,19 +49,11 @@ def test_api_words_follow_api():
 @pytest.mark.parametrize(
     ("command", "argument_lists"),
     [
-        (
-            "gh pr view 1 # gh pr close 1\ngh pr view 2",
-            [["pr", "view", "1"], ["pr", "view", "2"]],
-        ),
-        ("# gh pr close 1\ngh pr view 2", [["pr", "view", "2"]]),
-        ('gh pr comment 1 --body "# x"', [["pr", "comment", "1", "--body", "# x"]]),
-        (
-            "gh pr view 1 # it's open\ngh pr view 2",
-            [["pr", "view", "1"], ["pr", "view", "2"]],
-        ),
+        ("gh pr comment 1 --body a#b", [["pr", "comment", "1", "--body", "a#b"]]),
+        ("gh pr view 1 -R o/r # note", [["pr", "view", "1", "-R", "o/r", "#", "note"]]),
     ],
 )
-def test_comments_end_at_the_line_break(command, argument_lists):
+def test_hash_is_an_ordinary_character(command, argument_lists):
     assert gh_argument_lists(command) == argument_lists
 
 

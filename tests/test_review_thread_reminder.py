@@ -552,24 +552,6 @@ def test_gh_pr_target_is_the_word_after_the_subcommand(tmp_path):
     ]
 
 
-def test_shell_comments_hide_gh_commands(tmp_path):
-    transcript = tmp_path / "transcript.jsonl"
-    write_json_lines(
-        transcript,
-        assistant_call(
-            bash_call("# don't gh pr close 9 -R acme/a\ngh pr view 1 -R acme/b")
-        ),
-        assistant_call(
-            bash_call("gh pr view 2 -R acme/c # it's open\ngh pr view 3 -R acme/d")
-        ),
-    )
-    assert list(activity_in(transcript)) == [
-        PullRequest("acme", "b", 1),
-        PullRequest("acme", "c", 2),
-        PullRequest("acme", "d", 3),
-    ]
-
-
 def test_redirections_are_not_gh_arguments(tmp_path):
     transcript = tmp_path / "transcript.jsonl"
     write_json_lines(

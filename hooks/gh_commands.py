@@ -1,4 +1,3 @@
-import io
 import shlex
 from typing import NamedTuple
 
@@ -18,23 +17,16 @@ class GhPrCall(NamedTuple):
         return self.subcommand in CREATE_SUBCOMMANDS
 
 
-class CommentsKeepLineBreaks(io.StringIO):
-    def readline(self):
-        line = super().readline()
-        if line.endswith("\n"):
-            self.seek(self.tell() - 1)
-        return line
-
-
 def shell_tokens(command):
     joined_lines = command.replace(LINE_CONTINUATION, "")
     lexer = shlex.shlex(
-        CommentsKeepLineBreaks(joined_lines),
+        joined_lines,
         posix=True,
         punctuation_chars=COMMAND_SEPARATORS,
     )
     lexer.whitespace = WORD_SEPARATORS
     lexer.whitespace_split = True
+    lexer.commenters = ""
     try:
         return list(lexer)
     except ValueError:
