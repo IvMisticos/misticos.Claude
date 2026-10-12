@@ -13,6 +13,14 @@ CODER = {"subagent_type": "misticos:coder", "prompt": "build"}
 WORKER = {"subagent_type": "general-purpose", "prompt": "find"}
 
 
+@pytest.fixture(autouse=True)
+def isolated_agent_lookup(tmp_path, monkeypatch):
+    (tmp_path / ".git").mkdir()
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    monkeypatch.delenv("CLAUDE_CODE_SUBAGENT_MODEL", raising=False)
+    monkeypatch.delenv("CLAUDE_CODE_SUBAGENT_MODEL_FORCE", raising=False)
+
+
 def decided_model(tool_input, caller, cwd):
     decision = agent_decision(tool_input, str(cwd), caller)
     return decision["updatedInput"]["model"] if decision else None
@@ -40,6 +48,5 @@ def test_requested_model_is_capped_when_the_definition_has_no_tier(tmp_path):
     agents = tmp_path / ".claude" / "agents"
     agents.mkdir(parents=True)
     (agents / "x.md").write_text("---\nname: x\nmodel: Inherit\n---\n")
-    (tmp_path / ".git").mkdir()
     worker = {"subagent_type": "x", "model": "opus", "prompt": "build"}
     assert decided_model(worker, "claude-sonnet-5-5", tmp_path) == "sonnet"
