@@ -112,6 +112,11 @@ def install_bun():
         run_pipeline("curl -fsSL https://bun.sh/install | bash -s canary")
 
 
+def install_mise():
+    if shutil.which("mise") is None and not (HOME / ".local" / "bin" / "mise").exists():
+        run_pipeline("curl -fsSL https://mise.run | sh")
+
+
 def install_dotnet():
     dotnet = HOME / ".dotnet" / "dotnet"
     if not dotnet.exists():
@@ -130,6 +135,7 @@ def install_cloud_tools():
         return
     install_apt_packages()
     install_bun()
+    install_mise()
     install_dotnet()
 
 
