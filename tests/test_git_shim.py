@@ -151,10 +151,18 @@ def test_runs_identity_changes_outside_the_project(
     assert result.returncode == 0
 
 
-def test_denies_global_identity_changes_outside_the_project(run_git, fixture_git_dir):
-    result = run_git(
-        "config", "--global", "user.name", "x", FAKE_TARGET_GIT_DIR=fixture_git_dir
-    )
+@pytest.mark.parametrize(
+    "arguments",
+    [
+        ["config", "--global", "user.name", "x"],
+        ["-c", "user.name=x", "config", "--global", "user.email", "x@example.com"],
+        ["--config-env=user.name=VAR", "config", "--global", "user.email", "y"],
+    ],
+)
+def test_denies_global_identity_changes_outside_the_project(
+    run_git, fixture_git_dir, arguments
+):
+    result = run_git(*arguments, FAKE_TARGET_GIT_DIR=fixture_git_dir)
     assert result.returncode == 1
 
 
