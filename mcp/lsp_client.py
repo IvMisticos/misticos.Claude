@@ -4,96 +4,97 @@ import os
 import pathlib
 import subprocess
 import sys
-from typing import NamedTuple
 
 from lsp_types import FileEvent, LSPAny, Message
-from text_positions import lsp_position, read_text, to_uri
+from open_documents import OpenDocuments
+from text_positions import lsp_position, to_uri
 
 QUIET_SECONDS_BEFORE_READY = 2.0
 MAX_STARTUP_SECONDS = 90.0
 REQUEST_TIMEOUT_SECONDS = 60.0
-FIRST_VERSION = 1
 
 
 class LanguageServerExited(RuntimeError):
     pass
 
 
-class OpenedDocument(NamedTuple):
-    version: int
-    text: str
-
-
 class LanguageServer:
-    def __init__(
-        self,
+    @classmethod
+    async def start(
+        cls,
         name: str,
         command: list[str],
         language_ids: dict[str, str],
         root: pathlib.Path,
         environment: dict[str, str],
-    ) -> None:
-        self.name = name
-        self.command = command
-        self.environment = environment
-        self.language_ids = language_ids
-        self.root = root
-        self.process: asyncio.subprocess.Process | None = None
-        self.pending: dict[int, asyncio.Future[LSPAny]] = {}
-        self.next_id = 1
-        self.opened = {}
-        self.last_message_at = 0.0
-        self.reader_task: asyncio.Task[None] | None = None
-
-    @property
-    def alive(self) -> bool:
-        return (
-            self.process is not None
-            and self.process.returncode is None
-            and not self.reader_task.done()
-        )
-
-    async def start(self) -> None:
-        self.process = await asyncio.create_subprocess_exec(
-            *self.command,
-            cwd=self.root,
-            env=self.environment,
+    ) -> "LanguageServer":
+        process = await asyncio.create_subprocess_exec(
+            *command,
+            cwd=root,
+            env=environment,
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=sys.stderr,
         )
-        self.reader_task = asyncio.create_task(self.read_messages())
+        server = cls(name, process, language_ids, root)
         try:
-            await self.request(
-                "initialize",
-                {
-                    "processId": os.getpid(),
-                    "rootUri": to_uri(self.root),
-                    "workspaceFolders": [
-                        {"uri": to_uri(self.root), "name": self.root.name}
-                    ],
-                    "capabilities": {
-                        "window": {"workDoneProgress": True},
-                        "workspace": {"workspaceEdit": {"documentChanges": True}},
-                        "textDocument": {
-                            "hover": {"contentFormat": ["markdown", "plaintext"]},
-                            "diagnostic": {},
-                            "callHierarchy": {},
-                        },
+            await server.initialize()
+        except Exception:
+            server.stop()
+            raise
+        return server
+
+    def __init__(
+        self,
+        name: str,
+        process: asyncio.subprocess.Process,
+        language_ids: dict[str, str],
+        root: pathlib.Path,
+    ) -> None:
+        if process.stdin is None or process.stdout is None:
+            raise ValueError(f"{name} language server needs piped stdin and stdout")
+        self.name = name
+        self.process = process
+        self.stdin = process.stdin
+        self.stdout = process.stdout
+        self.root = root
+        self.documents = OpenDocuments(language_ids, self.notify)
+        self.pending: dict[int, asyncio.Future[LSPAny]] = {}
+        self.next_id = 1
+        self.last_message_at = 0.0
+        self.reader_task = asyncio.create_task(self.read_messages())
+
+    @property
+    def alive(self) -> bool:
+        return self.process.returncode is None and not self.reader_task.done()
+
+    async def initialize(self) -> None:
+        await self.request(
+            "initialize",
+            {
+                "processId": os.getpid(),
+                "rootUri": to_uri(self.root),
+                "workspaceFolders": [
+                    {"uri": to_uri(self.root), "name": self.root.name}
+                ],
+                "capabilities": {
+                    "window": {"workDoneProgress": True},
+                    "workspace": {"workspaceEdit": {"documentChanges": True}},
+                    "textDocument": {
+                        "hover": {"contentFormat": ["markdown", "plaintext"]},
+                        "diagnostic": {},
+                        "callHierarchy": {},
                     },
                 },
-            )
-            self.notify("initialized", {})
-            await self.wait_until_quiet()
-        except Exception:
-            self.stop()
-            raise
+            },
+        )
+        self.notify("initialized", {})
+        await self.wait_until_quiet()
 
     def stop(self) -> None:
-        if self.process is not None and self.process.returncode is None:
+        if self.process.returncode is None:
             self.process.kill()
-        if self.reader_task is not None:
-            self.reader_task.cancel()
+        self.reader_task.cancel()
         self.fail_pending(self.exited())
 
     def exited(self) -> LanguageServerExited:
@@ -111,7 +112,7 @@ class LanguageServer:
 
     def send(self, message: Message) -> None:
         body = json.dumps(message).encode()
-        self.process.stdin.write(b"Content-Length: %d\r\n\r\n" % len(body) + body)
+        self.stdin.write(b"Content-Length: %d\r\n\r\n" % len(body) + body)
 
     def reply(self, request_id: int | str, **fields: LSPAny) -> None:
         self.send({"jsonrpc": "2.0", "id": request_id, **fields})
@@ -148,14 +149,16 @@ class LanguageServer:
     async def read_message(self) -> Message:
         length = None
         while True:
-            line = await self.process.stdout.readline()
+            line = await self.stdout.readline()
             if not line:
                 raise asyncio.IncompleteReadError(line, None)
             if line.lower().startswith(b"content-length:"):
                 length = int(line.split(b":")[1])
             if line in (b"\r\n", b"\n"):
                 break
-        return json.loads(await self.process.stdout.readexactly(length))
+        if length is None:
+            raise ValueError(f"{self.name} sent a message without Content-Length")
+        return json.loads(await self.stdout.readexactly(length))
 
     def fail_pending(self, error: Exception) -> None:
         for future in self.pending.values():
@@ -194,49 +197,15 @@ class LanguageServer:
             return
         self.reply(message["id"], result=result)
 
-    def open_document(self, path):
-        text = read_text(path)
-        uri = to_uri(path)
-        opened = self.opened.get(uri)
-        if opened is None:
-            self.did_open(uri, self.language_ids[path.suffix], text)
-        elif opened.text != text:
-            self.did_change(uri, opened.version + 1, text)
-        return text
-
-    def did_open(self, uri, language_id, text):
-        self.opened[uri] = OpenedDocument(FIRST_VERSION, text)
-        document = {
-            "uri": uri,
-            "languageId": language_id,
-            "version": FIRST_VERSION,
-            "text": text,
-        }
-        self.notify("textDocument/didOpen", {"textDocument": document})
-
-    def did_change(self, uri, version, text):
-        self.opened[uri] = OpenedDocument(version, text)
-        self.notify(
-            "textDocument/didChange",
-            {
-                "textDocument": {"uri": uri, "version": version},
-                "contentChanges": [{"text": text}],
-            },
-        )
-
-    def close_document(self, uri):
-        if self.opened.pop(uri, None) is not None:
-            self.notify("textDocument/didClose", {"textDocument": {"uri": uri}})
-
     def apply_file_changes(self, events: list[FileEvent]) -> None:
         if not events:
             return
         for event in events:
-            self.close_document(event["uri"])
+            self.documents.close(event["uri"])
         self.notify("workspace/didChangeWatchedFiles", {"changes": events})
 
     async def at_position(self, method, path, line, column, extra=None):
-        text = self.open_document(path)
+        text = self.documents.open(path)
         position = lsp_position(text, line, column)
         params = {"textDocument": {"uri": to_uri(path)}, "position": position}
         params.update(extra or {})

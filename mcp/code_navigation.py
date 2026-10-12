@@ -41,7 +41,7 @@ async def at_position(method, file, line, column, extra=None):
 
 
 async def about_document(method, path, server):
-    server.open_document(path)
+    server.documents.open(path)
     return await server.request(method, {"textDocument": {"uri": to_uri(path)}})
 
 
