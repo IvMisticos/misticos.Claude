@@ -20,7 +20,7 @@ class ReplyHistory(Enum):
 
 
 class Harness(NamedTuple):
-    model_names: dict
+    model_names: dict[str, str]
     context_from: ContextSource
     output_shape: OutputShape
     reply_history: ReplyHistory = ReplyHistory.EVENTS
