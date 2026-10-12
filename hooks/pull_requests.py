@@ -187,7 +187,7 @@ def pull_requests_in_result(result, use):
             return pull_requests_linked_in(nested_texts(result))
         case ResultUse.NOTIFICATIONS:
             return pull_request_events_in(nested_texts(result))
-        case None:
+        case _:
             return []
 
 
