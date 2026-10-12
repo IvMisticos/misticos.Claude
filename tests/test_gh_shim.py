@@ -50,6 +50,9 @@ def run_gh(shim_runner):
         ["api", "-iXPOST", "repos/o/r/pulls"],
         ["api", "-if", "title=x", "repos/o/r/pulls"],
         ["api", "--some-new-switch", "repos/o/r/pulls", "-f", "title=x"],
+        ["api", "graphql", "-f", "query=mutation { updatePullRequest(input: {}) }"],
+        ["api", "graphql", "-F", "query=@mutation.graphql"],
+        ["api", "graphql", "--input", "mutation.json"],
     ],
 )
 def test_denies_pull_request_writes(run_gh, arguments):
@@ -78,6 +81,7 @@ def test_denies_pull_request_writes(run_gh, arguments):
             "-f",
             "body=mergePullRequest",
         ],
+        ["api", "graphql", "-f", "query=@mutation.graphql"],
         ["api", "repos/o/r/issues", "-f", "body=see /pulls/1"],
         ["api", "-H", "Accept: x/pulls", "repos/o/r/issues", "-f", "title=x"],
     ],

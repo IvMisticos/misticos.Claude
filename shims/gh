@@ -9,6 +9,7 @@ subcommand=""
 endpoint=""
 method=""
 sends_fields=false
+reads_query_from_file=false
 api_positionals=0
 api_flag_awaiting_value=""
 
@@ -56,7 +57,15 @@ record_api_flag() {
   local flag=$1 value=$2
   case $flag in
     -X | --method) method=$value ;;
-    -f | -F | --raw-field | --field | --input) sends_fields=true ;;
+    -f | --raw-field) sends_fields=true ;;
+    -F | --field)
+      sends_fields=true
+      [[ $value == query=@* ]] && reads_query_from_file=true
+      ;;
+    --input)
+      sends_fields=true
+      reads_query_from_file=true
+      ;;
   esac
   return 0
 }
@@ -133,7 +142,8 @@ writes_a_pull_request() {
 
 runs_a_pull_request_mutation() {
   [[ $endpoint == graphql || $endpoint == */graphql ]] || return 1
-  [[ $* =~ (create|merge|enqueue)PullRequest|enablePullRequestAutoMerge ]]
+  $reads_query_from_file && return 0
+  [[ $* =~ (create|update|merge|enqueue)PullRequest|enablePullRequestAutoMerge ]]
 }
 
 api_writes_pull_requests() {
