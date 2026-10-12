@@ -7,6 +7,7 @@ LINE_CONTINUATION = "\\\n"
 HEREDOC_OPERATOR = "<<"
 HERESTRING_OPERATOR = "<<<"
 TAB_STRIPPING_MARK = "-"
+ARITHMETIC_OPENING = "(("
 DOUBLE_QUOTE_ESCAPES = frozenset('$`"\\')
 ANSI_C_ESCAPES = {"n": "\n", "t": "\t", "r": "\r", "\\": "\\", "'": "'", '"': '"'}
 
@@ -44,6 +45,9 @@ class ShellWords:
         if character in WORD_SEPARATORS:
             self.index += 1
             return self.finished_word()
+        if self.text.startswith(ARITHMETIC_OPENING, self.index):
+            self.append(self.arithmetic())
+            return []
         if character in SHELL_OPERATOR_CHARACTERS:
             return self.operator_tokens()
         if character == "#" and self.word is None:
@@ -88,6 +92,17 @@ class ShellWords:
         ):
             self.start_heredoc()
         return [*tokens, ShellOperator(operator)]
+
+    def arithmetic(self):
+        start = self.index
+        depth = 0
+        while self.index < len(self.text):
+            character = self.text[self.index]
+            self.index += 1
+            depth += {"(": 1, ")": -1}.get(character, 0)
+            if depth == 0:
+                break
+        return self.text[start : self.index]
 
     def ends_a_line(self):
         return self.at_any_of("\n") and bool(self.heredocs)
