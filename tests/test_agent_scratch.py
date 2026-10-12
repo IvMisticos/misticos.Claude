@@ -1,10 +1,14 @@
 import json
-import subprocess
-import sys
 import time
 from pathlib import Path
 
 import pytest
+from conftest import (
+    ReviewThread,
+    graphql_review_threads,
+    run_json_hook,
+    write_json_lines,
+)
 
 AGENT_SCRATCH = Path(__file__).resolve().parent.parent / "hooks" / "agent_scratch.py"
 SHELL_TASK = {"id": "b1", "type": "shell", "status": "running", "command": "make"}
@@ -23,16 +27,8 @@ def scratchpad(tmp_path):
 
 
 def run_hook(event, cwd=None, **fields):
-    payload = json.dumps({"hook_event_name": event, **fields})
-    output = subprocess.run(
-        [sys.executable, AGENT_SCRATCH],
-        input=payload,
-        cwd=cwd,
-        capture_output=True,
-        text=True,
-        check=True,
-    ).stdout
-    return json.loads(output) if output else None
+    payload = {"hook_event_name": event, **fields}
+    return run_json_hook(AGENT_SCRATCH, payload, cwd=cwd)
 
 
 def contents(folder):
@@ -135,36 +131,17 @@ def test_ignores_a_missing_or_relative_scratchpad(tmp_path, scratchpad_dir):
     assert list(tmp_path.iterdir()) == []
 
 
-UNRESOLVED_THREAD = {
-    "data": {
-        "repository": {
-            "pullRequest": {
-                "state": "OPEN",
-                "reviewThreads": {
-                    "nodes": [
-                        {
-                            "id": "T1",
-                            "isResolved": False,
-                            "comments": {"nodes": [{"databaseId": 1}]},
-                        }
-                    ]
-                },
-            }
-        }
-    }
-}
+UNRESOLVED_THREAD = graphql_review_threads(ReviewThread("T1", [1]))
 
 
 def test_agent_reminded_about_review_threads_keeps_its_folder(
-    scratchpad, tmp_path, fake_bin
+    scratchpad, tmp_path, fake_bin, home
 ):
     gh_bin = fake_bin("gh", f"#!/bin/bash\necho '{json.dumps(UNRESOLVED_THREAD)}'\n")
     pull_request = {"owner": "acme", "repo": "widgets", "pullNumber": 7}
     call = {"type": "tool_use", "name": "pull_request_read", "input": pull_request}
     transcript = tmp_path / "agent.jsonl"
-    transcript.write_text(json.dumps({"message": {"content": [call]}}) + "\n")
-    home = tmp_path / "home"
-    home.mkdir()
+    write_json_lines(transcript, {"message": {"content": [call]}})
     payload = {
         "hook_event_name": "SubagentStop",
         "session_id": "s1",
@@ -173,13 +150,8 @@ def test_agent_reminded_about_review_threads_keeps_its_folder(
         "background_tasks": [],
         "scratchpad_dir": str(scratchpad),
     }
-    output = subprocess.run(
-        [sys.executable, AGENT_SCRATCH],
-        input=json.dumps(payload),
-        capture_output=True,
-        text=True,
-        env={"HOME": str(home), "PATH": str(gh_bin)},
-        check=True,
-    ).stdout
-    assert json.loads(output)["decision"] == "block"
+    output = run_json_hook(
+        AGENT_SCRATCH, payload, env={"HOME": str(home), "PATH": str(gh_bin)}
+    )
+    assert output["decision"] == "block"
     assert folders_and_agent_folders(scratchpad) == EVERYTHING

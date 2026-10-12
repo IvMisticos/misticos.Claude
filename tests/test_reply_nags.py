@@ -1,9 +1,8 @@
-import json
-import subprocess
 import sys
 from pathlib import Path
 
 import pytest
+from conftest import append_json_lines, home_environment, run_json_hook
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
 
@@ -41,23 +40,8 @@ def test_log_starts_at_the_reviewed_prompt():
     assert [type(item) for item in log.history] == [Prompt, Reply, Prompt]
 
 
-@pytest.fixture
-def home(tmp_path):
-    home = tmp_path / "home"
-    home.mkdir()
-    return home
-
-
 def run_hook(home, payload, *arguments):
-    result = subprocess.run(
-        [sys.executable, str(REPLY_NAGS), *arguments],
-        input=json.dumps(payload),
-        capture_output=True,
-        text=True,
-        env={"HOME": str(home), "PATH": "/usr/bin:/bin"},
-        check=True,
-    )
-    return json.loads(result.stdout) if result.stdout else None
+    return run_json_hook(REPLY_NAGS, payload, *arguments, env=home_environment(home))
 
 
 def claude_context(output):
@@ -71,8 +55,7 @@ class Transcript:
 
     def add(self, entry):
         self.count += 1
-        with self.path.open("a") as lines:
-            lines.write(json.dumps({"uuid": f"u{self.count}", **entry}) + "\n")
+        append_json_lines(self.path, {"uuid": f"u{self.count}", **entry})
 
     def human(self, text="hi"):
         self.add(

@@ -1,10 +1,16 @@
 import json
-import subprocess
 import sys
 import time
 from pathlib import Path
 
 import pytest
+from conftest import (
+    ReviewThread,
+    append_json_lines,
+    graphql_review_threads,
+    run_json_hook,
+    write_json_lines,
+)
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
 
@@ -31,35 +37,6 @@ printf '%s\\n' "$(<"$response")"
 """
 
 
-class Thread:
-    def __init__(self, thread_id, comment_ids, resolved=False):
-        self.id = thread_id
-        self.comment_ids = comment_ids
-        self.resolved = resolved
-
-    def as_graphql(self):
-        last_comment = {"databaseId": self.comment_ids[-1]}
-        return {
-            "id": self.id,
-            "isResolved": self.resolved,
-            "comments": {"nodes": [last_comment]},
-        }
-
-    def as_remote(self):
-        return {
-            "resolved": self.resolved,
-            "outdated": False,
-            "comment_ids": self.comment_ids,
-        }
-
-
-@pytest.fixture
-def home(tmp_path):
-    home = tmp_path / "home"
-    home.mkdir()
-    return home
-
-
 @pytest.fixture
 def responses(tmp_path):
     responses = tmp_path / "responses"
@@ -75,18 +52,13 @@ def gh_path(fake_bin, responses):
 @pytest.fixture
 def transcript(tmp_path):
     transcript = tmp_path / "transcript.jsonl"
-    write_lines(transcript, tool_use(PULL_REQUEST))
+    write_json_lines(transcript, tool_use(PULL_REQUEST))
     return transcript
 
 
 def add_activity(transcript):
     event = f'<event>{{"pr":"{PULL_REQUEST}"}}</event>'
-    with transcript.open("a") as lines:
-        lines.write(json.dumps({"type": "user", "message": {"content": event}}) + "\n")
-
-
-def write_lines(path, *entries):
-    path.write_text("".join(json.dumps(entry) + "\n" for entry in entries))
+    append_json_lines(transcript, {"type": "user", "message": {"content": event}})
 
 
 def tool_use(pull_request):
@@ -103,9 +75,7 @@ def tool_use(pull_request):
 
 
 def answer_graphql(responses, *threads, state="OPEN"):
-    nodes = [thread.as_graphql() for thread in threads]
-    pull_request = {"state": state, "reviewThreads": {"nodes": nodes}}
-    response = {"data": {"repository": {"pullRequest": pull_request}}}
+    response = graphql_review_threads(*threads, state=state)
     (responses / "graphql.json").write_text(json.dumps(response))
 
 
@@ -129,15 +99,7 @@ def run_hook(home, path, payload, *arguments, remote=False):
     environment = {"HOME": str(home), "PATH": path}
     if remote:
         environment["CLAUDE_CODE_REMOTE"] = "true"
-    result = subprocess.run(
-        [sys.executable, str(HOOK), *arguments],
-        input=json.dumps(payload),
-        capture_output=True,
-        text=True,
-        env=environment,
-        check=True,
-    )
-    return json.loads(result.stdout) if result.stdout else None
+    return run_json_hook(HOOK, payload, *arguments, env=environment)
 
 
 def blocked():
@@ -146,15 +108,15 @@ def blocked():
 
 
 def test_new_unresolved_thread_blocks_once(home, gh_path, responses, transcript):
-    answer_graphql(responses, Thread("T1", [1]), Thread("T2", [2, 3]))
+    answer_graphql(responses, ReviewThread("T1", [1]), ReviewThread("T2", [2, 3]))
     assert run_hook(home, gh_path, stop(transcript)) == blocked()
     assert run_hook(home, gh_path, stop(transcript)) is None
 
 
 def test_stop_without_new_activity_calls_no_gh(home, gh_path, responses, transcript):
-    answer_graphql(responses, Thread("T1", [1]))
+    answer_graphql(responses, ReviewThread("T1", [1]))
     run_hook(home, gh_path, stop(transcript))
-    answer_graphql(responses, Thread("T1", [1, 2]))
+    answer_graphql(responses, ReviewThread("T1", [1, 2]))
     calls = responses / "calls.log"
     calls.unlink()
     assert run_hook(home, gh_path, stop(transcript)) is None
@@ -164,9 +126,9 @@ def test_stop_without_new_activity_calls_no_gh(home, gh_path, responses, transcr
 def test_new_comment_on_a_seen_thread_blocks_again(
     home, gh_path, responses, transcript
 ):
-    answer_graphql(responses, Thread("T1", [1]), Thread("T2", [2]))
+    answer_graphql(responses, ReviewThread("T1", [1]), ReviewThread("T2", [2]))
     run_hook(home, gh_path, stop(transcript))
-    answer_graphql(responses, Thread("T1", [1]), Thread("T2", [2, 4]))
+    answer_graphql(responses, ReviewThread("T1", [1]), ReviewThread("T2", [2, 4]))
     add_activity(transcript)
     assert run_hook(home, gh_path, stop(transcript)) == blocked()
 
@@ -176,12 +138,12 @@ def test_unreadable_state_starts_over(home, gh_path, responses, transcript, stor
     state = home / ".claude/hooks/data/misticos.Claude/review-threads/s1"
     state.parent.mkdir(parents=True)
     state.write_text(stored)
-    answer_graphql(responses, Thread("T1", [1]))
+    answer_graphql(responses, ReviewThread("T1", [1]))
     assert run_hook(home, gh_path, stop(transcript)) == blocked()
 
 
 def test_resolved_thread_stays_silent(home, gh_path, responses, transcript):
-    answer_graphql(responses, Thread("T1", [1], resolved=True))
+    answer_graphql(responses, ReviewThread("T1", [1], resolved=True))
     assert run_hook(home, gh_path, stop(transcript)) is None
 
 
@@ -189,7 +151,7 @@ def test_resolved_thread_stays_silent(home, gh_path, responses, transcript):
 def test_finished_pull_request_stays_silent(
     home, gh_path, responses, transcript, state
 ):
-    answer_graphql(responses, Thread("T1", [1]), state=state)
+    answer_graphql(responses, ReviewThread("T1", [1]), state=state)
     assert run_hook(home, gh_path, stop(transcript)) is None
 
 
@@ -199,7 +161,7 @@ def test_gh_failure_stays_silent_and_retries_next_stop(
     (responses / "error.txt").write_text("gh: Bad Gateway (HTTP 502)")
     assert run_hook(home, gh_path, stop(transcript)) is None
     (responses / "error.txt").unlink()
-    answer_graphql(responses, Thread("T1", [1]))
+    answer_graphql(responses, ReviewThread("T1", [1]))
     assert run_hook(home, gh_path, stop(transcript)) == blocked()
 
 
@@ -207,7 +169,7 @@ def test_gh_failure_retries_a_pull_request_found_in_a_create_result(
     home, gh_path, responses, tmp_path
 ):
     transcript = tmp_path / "transcript.jsonl"
-    write_lines(
+    write_json_lines(
         transcript,
         assistant_call(bash_call("gh pr create --fill", "b1")),
         tool_result("b1", "https://github.com/acme/widgets/pull/7\n"),
@@ -215,7 +177,7 @@ def test_gh_failure_retries_a_pull_request_found_in_a_create_result(
     (responses / "error.txt").write_text("gh: Bad Gateway (HTTP 502)")
     assert run_hook(home, gh_path, stop(transcript)) is None
     (responses / "error.txt").unlink()
-    answer_graphql(responses, Thread("T1", [1]))
+    answer_graphql(responses, ReviewThread("T1", [1]))
     assert run_hook(home, gh_path, stop(transcript)) == blocked()
 
 
@@ -225,25 +187,25 @@ def test_missing_gh_stays_silent_and_keeps_the_activity(
     empty_bin = tmp_path / "empty"
     empty_bin.mkdir()
     assert run_hook(home, str(empty_bin), stop(transcript)) is None
-    answer_graphql(responses, Thread("T1", [1]))
+    answer_graphql(responses, ReviewThread("T1", [1]))
     assert run_hook(home, gh_path, stop(transcript)) == blocked()
 
 
 def test_continuing_after_a_block_stays_silent_and_keeps_the_thread_new(
     home, gh_path, responses, transcript
 ):
-    answer_graphql(responses, Thread("T1", [1]))
+    answer_graphql(responses, ReviewThread("T1", [1]))
     active = stop(transcript, stop_hook_active=True)
     assert run_hook(home, gh_path, active) is None
     assert run_hook(home, gh_path, stop(transcript)) == blocked()
 
 
 def test_subagent_checks_its_own_transcript(home, gh_path, responses, tmp_path):
-    answer_graphql(responses, Thread("T1", [1]))
+    answer_graphql(responses, ReviewThread("T1", [1]))
     parent = tmp_path / "parent.jsonl"
-    write_lines(parent, tool_use(PULL_REQUEST))
+    write_json_lines(parent, tool_use(PULL_REQUEST))
     own = tmp_path / "agent.jsonl"
-    write_lines(own, {"type": "assistant", "message": {"content": []}})
+    write_json_lines(own, {"type": "assistant", "message": {"content": []}})
     payload = stop(
         parent, hook_event_name="SubagentStop", agent_transcript_path=str(own)
     )
@@ -253,7 +215,7 @@ def test_subagent_checks_its_own_transcript(home, gh_path, responses, tmp_path):
 def test_subagent_leaves_the_parent_reminder_unclaimed(
     home, gh_path, responses, transcript
 ):
-    answer_graphql(responses, Thread("T1", [1]))
+    answer_graphql(responses, ReviewThread("T1", [1]))
     subagent = stop(
         transcript,
         hook_event_name="SubagentStop",
@@ -295,11 +257,11 @@ def same_length_filler(entry):
 def test_stop_reads_only_lines_added_since_the_last_stop(
     home, gh_path, responses, tmp_path
 ):
-    answer_graphql(responses, Thread("T1", [1]))
+    answer_graphql(responses, ReviewThread("T1", [1]))
     transcript = tmp_path / "transcript.jsonl"
-    write_lines(transcript, same_length_filler(tool_use(PULL_REQUEST)))
+    write_json_lines(transcript, same_length_filler(tool_use(PULL_REQUEST)))
     assert run_hook(home, gh_path, stop(transcript)) is None
-    write_lines(transcript, tool_use(PULL_REQUEST))
+    write_json_lines(transcript, tool_use(PULL_REQUEST))
     assert run_hook(home, gh_path, stop(transcript)) is None
     add_activity(transcript)
     assert run_hook(home, gh_path, stop(transcript)) == blocked()
@@ -308,13 +270,13 @@ def test_stop_reads_only_lines_added_since_the_last_stop(
 def test_shrunk_transcript_checks_its_activity_again(
     home, gh_path, responses, tmp_path
 ):
-    answer_graphql(responses, Thread("T1", [1]))
+    answer_graphql(responses, ReviewThread("T1", [1]))
     transcript = tmp_path / "transcript.jsonl"
     filler = same_length_filler(tool_use(PULL_REQUEST))
-    write_lines(transcript, filler, filler, tool_use(PULL_REQUEST))
+    write_json_lines(transcript, filler, filler, tool_use(PULL_REQUEST))
     assert run_hook(home, gh_path, stop(transcript)) == blocked()
-    answer_graphql(responses, Thread("T1", [1, 2]))
-    write_lines(transcript, tool_use(PULL_REQUEST))
+    answer_graphql(responses, ReviewThread("T1", [1, 2]))
+    write_json_lines(transcript, tool_use(PULL_REQUEST))
     assert run_hook(home, gh_path, stop(transcript)) == blocked()
 
 
@@ -341,22 +303,27 @@ def test_call_that_finished_counts_after_the_deadline():
 def test_remote_session_reads_review_threads_route(
     home, gh_path, responses, transcript
 ):
-    answer_remote(responses, Thread("T1", [1, 5]), Thread("T2", [2], resolved=True))
+    answer_remote(
+        responses, ReviewThread("T1", [1, 5]), ReviewThread("T2", [2], resolved=True)
+    )
     assert run_hook(home, gh_path, stop(transcript), remote=True) == blocked()
-    answer_remote(responses, Thread("T1", [1, 5, 6]), state="closed")
+    answer_remote(responses, ReviewThread("T1", [1, 5, 6]), state="closed")
     add_activity(transcript)
     assert run_hook(home, gh_path, stop(transcript), remote=True) is None
 
 
-def test_cursor_gets_a_follow_up_message(home, gh_path, responses, transcript):
-    answer_graphql(responses, Thread("T1", [1]))
-    payload = {
+def cursor_stop(transcript, **fields):
+    return {
         "hook_event_name": "stop",
         "conversation_id": "c1",
-        "status": "completed",
-        "loop_count": 0,
         "transcript_path": str(transcript),
+        **fields,
     }
+
+
+def test_cursor_gets_a_follow_up_message(home, gh_path, responses, transcript):
+    answer_graphql(responses, ReviewThread("T1", [1]))
+    payload = cursor_stop(transcript, status="completed", loop_count=0)
     output = run_hook(home, gh_path, payload, "--harness", "cursor")
     assert output == {"followup_message": blocked()["reason"]}
 
@@ -367,13 +334,8 @@ def test_cursor_gets_a_follow_up_message(home, gh_path, responses, transcript):
 def test_cursor_stays_silent_after_a_follow_up_or_abort(
     home, gh_path, responses, transcript, fields
 ):
-    answer_graphql(responses, Thread("T1", [1]))
-    payload = {
-        "hook_event_name": "stop",
-        "conversation_id": "c1",
-        "transcript_path": str(transcript),
-        **fields,
-    }
+    answer_graphql(responses, ReviewThread("T1", [1]))
+    payload = cursor_stop(transcript, **fields)
     assert run_hook(home, gh_path, payload, "--harness", "cursor") is None
 
 
@@ -426,7 +388,7 @@ def test_finds_pull_requests_the_session_worked_on(tmp_path):
         "output": "https://github.com/acme/apps/pull/8\n",
     }
     transcript = tmp_path / "transcript.jsonl"
-    write_lines(
+    write_json_lines(
         transcript,
         tool_use(PULL_REQUEST),
         assistant_call(create),
@@ -483,7 +445,7 @@ def test_ignores_pull_requests_the_session_only_mentioned(tmp_path):
         "input": {"content": f'see {link} and {{"pr":"acme/widgets#3"}}'},
     }
     transcript = tmp_path / "transcript.jsonl"
-    write_lines(
+    write_json_lines(
         transcript,
         assistant_call(listing),
         tool_result("l1", json.dumps([listed])),
@@ -514,7 +476,7 @@ def test_codex_create_result_matches_by_call_id(tmp_path):
         "output": json.dumps({"url": "https://github.com/acme/apps/pull/8"}),
     }
     transcript = tmp_path / "transcript.jsonl"
-    write_lines(
+    write_json_lines(
         transcript,
         {"type": "response_item", "payload": create},
         {"type": "response_item", "payload": created},
@@ -530,7 +492,7 @@ def test_create_call_without_id_reads_no_other_entries(tmp_path):
     }
     prose = "Compare with https://github.com/acme/widgets/pull/2"
     transcript = tmp_path / "transcript.jsonl"
-    write_lines(
+    write_json_lines(
         transcript,
         assistant_call(create),
         {"type": "user", "message": {"content": prose}},
@@ -540,7 +502,7 @@ def test_create_call_without_id_reads_no_other_entries(tmp_path):
 
 def test_newline_ends_a_gh_command(tmp_path):
     transcript = tmp_path / "transcript.jsonl"
-    write_lines(
+    write_json_lines(
         transcript,
         assistant_call(bash_call("gh pr view 1 -R acme/a\ngh pr view 2 -R acme/b")),
         assistant_call(bash_call("gh auth status\ngh pr create --fill", "b1")),
@@ -557,7 +519,7 @@ def test_newline_ends_a_gh_command(tmp_path):
 
 def test_escaped_backslash_before_a_newline_keeps_the_newline(tmp_path):
     transcript = tmp_path / "transcript.jsonl"
-    write_lines(
+    write_json_lines(
         transcript,
         assistant_call(bash_call("echo a\\\\\ngh pr view 7 -R acme/c")),
         assistant_call(bash_call("echo b\\\\\\\ngh pr view 8 -R acme/d")),
@@ -567,7 +529,7 @@ def test_escaped_backslash_before_a_newline_keeps_the_newline(tmp_path):
 
 def test_gh_pr_target_comes_after_flags_and_their_values(tmp_path):
     transcript = tmp_path / "transcript.jsonl"
-    write_lines(
+    write_json_lines(
         transcript,
         assistant_call(bash_call("gh pr view --json state 5 -R acme/a")),
         assistant_call(bash_call("gh pr merge -s --body 1 6 -R acme/b")),
@@ -591,7 +553,7 @@ def test_gh_pr_target_comes_after_flags_and_their_values(tmp_path):
 
 def test_shell_comments_hide_gh_commands(tmp_path):
     transcript = tmp_path / "transcript.jsonl"
-    write_lines(
+    write_json_lines(
         transcript,
         assistant_call(
             bash_call("# don't gh pr close 9 -R acme/a\ngh pr view 1 -R acme/b")
@@ -609,7 +571,7 @@ def test_shell_comments_hide_gh_commands(tmp_path):
 
 def test_redirections_are_not_gh_arguments(tmp_path):
     transcript = tmp_path / "transcript.jsonl"
-    write_lines(
+    write_json_lines(
         transcript,
         assistant_call(bash_call("gh pr comment --body x -R acme/a 2>&1")),
         assistant_call(bash_call("gh pr view -R acme/b --json url 2>/dev/null")),

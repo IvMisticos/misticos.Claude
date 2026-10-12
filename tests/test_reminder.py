@@ -1,9 +1,8 @@
-import json
-import subprocess
 import sys
 from pathlib import Path
 
 import pytest
+from conftest import append_json_lines, home_environment, run_json_hook
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
 
@@ -18,23 +17,10 @@ CLAUDE_ARGUMENTS = ["--harness", "claude"]
 PARTS = 4
 
 
-@pytest.fixture
-def home(tmp_path):
-    home = tmp_path / "home"
-    home.mkdir()
-    return home
-
-
 def reminder(home, part, payload, arguments=CLAUDE_ARGUMENTS):
-    result = subprocess.run(
-        [sys.executable, str(REMINDER), str(part), str(PARTS), *arguments],
-        input=json.dumps(payload),
-        capture_output=True,
-        text=True,
-        env={"HOME": str(home), "PATH": "/usr/bin:/bin"},
-        check=True,
+    return run_json_hook(
+        REMINDER, payload, str(part), str(PARTS), *arguments, env=home_environment(home)
     )
-    return json.loads(result.stdout) if result.stdout else None
 
 
 def context(output):
@@ -54,8 +40,7 @@ def transcript_at(tmp_path, tokens):
         "type": "assistant",
         "message": {"model": "claude-opus-5-5", "usage": {"input_tokens": tokens}},
     }
-    with transcript.open("a") as lines:
-        lines.write(json.dumps(entry) + "\n")
+    append_json_lines(transcript, entry)
     return transcript
 
 
