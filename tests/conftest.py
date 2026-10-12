@@ -1,5 +1,7 @@
+import json
 import os
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -17,6 +19,22 @@ def without_session_variables(environment):
         for name, value in environment.items()
         if not name.startswith(("GIT_", "HARNESS_", "CLAUDE_", "ALLOW_"))
     }
+
+
+def home_environment(home):
+    return {"HOME": str(home), "PATH": "/usr/bin:/bin"}
+
+
+def run_json_hook(hook, payload, *arguments, **run_options):
+    output = subprocess.run(
+        [sys.executable, hook, *arguments],
+        input=json.dumps(payload),
+        capture_output=True,
+        text=True,
+        check=True,
+        **run_options,
+    ).stdout
+    return json.loads(output) if output else None
 
 
 @pytest.fixture

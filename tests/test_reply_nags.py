@@ -1,9 +1,9 @@
 import json
-import subprocess
 import sys
 from pathlib import Path
 
 import pytest
+from conftest import home_environment, run_json_hook
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
 
@@ -42,15 +42,7 @@ def test_log_starts_at_the_reviewed_prompt():
 
 
 def run_hook(home, payload, *arguments):
-    result = subprocess.run(
-        [sys.executable, str(REPLY_NAGS), *arguments],
-        input=json.dumps(payload),
-        capture_output=True,
-        text=True,
-        env={"HOME": str(home), "PATH": "/usr/bin:/bin"},
-        check=True,
-    )
-    return json.loads(result.stdout) if result.stdout else None
+    return run_json_hook(REPLY_NAGS, payload, *arguments, env=home_environment(home))
 
 
 def claude_context(output):

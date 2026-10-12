@@ -1,10 +1,9 @@
 import json
-import subprocess
-import sys
 import time
 from pathlib import Path
 
 import pytest
+from conftest import run_json_hook
 
 AGENT_SCRATCH = Path(__file__).resolve().parent.parent / "hooks" / "agent_scratch.py"
 SHELL_TASK = {"id": "b1", "type": "shell", "status": "running", "command": "make"}
@@ -23,16 +22,8 @@ def scratchpad(tmp_path):
 
 
 def run_hook(event, cwd=None, **fields):
-    payload = json.dumps({"hook_event_name": event, **fields})
-    output = subprocess.run(
-        [sys.executable, AGENT_SCRATCH],
-        input=payload,
-        cwd=cwd,
-        capture_output=True,
-        text=True,
-        check=True,
-    ).stdout
-    return json.loads(output) if output else None
+    payload = {"hook_event_name": event, **fields}
+    return run_json_hook(AGENT_SCRATCH, payload, cwd=cwd)
 
 
 def contents(folder):
@@ -171,13 +162,8 @@ def test_agent_reminded_about_review_threads_keeps_its_folder(
         "background_tasks": [],
         "scratchpad_dir": str(scratchpad),
     }
-    output = subprocess.run(
-        [sys.executable, AGENT_SCRATCH],
-        input=json.dumps(payload),
-        capture_output=True,
-        text=True,
-        env={"HOME": str(home), "PATH": str(gh_bin)},
-        check=True,
-    ).stdout
-    assert json.loads(output)["decision"] == "block"
+    output = run_json_hook(
+        AGENT_SCRATCH, payload, env={"HOME": str(home), "PATH": str(gh_bin)}
+    )
+    assert output["decision"] == "block"
     assert folders_and_agent_folders(scratchpad) == EVERYTHING

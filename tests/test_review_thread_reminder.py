@@ -1,10 +1,10 @@
 import json
-import subprocess
 import sys
 import time
 from pathlib import Path
 
 import pytest
+from conftest import run_json_hook
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
 
@@ -122,15 +122,7 @@ def run_hook(home, path, payload, *arguments, remote=False):
     environment = {"HOME": str(home), "PATH": path}
     if remote:
         environment["CLAUDE_CODE_REMOTE"] = "true"
-    result = subprocess.run(
-        [sys.executable, str(HOOK), *arguments],
-        input=json.dumps(payload),
-        capture_output=True,
-        text=True,
-        env=environment,
-        check=True,
-    )
-    return json.loads(result.stdout) if result.stdout else None
+    return run_json_hook(HOOK, payload, *arguments, env=environment)
 
 
 def blocked():

@@ -1,9 +1,9 @@
 import json
-import subprocess
 import sys
 from pathlib import Path
 
 import pytest
+from conftest import home_environment, run_json_hook
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
 
@@ -19,15 +19,9 @@ PARTS = 4
 
 
 def reminder(home, part, payload, arguments=CLAUDE_ARGUMENTS):
-    result = subprocess.run(
-        [sys.executable, str(REMINDER), str(part), str(PARTS), *arguments],
-        input=json.dumps(payload),
-        capture_output=True,
-        text=True,
-        env={"HOME": str(home), "PATH": "/usr/bin:/bin"},
-        check=True,
+    return run_json_hook(
+        REMINDER, payload, str(part), str(PARTS), *arguments, env=home_environment(home)
     )
-    return json.loads(result.stdout) if result.stdout else None
 
 
 def context(output):
