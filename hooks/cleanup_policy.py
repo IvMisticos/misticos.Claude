@@ -52,7 +52,7 @@ def needs_cleanup(disk, most_free_since_cleanup):
     return disk.free < most_free - min(CLEAN_UP_AGAIN_AFTER_BYTES, most_free / 2)
 
 
-def disk_cleanup(paths):
+def clean_up_low_disks(paths):
     current = list(disks(paths))
     most_free = most_free_since_cleanup(CLEANUP_RECORD, current)
     before = [disk for disk in current if needs_cleanup(disk, most_free)]

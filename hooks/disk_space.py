@@ -5,7 +5,7 @@
 
 import os
 
-from cleanup_policy import disk_cleanup
+from cleanup_policy import clean_up_low_disks
 from disks import BYTES_PER_MIB, disks
 from harnesses import harness_parser
 from hook_io import (
@@ -50,8 +50,8 @@ def disk_warning(payload):
 def main():
     options = harness_parser().parse_args()
     payload = read_payload()
-    cleanup = disk_cleanup(watched_paths(payload))
-    notes = " ".join(filter(None, [cleanup, disk_warning(payload)]))
+    cleanup_note = clean_up_low_disks(watched_paths(payload))
+    notes = " ".join(filter(None, [cleanup_note, disk_warning(payload)]))
     if notes:
         write_context(event_name_of(payload), notes, options.harness.output_shape)
 
