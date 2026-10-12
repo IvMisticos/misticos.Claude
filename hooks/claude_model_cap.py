@@ -8,7 +8,7 @@ import os
 import re
 from pathlib import Path
 
-from hook_io import denied, run_pre_tool_use
+from hook_io import PreToolUseDecision, denied, run_pre_tool_use
 from model_cap import outranks, project_folders, tier_rank
 from transcript import dict_or_empty, recent_entries
 
@@ -21,7 +21,7 @@ PLUGIN_NAME = "misticos"
 PLUGIN_AGENTS_DIR = Path(__file__).resolve().parent.parent / "agents"
 
 
-def with_model(tool_input, model):
+def with_model(tool_input, model) -> PreToolUseDecision:
     return {"updatedInput": {**tool_input, "model": model}}
 
 
