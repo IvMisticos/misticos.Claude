@@ -7,6 +7,8 @@ shopt -s nocasematch
 
 location_options=()
 subcommand=""
+subcommand_arguments=()
+global_options_change_identity=false
 changes_global_identity=false
 
 deny() {
@@ -111,7 +113,7 @@ commit_changes_author() {
   return 1
 }
 
-arguments_change_identity() {
+read_global_options() {
   local word
   while [ $# -gt 0 ]; do
     word=$1
@@ -119,48 +121,36 @@ arguments_change_identity() {
     case $word in
       -c | --config-env)
         word=${1-}
-        is_identity_key "${word%%=*}" && return 0
+        is_identity_key "${word%%=*}" && global_options_change_identity=true
         shift
         ;;
       --config-env=*)
         word=${word#--config-env=}
-        is_identity_key "${word%%=*}" && return 0
+        is_identity_key "${word%%=*}" && global_options_change_identity=true
         ;;
-      -C | --git-dir | --work-tree | --namespace) shift ;;
-      -*) ;;
-      config)
-        config_changes_identity "$@"
-        return
-        ;;
-      commit)
-        commit_changes_author "$@"
-        return
-        ;;
-      *) return 1 ;;
-    esac
-  done
-  return 1
-}
-
-read_global_options() {
-  local word
-  while [ $# -gt 0 ]; do
-    word=$1
-    shift
-    case $word in
       -C | --git-dir | --work-tree)
         location_options+=("$word" "${1-}")
         shift
         ;;
       --git-dir=* | --work-tree=*) location_options+=("$word") ;;
-      -c | --config-env | --namespace) shift ;;
+      --namespace) shift ;;
       -*) ;;
       *)
         subcommand=$word
+        subcommand_arguments=("$@")
         return
         ;;
     esac
   done
+}
+
+arguments_change_identity() {
+  $global_options_change_identity && return 0
+  case $subcommand in
+    config) config_changes_identity ${subcommand_arguments[@]+"${subcommand_arguments[@]}"} ;;
+    commit) commit_changes_author ${subcommand_arguments[@]+"${subcommand_arguments[@]}"} ;;
+    *) return 1 ;;
+  esac
 }
 
 creates_a_repository() {
@@ -190,7 +180,7 @@ if [ -z "${ALLOW_GIT_IDENTITY_CHANGE-}" ]; then
   read_global_options "$@"
   identity_changes=false
   creates_a_repository || ! environment_changes_identity || identity_changes=true
-  arguments_change_identity "$@" && identity_changes=true
+  arguments_change_identity && identity_changes=true
   if $identity_changes; then
     $changes_global_identity && deny
     targets_project_repository && deny
