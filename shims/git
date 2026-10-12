@@ -48,7 +48,7 @@ environment_identity_differs_from_harness() {
 environment_changes_identity() {
   local index name
   environment_identity_differs_from_harness && return 0
-  matches_ignoring_case "${GIT_CONFIG_PARAMETERS-}" "'$identity_key_pattern=" && return 0
+  matches_ignoring_case "${GIT_CONFIG_PARAMETERS-}" "'$identity_key_pattern'?=" && return 0
   for ((index = 0; index < ${GIT_CONFIG_COUNT:-0}; index++)); do
     name="GIT_CONFIG_KEY_$index"
     is_identity_key "${!name-}" && return 0

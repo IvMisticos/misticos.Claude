@@ -83,6 +83,7 @@ def test_denies_identity_arguments(run_git, arguments):
         {"GIT_CONFIG_COUNT": "1", "GIT_CONFIG_KEY_0": "USER.NAME"},
         {"GIT_CONFIG_COUNT": "1", "GIT_CONFIG_KEY_0": "user.name"},
         {"GIT_CONFIG_PARAMETERS": "'author.email=x'"},
+        {"GIT_CONFIG_PARAMETERS": "'core.pager'='cat' 'user.name'='x'"},
         {"GIT_CONFIG_COUNT": "1", "GIT_CONFIG_KEY_0": "committer.name"},
         {"GIT_AUTHOR_NAME": "x", "HARNESS_GIT_IDENTITY": "y|||"},
     ],
