@@ -9,8 +9,7 @@ from pathlib import Path
 from harnesses import ContextSource, harness_parser
 from hook_io import read_payload, run_hook, write_context
 from reminder_baselines import (
-    COPY,
-    POINTER,
+    Action,
     claim_action,
     fire_id,
     forget_baseline,
@@ -30,9 +29,9 @@ RULES_PATH = str(Path(__file__).resolve().parent.parent / "INSTRUCTIONS.md")
 
 
 def message_for_part(action, part, messages, rules):
-    if action == POINTER:
+    if action == Action.POINTER:
         return pointer_reminder(rules) if part == 1 else None
-    if action != COPY or not 1 <= part <= len(messages):
+    if action != Action.COPY or not 1 <= part <= len(messages):
         return None
     return messages[part - 1]
 
@@ -92,7 +91,7 @@ def session_start_reminder(rules, payload, options):
     )
     if len(messages) > options.entries:
         return pointer_reminder(rules) if options.part == 1 else None
-    return message_for_part(COPY, options.part, messages, rules)
+    return message_for_part(Action.COPY, options.part, messages, rules)
 
 
 def reminder_for(event, payload, options):

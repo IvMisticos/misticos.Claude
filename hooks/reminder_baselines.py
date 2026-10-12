@@ -1,6 +1,7 @@
-import collections
 import contextlib
 import os
+from enum import StrEnum
+from typing import NamedTuple
 
 from session_state import (
     STATE_ROOT,
@@ -14,12 +15,20 @@ from session_state import (
 FULL_COPY_EVERY_TOKENS = 100_000
 POINTER_EVERY_TOKENS = 25_000
 BASELINE_DIR = os.path.join(STATE_ROOT, "reminder")
-IDLE = ""
-POINTER = "pointer"
-COPY = "copy"
-Baselines = collections.namedtuple(
-    "Baselines", "pointed_at copied_at fire action seen", defaults=(0,)
-)
+
+
+class Action(StrEnum):
+    IDLE = ""
+    POINTER = "pointer"
+    COPY = "copy"
+
+
+class Baselines(NamedTuple):
+    pointed_at: int
+    copied_at: int
+    fire: str
+    action: Action
+    seen: int = 0
 
 
 def fire_id(event, payload):
@@ -46,36 +55,49 @@ def context_shrank(baselines, tokens):
     return tokens < baselines.pointed_at
 
 
-def next_action(baselines, fire, tokens, can_copy):
+def next_action(
+    baselines: Baselines | None, fire: str, tokens: int, can_copy: bool
+) -> tuple[Action, Baselines]:
     if baselines is None or context_shrank(baselines, tokens):
-        return IDLE, Baselines(tokens, tokens, fire, IDLE)
+        return Action.IDLE, Baselines(tokens, tokens, fire, Action.IDLE)
     if can_copy and tokens - baselines.copied_at >= FULL_COPY_EVERY_TOKENS:
-        return COPY, Baselines(tokens, tokens, fire, COPY)
+        return Action.COPY, Baselines(tokens, tokens, fire, Action.COPY)
     if tokens - baselines.pointed_at >= POINTER_EVERY_TOKENS:
-        return POINTER, Baselines(tokens, baselines.copied_at, fire, POINTER)
-    return IDLE, baselines._replace(fire=fire, action=IDLE)
+        pointed = Baselines(tokens, baselines.copied_at, fire, Action.POINTER)
+        return Action.POINTER, pointed
+    return Action.IDLE, baselines._replace(fire=fire, action=Action.IDLE)
 
 
-def action_for_fire(baselines, fire, tokens, can_copy):
+def action_for_fire(
+    baselines: Baselines | None, fire: str, tokens: int, can_copy: bool
+) -> tuple[Action, Baselines]:
     if baselines is not None and fire and baselines.fire == fire:
         return baselines.action, baselines
     return next_action(baselines, fire, tokens, can_copy)
 
 
-def parsed_baselines(stored):
+def parsed_action(stored) -> Action | None:
+    try:
+        return Action(stored)
+    except ValueError:
+        return None
+
+
+def parsed_baselines(stored) -> Baselines | None:
     baselines = parsed_record(Baselines, stored)
     if baselines is None:
         return None
+    action = parsed_action(baselines.action)
     counts = (baselines.pointed_at, baselines.copied_at, baselines.seen)
     valid = (
         all(isinstance(count, int) for count in counts)
         and isinstance(baselines.fire, str)
-        and baselines.action in (IDLE, POINTER, COPY)
+        and action is not None
     )
-    return baselines if valid else None
+    return baselines._replace(action=action) if valid else None
 
 
-def claim_action(session_id, fire, can_copy, tokens=None, added_tokens=0):
+def claim_action(session_id, fire, can_copy, tokens=None, added_tokens=0) -> Action:
     with locked_session_file(BASELINE_DIR, session_id) as baseline_file:
         stored = parsed_baselines(read_json(baseline_file))
         if tokens is None:
