@@ -141,7 +141,7 @@ def without_repo_flags(arguments):
             repo = word.removeprefix("-R")
         else:
             remaining.append(word)
-    return repo, remaining
+    return repo or None, remaining
 
 
 def is_flag(word):
