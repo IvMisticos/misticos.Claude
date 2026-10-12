@@ -78,8 +78,9 @@ def is_subagent_start(payload):
 
 def session_start_reminder(rules, payload, options):
     is_subagent = is_subagent_start(payload)
-    if options.part == 1 and payload.get("session_id") and not is_subagent:
-        forget_baseline(payload["session_id"])
+    session_id = session_id_of(payload)
+    if options.part == 1 and session_id and not is_subagent:
+        forget_baseline(session_id)
     sections = (
         rule_sections_for(payload.get("agent_type")) if is_subagent else ALL_SECTIONS
     )
