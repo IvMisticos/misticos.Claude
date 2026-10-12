@@ -1,10 +1,12 @@
 import asyncio
 import json
 import os
+import pathlib
 import subprocess
 import sys
 from typing import NamedTuple
 
+from lsp_types import FileEvent, LSPAny, Message
 from text_positions import lsp_position, read_text, to_uri
 
 QUIET_SECONDS_BEFORE_READY = 2.0
@@ -23,28 +25,35 @@ class OpenedDocument(NamedTuple):
 
 
 class LanguageServer:
-    def __init__(self, name, command, language_ids, root, environment):
+    def __init__(
+        self,
+        name: str,
+        command: list[str],
+        language_ids: dict[str, str],
+        root: pathlib.Path,
+        environment: dict[str, str],
+    ) -> None:
         self.name = name
         self.command = command
         self.environment = environment
         self.language_ids = language_ids
         self.root = root
-        self.process = None
-        self.pending = {}
+        self.process: asyncio.subprocess.Process | None = None
+        self.pending: dict[int, asyncio.Future[LSPAny]] = {}
         self.next_id = 1
         self.opened = {}
         self.last_message_at = 0.0
-        self.reader_task = None
+        self.reader_task: asyncio.Task[None] | None = None
 
     @property
-    def alive(self):
+    def alive(self) -> bool:
         return (
             self.process is not None
             and self.process.returncode is None
             and not self.reader_task.done()
         )
 
-    async def start(self):
+    async def start(self) -> None:
         self.process = await asyncio.create_subprocess_exec(
             *self.command,
             cwd=self.root,
@@ -80,17 +89,17 @@ class LanguageServer:
             self.stop()
             raise
 
-    def stop(self):
+    def stop(self) -> None:
         if self.process is not None and self.process.returncode is None:
             self.process.kill()
         if self.reader_task is not None:
             self.reader_task.cancel()
         self.fail_pending(self.exited())
 
-    def exited(self):
+    def exited(self) -> LanguageServerExited:
         return LanguageServerExited(f"{self.name} language server exited")
 
-    async def wait_until_quiet(self):
+    async def wait_until_quiet(self) -> None:
         started = asyncio.get_event_loop().time()
         while asyncio.get_event_loop().time() - started < MAX_STARTUP_SECONDS:
             await asyncio.sleep(0.25)
@@ -100,17 +109,17 @@ class LanguageServer:
             ):
                 return
 
-    def send(self, message):
+    def send(self, message: Message) -> None:
         body = json.dumps(message).encode()
         self.process.stdin.write(b"Content-Length: %d\r\n\r\n" % len(body) + body)
 
-    def reply(self, request_id, **fields):
+    def reply(self, request_id: int | str, **fields: LSPAny) -> None:
         self.send({"jsonrpc": "2.0", "id": request_id, **fields})
 
-    def notify(self, method, params):
+    def notify(self, method: str, params: LSPAny) -> None:
         self.send({"jsonrpc": "2.0", "method": method, "params": params})
 
-    async def request(self, method, params):
+    async def request(self, method: str, params: LSPAny) -> LSPAny:
         if not self.alive:
             raise self.exited()
         request_id = self.next_id
@@ -125,7 +134,7 @@ class LanguageServer:
         finally:
             self.pending.pop(request_id, None)
 
-    async def read_messages(self):
+    async def read_messages(self) -> None:
         try:
             while True:
                 message = await self.read_message()
@@ -136,7 +145,7 @@ class LanguageServer:
         finally:
             self.fail_pending(self.exited())
 
-    async def read_message(self):
+    async def read_message(self) -> Message:
         length = None
         while True:
             line = await self.process.stdout.readline()
@@ -148,13 +157,13 @@ class LanguageServer:
                 break
         return json.loads(await self.process.stdout.readexactly(length))
 
-    def fail_pending(self, error):
+    def fail_pending(self, error: Exception) -> None:
         for future in self.pending.values():
             if not future.done():
                 future.set_exception(error)
         self.pending.clear()
 
-    def dispatch(self, message):
+    def dispatch(self, message: Message) -> None:
         if "id" not in message:
             return
         if "method" in message:
@@ -169,7 +178,7 @@ class LanguageServer:
             return
         future.set_result(message.get("result"))
 
-    def answer_server_request(self, message):
+    def answer_server_request(self, message: Message) -> None:
         method = message["method"]
         if method == "workspace/configuration":
             result = [None for _ in message.get("params", {}).get("items", [])]
@@ -219,7 +228,7 @@ class LanguageServer:
         if self.opened.pop(uri, None) is not None:
             self.notify("textDocument/didClose", {"textDocument": {"uri": uri}})
 
-    def apply_file_changes(self, events):
+    def apply_file_changes(self, events: list[FileEvent]) -> None:
         if not events:
             return
         for event in events:

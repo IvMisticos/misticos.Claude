@@ -3,11 +3,20 @@ import os
 import shutil
 import sys
 from pathlib import Path
+from typing import TypedDict
 
 SOLUTION_SUFFIXES = (".sln", ".slnx", ".slnf")
 PROJECT_SUFFIXES = (".csproj",)
 
-LANGUAGE_SERVERS = {
+
+class LanguageServerSpec(TypedDict):
+    command: list[str]
+    install: list[str]
+    extensions: dict[str, str]
+    config_files: list[str]
+
+
+LANGUAGE_SERVERS: dict[str, LanguageServerSpec] = {
     "typescript": {
         "command": ["tsgo", "--lsp", "-stdio"],
         "install": ["bun", "add", "-g", "@typescript/native-preview"],
@@ -62,7 +71,9 @@ INSTALL_TIMEOUT_SECONDS = 600.0
 installs = {}
 
 
-def installed_binary(spec, environment):
+def installed_binary(
+    spec: LanguageServerSpec, environment: dict[str, str]
+) -> str | None:
     return shutil.which(spec["command"][0], path=environment["PATH"])
 
 
@@ -79,7 +90,7 @@ async def ensure_installed(name):
     await asyncio.wait_for(asyncio.shield(install), INSTALL_TIMEOUT_SECONDS)
 
 
-async def install_server(spec, environment):
+async def install_server(spec: LanguageServerSpec, environment: dict[str, str]) -> None:
     binary, installer = spec["command"][0], spec["install"][0]
     if not shutil.which(installer, path=environment["PATH"]):
         raise RuntimeError(
