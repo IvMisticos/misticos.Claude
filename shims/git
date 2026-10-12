@@ -15,18 +15,20 @@ deny() {
   exit 1
 }
 
-equals_ignoring_case() (
+identity_section_pattern='(user|author|committer)'
+identity_key_pattern="$identity_section_pattern\\.(name|email)"
+
+matches_ignoring_case() (
   shopt -s nocasematch
-  [[ $1 == "$2" ]]
+  [[ $1 =~ $2 ]]
 )
 
-contains_ignoring_case() (
-  shopt -s nocasematch
-  [[ $1 == *"$2"* ]]
-)
+is_identity_section() {
+  matches_ignoring_case "$1" "^$identity_section_pattern$"
+}
 
 is_identity_key() {
-  equals_ignoring_case "$1" user.name || equals_ignoring_case "$1" user.email
+  matches_ignoring_case "$1" "^$identity_key_pattern$"
 }
 
 environment_identity() {
@@ -46,8 +48,7 @@ environment_identity_differs_from_harness() {
 environment_changes_identity() {
   local index name
   environment_identity_differs_from_harness && return 0
-  contains_ignoring_case "${GIT_CONFIG_PARAMETERS-}" "'user.name=" && return 0
-  contains_ignoring_case "${GIT_CONFIG_PARAMETERS-}" "'user.email=" && return 0
+  matches_ignoring_case "${GIT_CONFIG_PARAMETERS-}" "'$identity_key_pattern=" && return 0
   for ((index = 0; index < ${GIT_CONFIG_COUNT:-0}; index++)); do
     name="GIT_CONFIG_KEY_$index"
     is_identity_key "${!name-}" && return 0
@@ -76,15 +77,15 @@ config_writes_globally() {
   return 1
 }
 
-config_changes_user_section() {
-  local word changes_a_section=false names_user=false
+config_changes_identity_section() {
+  local word changes_a_section=false names_identity_section=false
   for word in "$@"; do
     case $word in
       --remove-section | --rename-section | remove-section | rename-section) changes_a_section=true ;;
     esac
-    if equals_ignoring_case "$word" user; then names_user=true; fi
+    if is_identity_section "$word"; then names_identity_section=true; fi
   done
-  $changes_a_section && $names_user
+  $changes_a_section && $names_identity_section
 }
 
 config_unsets_identity_key() {
@@ -118,7 +119,7 @@ config_sets_identity_key() {
 
 config_changes_identity() {
   config_reads "$@" && return 1
-  config_changes_user_section "$@" || config_unsets_identity_key "$@" || config_sets_identity_key "$@"
+  config_changes_identity_section "$@" || config_unsets_identity_key "$@" || config_sets_identity_key "$@"
 }
 
 config_changes_global_identity() {
