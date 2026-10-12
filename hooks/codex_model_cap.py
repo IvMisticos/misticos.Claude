@@ -8,7 +8,7 @@ import os
 import tomllib
 from pathlib import Path
 
-from hook_io import run_pre_tool_use
+from hook_io import allowed_with, denied, run_pre_tool_use
 from model_cap import outranks, project_folders
 
 DEFAULT_ROLE = "default"
@@ -98,20 +98,17 @@ def role_decision(spawn, cwd, caller):
     )
     if not outranks(fixed_model, caller):
         return None
-    return {
-        "permissionDecision": "deny",
-        "permissionDecisionReason": (
-            f"The {role_name} role runs on {fixed_model}, above your {caller}. "
-            "Spawn with a role at or below your model."
-        ),
-    }
+    return denied(
+        f"The {role_name} role runs on {fixed_model}, above your {caller}. "
+        "Spawn with a role at or below your model."
+    )
 
 
 def request_decision(spawn, cwd, caller):
     requested = spawn.get("model") or default_subagent_model(cwd)
     if not outranks(requested, caller):
         return None
-    return {"permissionDecision": "allow", "updatedInput": {**spawn, "model": caller}}
+    return allowed_with({**spawn, "model": caller})
 
 
 def cap_decision(payload):

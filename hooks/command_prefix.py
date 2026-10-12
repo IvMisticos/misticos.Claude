@@ -8,7 +8,7 @@ import os
 import sys
 
 from harnesses import OutputShape, harness_parser
-from hook_io import read_payload, run_hook
+from hook_io import allowed_with, pre_tool_use_output, read_payload, run_hook
 from session_environment import session_environment_command
 
 
@@ -23,13 +23,7 @@ def rewritten_tool_call(payload, shape):
         case OutputShape.CURSOR:
             return {"permission": "allow", "updated_input": updated_input}
         case OutputShape.CLAUDE:
-            return {
-                "hookSpecificOutput": {
-                    "hookEventName": "PreToolUse",
-                    "permissionDecision": "allow",
-                    "updatedInput": updated_input,
-                }
-            }
+            return pre_tool_use_output(allowed_with(updated_input))
 
 
 def main():

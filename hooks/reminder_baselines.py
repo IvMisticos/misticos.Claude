@@ -5,6 +5,7 @@ import os
 from session_state import (
     STATE_ROOT,
     locked_session_file,
+    parsed_record,
     read_json,
     session_file_path,
     write_json,
@@ -62,9 +63,8 @@ def action_for_fire(baselines, fire, tokens, can_copy):
 
 
 def parsed_baselines(stored):
-    try:
-        baselines = Baselines(**stored)
-    except TypeError:
+    baselines = parsed_record(Baselines, stored)
+    if baselines is None:
         return None
     counts = (baselines.pointed_at, baselines.copied_at, baselines.seen)
     valid = (

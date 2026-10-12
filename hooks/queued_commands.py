@@ -1,3 +1,4 @@
+BUN_BUILD_AND_TEST = frozenset({"build", "test"})
 QUEUED_SUBCOMMANDS = {
     "dotnet": {"build", "test", "publish", "pack"},
     "cargo": {
@@ -13,11 +14,11 @@ QUEUED_SUBCOMMANDS = {
         "rustc",
         "nextest",
     },
-    "bun": {"build", "test"},
+    "bun": BUN_BUILD_AND_TEST,
     "uv": {"build"},
 }
 QUEUED_RUN_TARGETS = {
-    "bun": {"build", "test"},
+    "bun": BUN_BUILD_AND_TEST,
     "uv": {"pytest"},
 }
 PYTHON_LAUNCHERS = {"python", "python3"}
