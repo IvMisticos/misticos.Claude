@@ -2,8 +2,45 @@ import json
 import os
 import sys
 import traceback
+from collections.abc import Callable
+from typing import Literal, Required, TypedDict
 
 from harnesses import OutputShape
+
+
+class PreToolUseDecision(TypedDict, total=False):
+    permissionDecision: Literal["allow", "deny"]
+    permissionDecisionReason: str
+    updatedInput: dict
+
+
+class PreToolUseFields(PreToolUseDecision, total=False):
+    hookEventName: Required[Literal["PreToolUse"]]
+
+
+class ContextFields(TypedDict):
+    hookEventName: str
+    additionalContext: str
+
+
+class ClaudeOutput(TypedDict):
+    hookSpecificOutput: PreToolUseFields | ContextFields
+
+
+class ClaudeBlock(TypedDict):
+    decision: Literal["block"]
+    reason: str
+
+
+class CursorContext(TypedDict):
+    additional_context: str
+
+
+class CursorFollowup(TypedDict):
+    followup_message: str
+
+
+PreToolUseDecider = Callable[[dict], PreToolUseDecision | None]
 
 
 def read_payload():
@@ -21,35 +58,37 @@ def scratchpad_of(payload):
     return None
 
 
-def hook_specific_output(event, fields):
-    return {"hookSpecificOutput": {"hookEventName": event, **fields}}
+def pre_tool_use_output(decision: PreToolUseDecision) -> ClaudeOutput:
+    return {"hookSpecificOutput": {"hookEventName": "PreToolUse", **decision}}
 
 
-def pre_tool_use_output(decision):
-    return hook_specific_output("PreToolUse", decision)
-
-
-def allowed_with(updated_input):
+def allowed_with(updated_input: dict) -> PreToolUseDecision:
     return {"permissionDecision": "allow", "updatedInput": updated_input}
 
 
-def denied(reason):
+def denied(reason: str) -> PreToolUseDecision:
     return {"permissionDecision": "deny", "permissionDecisionReason": reason}
 
 
-def hook_output(event, context, shape):
+def hook_output(
+    event: str, context: str, shape: OutputShape
+) -> ClaudeOutput | CursorContext:
     match shape:
         case OutputShape.CURSOR:
             return {"additional_context": context}
         case OutputShape.CLAUDE:
-            return hook_specific_output(event, {"additionalContext": context})
+            context_fields: ContextFields = {
+                "hookEventName": event,
+                "additionalContext": context,
+            }
+            return {"hookSpecificOutput": context_fields}
 
 
 def write_context(event, context, shape=OutputShape.CLAUDE):
     json.dump(hook_output(event, context, shape), sys.stdout)
 
 
-def block_output(reason, shape):
+def block_output(reason: str, shape: OutputShape) -> ClaudeBlock | CursorFollowup:
     match shape:
         case OutputShape.CURSOR:
             return {"followup_message": reason}
@@ -61,13 +100,13 @@ def write_block(reason, shape=OutputShape.CLAUDE):
     json.dump(block_output(reason, shape), sys.stdout)
 
 
-def write_pre_tool_use_decision(decide):
+def write_pre_tool_use_decision(decide: PreToolUseDecider):
     decision = decide(read_payload())
     if decision:
         json.dump(pre_tool_use_output(decision), sys.stdout)
 
 
-def run_pre_tool_use(decide):
+def run_pre_tool_use(decide: PreToolUseDecider):
     run_hook(lambda: write_pre_tool_use_decision(decide))
 
 
