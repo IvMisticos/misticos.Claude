@@ -312,15 +312,18 @@ def test_remote_session_reads_review_threads_route(
     assert run_hook(home, gh_path, stop(transcript), remote=True) is None
 
 
-def test_cursor_gets_a_follow_up_message(home, gh_path, responses, transcript):
-    answer_graphql(responses, ReviewThread("T1", [1]))
-    payload = {
+def cursor_stop(transcript, **fields):
+    return {
         "hook_event_name": "stop",
         "conversation_id": "c1",
-        "status": "completed",
-        "loop_count": 0,
         "transcript_path": str(transcript),
+        **fields,
     }
+
+
+def test_cursor_gets_a_follow_up_message(home, gh_path, responses, transcript):
+    answer_graphql(responses, ReviewThread("T1", [1]))
+    payload = cursor_stop(transcript, status="completed", loop_count=0)
     output = run_hook(home, gh_path, payload, "--harness", "cursor")
     assert output == {"followup_message": blocked()["reason"]}
 
@@ -332,12 +335,7 @@ def test_cursor_stays_silent_after_a_follow_up_or_abort(
     home, gh_path, responses, transcript, fields
 ):
     answer_graphql(responses, ReviewThread("T1", [1]))
-    payload = {
-        "hook_event_name": "stop",
-        "conversation_id": "c1",
-        "transcript_path": str(transcript),
-        **fields,
-    }
+    payload = cursor_stop(transcript, **fields)
     assert run_hook(home, gh_path, payload, "--harness", "cursor") is None
 
 
