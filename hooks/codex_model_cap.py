@@ -9,7 +9,7 @@ import tomllib
 from pathlib import Path
 from typing import NamedTuple
 
-from hook_io import allowed_with, denied, run_pre_tool_use
+from hook_io import allowed_with, cwd_of, denied, run_pre_tool_use
 from model_cap import outranks, project_folders
 
 DEFAULT_ROLE = "default"
@@ -145,7 +145,7 @@ def request_decision(spawn, layers, caller):
 def cap_decision(payload):
     caller = payload.get("model")
     spawn = payload.get("tool_input") or {}
-    layers = codex_layers(payload.get("cwd") or os.getcwd())
+    layers = codex_layers(cwd_of(payload))
     return role_decision(spawn, layers, caller) or request_decision(
         spawn, layers, caller
     )

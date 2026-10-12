@@ -4,6 +4,7 @@ import os
 from typing import NamedTuple
 
 from harnesses import ContextSource
+from json_values import dict_or_empty, json_object
 
 TRANSCRIPT_TAIL_BYTES = 1 << 20
 CHARS_PER_TOKEN_ESTIMATE = 4
@@ -21,10 +22,6 @@ class TranscriptPart(NamedTuple):
     @property
     def end(self):
         return self.start + len(self.lines)
-
-
-def dict_or_empty(value):
-    return value if isinstance(value, dict) else {}
 
 
 def is_conversation_turn(entry):
@@ -68,17 +65,9 @@ def transcript_part_from(transcript_path, offset):
     return TranscriptPart(start, complete_lines(data))
 
 
-def parsed_entry(line):
-    try:
-        entry = json.loads(line)
-    except (UnicodeDecodeError, json.JSONDecodeError):
-        return None
-    return entry if isinstance(entry, dict) else None
-
-
 def entries_in(lines):
     for line in lines:
-        entry = parsed_entry(line)
+        entry = json_object(line)
         if entry is not None:
             yield entry
 
@@ -94,7 +83,7 @@ def tail_entries(transcript_path):
 def positioned_entries(part):
     position = part.start
     for line in io.BytesIO(part.lines):
-        entry = parsed_entry(line)
+        entry = json_object(line)
         if entry is not None:
             yield position, entry
         position += len(line)

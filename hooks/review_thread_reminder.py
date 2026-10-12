@@ -3,17 +3,23 @@
 # requires-python = ">=3.11"
 # ///
 
-import os
 from typing import NamedTuple
 
 from harnesses import harness_parser
-from hook_io import read_payload, run_hook, write_block
+from hook_io import (
+    event_name_of,
+    read_payload,
+    run_hook,
+    session_id_of,
+    write_block,
+)
+from plugin_paths import DATA_ROOT
 from pull_requests import last_activity_by_pull_request
 from review_threads import gh_installed, review_states, thread_source
-from session_state import STATE_ROOT, locked_session_file, read_record, write_record
+from session_state import locked_session_file, read_record, write_record
 from transcript import positioned_entries, transcript_part_from
 
-STATE_DIR = os.path.join(STATE_ROOT, "review-threads")
+STATE_DIR = DATA_ROOT / "review-threads"
 SUBAGENT_STOP = "subagentstop"
 
 
@@ -39,16 +45,15 @@ def ended_without_completing(payload):
 
 
 def own_transcript(payload):
-    event = str(payload.get("hook_event_name") or "").lower()
-    if event == SUBAGENT_STOP:
+    if event_name_of(payload).lower() == SUBAGENT_STOP:
         return payload.get("agent_transcript_path")
     return payload.get("transcript_path")
 
 
 def memory_key(payload):
-    session_id = payload.get("session_id") or payload.get("conversation_id")
+    session_id = session_id_of(payload)
     agent_id = payload.get("agent_id")
-    if not isinstance(session_id, str):
+    if session_id is None:
         return None
     if isinstance(agent_id, str) and agent_id:
         return f"{session_id}-{agent_id}"

@@ -6,6 +6,7 @@ from collections.abc import Callable
 from typing import Literal, Required, TypedDict
 
 from harnesses import OutputShape
+from json_values import json_object
 
 
 class PreToolUseDecision(TypedDict, total=False):
@@ -44,11 +45,7 @@ PreToolUseDecider = Callable[[dict], PreToolUseDecision | None]
 
 
 def read_payload():
-    try:
-        payload = json.loads(sys.stdin.read() or "{}")
-    except json.JSONDecodeError:
-        return {}
-    return payload if isinstance(payload, dict) else {}
+    return json_object(sys.stdin.read()) or {}
 
 
 def scratchpad_of(payload):
@@ -56,6 +53,24 @@ def scratchpad_of(payload):
     if isinstance(scratchpad, str) and os.path.isabs(scratchpad):
         return scratchpad
     return None
+
+
+def event_name_of(payload):
+    event = payload.get("hook_event_name")
+    return event if isinstance(event, str) else ""
+
+
+def session_id_of(payload):
+    session_id = payload.get("session_id") or payload.get("conversation_id")
+    return session_id if isinstance(session_id, str) else None
+
+
+def is_subagent(payload):
+    return bool(payload.get("agent_id") or payload.get("subagent_id"))
+
+
+def cwd_of(payload):
+    return payload.get("cwd") or os.getcwd()
 
 
 def pre_tool_use_output(decision: PreToolUseDecision) -> ClaudeOutput:

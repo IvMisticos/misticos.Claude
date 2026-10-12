@@ -3,12 +3,20 @@
 # requires-python = ">=3.11"
 # ///
 
-import os
 import uuid
 from typing import NamedTuple
 
 from harnesses import ReplyHistory, harness_parser
-from hook_io import read_payload, run_hook, write_context
+from hook_io import (
+    event_name_of,
+    is_subagent,
+    read_payload,
+    run_hook,
+    session_id_of,
+    write_context,
+)
+from json_values import dict_or_empty
+from plugin_paths import DATA_ROOT
 from reply_history import (
     EventLog,
     Reply,
@@ -19,18 +27,16 @@ from reply_history import (
     without_trailing_prompts,
 )
 from session_state import (
-    STATE_ROOT,
     locked_session_file,
     parsed_record,
     read_json,
     write_json,
 )
-from transcript import dict_or_empty
 
 PROSE_LIMIT = 300
 FIRST_NAG_AT_MESSAGES = 2
 MESSAGES_BETWEEN_NAGS = 6
-STATE_DIR = os.path.join(STATE_ROOT, "reply-nags")
+STATE_DIR = DATA_ROOT / "reply-nags"
 LONG_REPLY = (
     "One of your recent messages had at least {length} characters outside "
     "code and links. Don't resend it, but from now on keep your messages "
@@ -159,16 +165,12 @@ def nags_from_events(event, payload, state):
     return [], NagState(memory, log, due.merged_over(state.pending_nags))
 
 
-def is_subagent(payload):
-    return bool(payload.get("agent_id") or payload.get("subagent_id"))
-
-
 def main():
     options = harness_parser().parse_args()
     payload = read_payload()
-    event = str(payload.get("hook_event_name") or "")
-    session_id = payload.get("session_id") or payload.get("conversation_id")
-    if not (event and isinstance(session_id, str)) or is_subagent(payload):
+    event = event_name_of(payload)
+    session_id = session_id_of(payload)
+    if not (event and session_id) or is_subagent(payload):
         return
     nags_for = (
         nags_from_transcript

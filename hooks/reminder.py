@@ -4,10 +4,17 @@
 # ///
 
 import sys
-from pathlib import Path
 
 from harnesses import ContextSource, harness_parser
-from hook_io import read_payload, run_hook, write_context
+from hook_io import (
+    event_name_of,
+    is_subagent,
+    read_payload,
+    run_hook,
+    session_id_of,
+    write_context,
+)
+from plugin_paths import PLUGIN_ROOT
 from reminder_baselines import (
     Action,
     claim_action,
@@ -25,7 +32,7 @@ from transcript import context_tokens, payload_tokens, transcript_fits_in_tail
 
 from agents import ALL_SECTIONS, rule_sections_for
 
-RULES_PATH = str(Path(__file__).resolve().parent.parent / "INSTRUCTIONS.md")
+RULES_PATH = str(PLUGIN_ROOT / "INSTRUCTIONS.md")
 
 
 def message_for_part(action, part, messages, rules):
@@ -38,10 +45,10 @@ def message_for_part(action, part, messages, rules):
 
 def growth_reminder(rules, payload, options):
     messages = full_copy_messages(rules, GROWN_PREAMBLE)
-    session_id = payload.get("session_id") or payload.get("conversation_id")
+    session_id = session_id_of(payload)
     if not (messages and session_id):
         return None
-    fire = fire_id(event_name(payload), payload)
+    fire = fire_id(event_name_of(payload), payload)
     if not fire and options.part > 1:
         return None
     can_copy = len(messages) <= options.entries and bool(fire or len(messages) == 1)
@@ -54,7 +61,7 @@ def growth_reminder(rules, payload, options):
         return None
     tokens = context_tokens(transcript_path, options.harness.context_from)
     if tokens is None:
-        if options.part != 1 or event_name(payload).lower() != "userpromptsubmit":
+        if options.part != 1 or event_name_of(payload).lower() != "userpromptsubmit":
             return None
         return (
             pointer_reminder(rules)
@@ -65,22 +72,15 @@ def growth_reminder(rules, payload, options):
     return message_for_part(action, options.part, messages, rules)
 
 
-def event_name(payload):
-    return str(payload.get("hook_event_name"))
-
-
 def is_subagent_start(payload):
-    return bool(
-        payload.get("agent_id")
-        or payload.get("subagent_id")
-        or event_name(payload).lower() == "subagentstart"
-    )
+    return is_subagent(payload) or event_name_of(payload).lower() == "subagentstart"
 
 
 def session_start_reminder(rules, payload, options):
     is_subagent = is_subagent_start(payload)
-    if options.part == 1 and payload.get("session_id") and not is_subagent:
-        forget_baseline(payload["session_id"])
+    session_id = session_id_of(payload)
+    if options.part == 1 and session_id and not is_subagent:
+        forget_baseline(session_id)
     sections = (
         rule_sections_for(payload.get("agent_type")) if is_subagent else ALL_SECTIONS
     )
@@ -98,7 +98,7 @@ def reminder_for(event, payload, options):
     rules = rules_at(RULES_PATH, options.harness.model_names)
     if event.lower() in ("sessionstart", "subagentstart"):
         return session_start_reminder(rules, payload, options)
-    if payload.get("agent_id") or payload.get("subagent_id"):
+    if is_subagent(payload):
         return None
     return growth_reminder(rules, payload, options)
 
@@ -116,7 +116,7 @@ def parsed_options(argv):
 def main():
     options = parsed_options(sys.argv[1:])
     payload = read_payload()
-    event = payload.get("hook_event_name")
+    event = event_name_of(payload)
     if not event:
         return
     reminder = reminder_for(event, payload, options)
