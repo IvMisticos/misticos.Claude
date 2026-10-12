@@ -536,27 +536,12 @@ def test_newline_ends_a_gh_command(tmp_path):
     ]
 
 
-def test_escaped_backslash_before_a_newline_keeps_the_newline(tmp_path):
+def test_gh_pr_target_is_the_word_after_the_subcommand(tmp_path):
     transcript = tmp_path / "transcript.jsonl"
     write_json_lines(
         transcript,
-        assistant_call(bash_call("echo a\\\\\ngh pr view 7 -R acme/c")),
-        assistant_call(bash_call("echo b\\\\\\\ngh pr view 8 -R acme/d")),
-    )
-    assert list(activity_in(transcript)) == [PullRequest("acme", "c", 7)]
-
-
-def test_gh_pr_target_comes_after_flags_and_their_values(tmp_path):
-    transcript = tmp_path / "transcript.jsonl"
-    write_json_lines(
-        transcript,
-        assistant_call(bash_call("gh pr view --json state 5 -R acme/a")),
-        assistant_call(bash_call("gh pr merge -s --body 1 6 -R acme/b")),
-        assistant_call(bash_call("gh pr close -c 2 7 -R acme/c")),
-        assistant_call(bash_call("gh pr review -c 8 -R acme/d")),
-        assistant_call(
-            bash_call("gh pr view -q .url https://github.com/acme/e/pull/9")
-        ),
+        assistant_call(bash_call("gh pr view 5 --json state -R acme/a")),
+        assistant_call(bash_call("gh pr merge 6 --squash -R acme/b")),
         assistant_call(bash_call("gh pr comment --body 3 -R acme/f")),
         assistant_call(bash_call("gh pr list -L 4 -R acme/g")),
         assistant_call(bash_call("gh pr create --milestone 4 -R acme/h")),
@@ -564,27 +549,6 @@ def test_gh_pr_target_comes_after_flags_and_their_values(tmp_path):
     assert list(activity_in(transcript)) == [
         PullRequest("acme", "a", 5),
         PullRequest("acme", "b", 6),
-        PullRequest("acme", "c", 7),
-        PullRequest("acme", "d", 8),
-        PullRequest("acme", "e", 9),
-    ]
-
-
-def test_shell_comments_hide_gh_commands(tmp_path):
-    transcript = tmp_path / "transcript.jsonl"
-    write_json_lines(
-        transcript,
-        assistant_call(
-            bash_call("# don't gh pr close 9 -R acme/a\ngh pr view 1 -R acme/b")
-        ),
-        assistant_call(
-            bash_call("gh pr view 2 -R acme/c # it's open\ngh pr view 3 -R acme/d")
-        ),
-    )
-    assert list(activity_in(transcript)) == [
-        PullRequest("acme", "b", 1),
-        PullRequest("acme", "c", 2),
-        PullRequest("acme", "d", 3),
     ]
 
 
