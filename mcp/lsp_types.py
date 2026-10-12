@@ -90,10 +90,27 @@ class ResponseError(TypedDict):
     message: str
 
 
-class Message(TypedDict, total=False):
+RequestId: TypeAlias = int | str
+
+
+class Request(TypedDict):
     jsonrpc: str
-    id: int | str
+    id: RequestId
     method: str
-    params: LSPAny
-    result: LSPAny
-    error: ResponseError
+    params: NotRequired[LSPAny]
+
+
+class Notification(TypedDict):
+    jsonrpc: str
+    method: str
+    params: NotRequired[LSPAny]
+
+
+class Response(TypedDict):
+    jsonrpc: str
+    id: RequestId
+    result: NotRequired[LSPAny]
+    error: NotRequired[ResponseError]
+
+
+Message: TypeAlias = Request | Notification | Response

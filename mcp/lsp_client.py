@@ -5,13 +5,22 @@ import pathlib
 import subprocess
 import sys
 
-from lsp_types import FileEvent, LSPAny, Message
+from lsp_types import (
+    FileEvent,
+    LSPAny,
+    Message,
+    Request,
+    RequestId,
+    Response,
+    ResponseError,
+)
 from open_documents import OpenDocuments
 from text_positions import lsp_position, to_uri
 
 QUIET_SECONDS_BEFORE_READY = 2.0
 MAX_STARTUP_SECONDS = 90.0
 REQUEST_TIMEOUT_SECONDS = 60.0
+METHOD_NOT_FOUND = -32601
 
 
 class LanguageServerExited(RuntimeError):
@@ -59,7 +68,7 @@ class LanguageServer:
         self.stdout = process.stdout
         self.root = root
         self.documents = OpenDocuments(language_ids, self.notify)
-        self.pending: dict[int, asyncio.Future[LSPAny]] = {}
+        self.pending: dict[RequestId, asyncio.Future[LSPAny]] = {}
         self.next_id = 1
         self.last_message_at = 0.0
         self.reader_task = asyncio.create_task(self.read_messages())
@@ -114,9 +123,6 @@ class LanguageServer:
         body = json.dumps(message).encode()
         self.stdin.write(b"Content-Length: %d\r\n\r\n" % len(body) + body)
 
-    def reply(self, request_id: int | str, **fields: LSPAny) -> None:
-        self.send({"jsonrpc": "2.0", "id": request_id, **fields})
-
     def notify(self, method: str, params: LSPAny) -> None:
         self.send({"jsonrpc": "2.0", "method": method, "params": params})
 
@@ -167,35 +173,38 @@ class LanguageServer:
         self.pending.clear()
 
     def dispatch(self, message: Message) -> None:
-        if "id" not in message:
+        if "method" not in message:
+            self.resolve_pending(message)
             return
-        if "method" in message:
+        if "id" in message:
             self.answer_server_request(message)
-            return
-        future = self.pending.pop(message["id"], None)
+
+    def resolve_pending(self, response: Response) -> None:
+        future = self.pending.pop(response["id"], None)
         if future is None or future.done():
             return
-        if "error" in message:
-            error = message["error"].get("message", "language server error")
+        if "error" in response:
+            error = response["error"].get("message", "language server error")
             future.set_exception(RuntimeError(error))
             return
-        future.set_result(message.get("result"))
+        future.set_result(response.get("result"))
 
-    def answer_server_request(self, message: Message) -> None:
-        method = message["method"]
+    def answer_server_request(self, request: Request) -> None:
+        method = request["method"]
         if method == "workspace/configuration":
-            result = [None for _ in message.get("params", {}).get("items", [])]
+            result = [None for _ in request.get("params", {}).get("items", [])]
         elif method == "workspace/applyEdit":
             result = {"applied": False}
         elif method.startswith(("window/workDoneProgress", "client/")):
             result = None
         else:
-            self.reply(
-                message["id"],
-                error={"code": -32601, "message": f"{method} is not supported"},
-            )
+            error: ResponseError = {
+                "code": METHOD_NOT_FOUND,
+                "message": f"{method} is not supported",
+            }
+            self.send({"jsonrpc": "2.0", "id": request["id"], "error": error})
             return
-        self.reply(message["id"], result=result)
+        self.send({"jsonrpc": "2.0", "id": request["id"], "result": result})
 
     def apply_file_changes(self, events: list[FileEvent]) -> None:
         if not events:
