@@ -110,7 +110,9 @@ class LanguageServer:
         self.next_id += 1
         future = asyncio.get_event_loop().create_future()
         self.pending[request_id] = future
-        self.reply(request_id, method=method, params=params)
+        self.send(
+            {"jsonrpc": "2.0", "id": request_id, "method": method, "params": params}
+        )
         try:
             return await asyncio.wait_for(future, REQUEST_TIMEOUT_SECONDS)
         finally:
