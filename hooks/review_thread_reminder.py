@@ -116,13 +116,16 @@ def matching_offsets(memory, part):
     return memory
 
 
-def claim_unseen_threads(key, part, activity, states):
+def scanned_memory(memory, part, activity, states):
     scanned = next_scan_start(part, activity, states)
+    return updated_memory(matching_offsets(memory, part), states, activity, scanned)
+
+
+def remember_scan(key, part, activity, states):
     with locked_session_file(STATE_DIR, key) as state_file:
-        memory = matching_offsets(read_record(state_file, EMPTY_MEMORY), part)
-        changed = threads_with_new_comments(open_threads(states), memory.seen)
-        write_record(state_file, updated_memory(memory, states, activity, scanned))
-    return changed
+        memory_before = read_record(state_file, EMPTY_MEMORY)
+        write_record(state_file, scanned_memory(memory_before, part, activity, states))
+    return memory_before
 
 
 def reminder(changed):
@@ -157,7 +160,8 @@ def review_reminder(payload):
     part = transcript_part_from(transcript_path, memory.scanned)
     activity = new_activity(part, matching_offsets(memory, part))
     states = review_states(list(activity), thread_source())
-    changed = claim_unseen_threads(key, part, activity, states)
+    memory_before_scan = remember_scan(key, part, activity, states)
+    changed = threads_with_new_comments(open_threads(states), memory_before_scan.seen)
     return reminder(changed) if changed else None
 
 
