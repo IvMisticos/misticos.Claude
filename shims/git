@@ -3,7 +3,6 @@
 set -euo pipefail
 
 . "$(dirname "$0")/lib/real_tool.sh"
-shopt -s nocasematch
 
 location_options=()
 subcommand=""
@@ -16,8 +15,18 @@ deny() {
   exit 1
 }
 
+equals_ignoring_case() (
+  shopt -s nocasematch
+  [[ $1 == "$2" ]]
+)
+
+contains_ignoring_case() (
+  shopt -s nocasematch
+  [[ $1 == *"$2"* ]]
+)
+
 is_identity_key() {
-  [[ $1 == user.name || $1 == user.email ]]
+  equals_ignoring_case "$1" user.name || equals_ignoring_case "$1" user.email
 }
 
 environment_identity() {
@@ -28,7 +37,8 @@ environment_identity() {
 environment_changes_identity() {
   local index name
   [ "$(environment_identity)" != "${HARNESS_GIT_IDENTITY-|||}" ] && return 0
-  [[ ${GIT_CONFIG_PARAMETERS-} == *"'user.name="* || ${GIT_CONFIG_PARAMETERS-} == *"'user.email="* ]] && return 0
+  contains_ignoring_case "${GIT_CONFIG_PARAMETERS-}" "'user.name=" && return 0
+  contains_ignoring_case "${GIT_CONFIG_PARAMETERS-}" "'user.email=" && return 0
   for ((index = 0; index < ${GIT_CONFIG_COUNT:-0}; index++)); do
     name="GIT_CONFIG_KEY_$index"
     is_identity_key "${!name-}" && return 0
@@ -62,8 +72,8 @@ config_changes_user_section() {
   for word in "$@"; do
     case $word in
       --remove-section | --rename-section | remove-section | rename-section) changes_a_section=true ;;
-      user) names_user=true ;;
     esac
+    if equals_ignoring_case "$word" user; then names_user=true; fi
   done
   $changes_a_section && $names_user
 }
