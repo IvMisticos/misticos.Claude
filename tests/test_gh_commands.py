@@ -137,3 +137,11 @@ def test_quoted_operators_stay_inside_the_gh_call(body):
 )
 def test_heredoc_bodies_are_not_commands(command, argument_lists):
     assert gh_argument_lists(command) == argument_lists
+
+
+@pytest.mark.parametrize(
+    "command", ['gh pr create --title "unterminated', "((gh pr create) | wc)"]
+)
+def test_calls_behind_broken_quotes_or_nested_subshells_are_found(command):
+    [arguments] = gh_argument_lists(command)
+    assert gh_pr_call(arguments).creates_a_pull_request()
