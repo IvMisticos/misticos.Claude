@@ -32,6 +32,10 @@ REMOTE_SESSION_TOOLS = (
     "set_session_tags",
     "set_session_title",
     "list_environments",
+    "list_events",
+    "get_event",
+    "watch_url",
+    "unwatch_url",
 )
 DISABLED_PLUGINS = ("cowork-plugin-management@synced",)
 USER_INVOCABLE_ONLY = "user-invocable-only"
