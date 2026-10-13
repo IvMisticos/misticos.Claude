@@ -4,7 +4,6 @@
 # dependencies = ["tomli-w"]
 # ///
 
-import fcntl
 import json
 import os
 import shutil
@@ -19,9 +18,6 @@ import tomli_w
 HOME = Path.home()
 CLAUDE_DIR = HOME / ".claude"
 CODEX_DIR = HOME / ".codex"
-SETTINGS_LOCK_FILE = "misticos-settings.lock"
-WRITTEN_DENIES_FILE = "misticos-written-denies.json"
-WRITTEN_SKILL_OVERRIDES_FILE = "misticos-written-skill-overrides.json"
 INSTALLED_PLUGINS = CLAUDE_DIR / "plugins" / "installed_plugins.json"
 WEB_GUIDANCE_PLUGIN = "modern-web-guidance@googlechrome"
 CLOUD_SESSION_MARK = "CCR_AGENT_PROXY_ENABLED"
@@ -37,6 +33,7 @@ REMOTE_SESSION_TOOLS = (
     "set_session_title",
     "list_environments",
 )
+DISABLED_PLUGINS = ("cowork-plugin-management@synced",)
 USER_INVOCABLE_ONLY = "user-invocable-only"
 USER_INVOCABLE_ONLY_SKILLS = (
     "session-start-hook",
@@ -124,91 +121,32 @@ def read_json(path):
     return json.loads(text) if text.strip() else {}
 
 
-class ManagedEntries:
-    def __init__(self, file_name, key, wanted):
-        self.path = CLAUDE_DIR / file_name
-        self.key = key
-        self.wanted = wanted
-        self.recorded = read_json(self.path).get(key, [])
-        self.added = []
-
-    def retired(self, is_retirable=lambda name: True):
-        return [
-            name
-            for name in self.recorded
-            if name not in self.wanted and is_retirable(name)
-        ]
-
-    def additions(self, kept_names):
-        self.added = [name for name in self.wanted if name not in kept_names]
-        return self.added
-
-    def record_before_settings_write(self):
-        self.write(
-            [*self.recorded, *(name for name in self.added if name not in self.recorded)]
-        )
-
-    def record_after_settings_write(self):
-        self.write(
-            [
-                name
-                for name in self.wanted
-                if name in self.recorded or name in self.added
-            ]
-        )
-
-    def write(self, names):
-        if read_json(self.path).get(self.key) == names:
-            return
-        write_atomically(self.path, json.dumps({self.key: names}, indent=2) + "\n")
-
-
 def configure_claude_settings():
     CLAUDE_DIR.mkdir(parents=True, exist_ok=True)
-    with open(CLAUDE_DIR / SETTINGS_LOCK_FILE, "w") as lock_file:
-        fcntl.flock(lock_file, fcntl.LOCK_EX)
-        write_claude_settings()
-
-
-def write_claude_settings():
     settings_path = CLAUDE_DIR / "settings.json"
     settings = read_json(settings_path)
     wanted = dict(settings)
     wanted["attribution"] = {"commit": "", "pr": "", "sessionUrl": False}
     wanted["autoMemoryEnabled"] = False
     wanted["autoCompactWindow"] = AUTO_COMPACT_WINDOW_TOKENS
-    denies = ManagedEntries(WRITTEN_DENIES_FILE, "deny", DENIED_TOOLS)
     permissions = dict(settings.get("permissions", {}))
-    retired_denies = denies.retired()
-    kept_denies = [
-        tool for tool in permissions.get("deny", []) if tool not in retired_denies
-    ]
-    permissions["deny"] = kept_denies + denies.additions(kept_denies)
+    denied = permissions.get("deny", [])
+    permissions["deny"] = denied + [tool for tool in DENIED_TOOLS if tool not in denied]
     wanted["permissions"] = permissions
-    skills = ManagedEntries(
-        WRITTEN_SKILL_OVERRIDES_FILE, "skills", USER_INVOCABLE_ONLY_SKILLS
-    )
-    overrides = settings.get("skillOverrides", {})
-    retired_skills = skills.retired(
-        lambda skill: overrides.get(skill) == USER_INVOCABLE_ONLY
-    )
-    kept_overrides = {
-        skill: mode for skill, mode in overrides.items() if skill not in retired_skills
-    }
     wanted["skillOverrides"] = {
-        **kept_overrides,
-        **dict.fromkeys(skills.additions(kept_overrides), USER_INVOCABLE_ONLY),
+        **dict.fromkeys(USER_INVOCABLE_ONLY_SKILLS, USER_INVOCABLE_ONLY),
+        **settings.get("skillOverrides", {}),
+    }
+    wanted["enabledPlugins"] = {
+        **dict.fromkeys(DISABLED_PLUGINS, False),
+        **settings.get("enabledPlugins", {}),
     }
     wanted["env"] = {
         **settings.get("env", {}),
         "CLAUDE_CODE_TERMINAL_MCP_TOOLS": TURN_ENDING_TOOLS,
     }
-    denies.record_before_settings_write()
-    skills.record_before_settings_write()
     if wanted != settings:
         write_atomically(settings_path, json.dumps(wanted, indent=2) + "\n")
-    denies.record_after_settings_write()
-    skills.record_after_settings_write()
 
 
 def install_web_guidance_plugin():
