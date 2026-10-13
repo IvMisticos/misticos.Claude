@@ -65,6 +65,16 @@ def session_id_of(payload):
     return session_id if isinstance(session_id, str) else None
 
 
+def agent_session_key(payload):
+    session_id = session_id_of(payload)
+    agent_id = payload.get("agent_id")
+    if session_id is None:
+        return None
+    if isinstance(agent_id, str) and agent_id:
+        return f"{session_id}-{agent_id}"
+    return session_id
+
+
 def is_subagent(payload):
     return bool(payload.get("agent_id") or payload.get("subagent_id"))
 

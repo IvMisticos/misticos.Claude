@@ -6,8 +6,10 @@ from conftest import home_environment, run_json_hook
 NOTE = Path(__file__).resolve().parent.parent / "hooks" / "note.py"
 
 
-def call_note(home, name, session_id):
+def call_note(home, name, session_id, agent_id=None):
     payload = {"hook_event_name": "PostToolUse", "session_id": session_id}
+    if agent_id:
+        payload["agent_id"] = agent_id
     return run_json_hook(NOTE, payload, name, env=home_environment(home))
 
 
@@ -23,6 +25,14 @@ def test_notifications_note_comes_on_every_fifth_call(tmp_path):
 def test_notifications_count_is_per_session(tmp_path):
     noted_calls(tmp_path, "notifications", "s1", 2)
     assert call_note(tmp_path, "notifications", "s2") is not None
+    assert call_note(tmp_path, "notifications", "s1") is None
+
+
+def test_notifications_count_is_per_agent_within_a_session(tmp_path):
+    noted_calls(tmp_path, "notifications", "s1", 2)
+    assert call_note(tmp_path, "notifications", "s1", "a1") is not None
+    assert call_note(tmp_path, "notifications", "s1", "a1") is None
+    assert call_note(tmp_path, "notifications", "s1", "a2") is not None
     assert call_note(tmp_path, "notifications", "s1") is None
 
 
