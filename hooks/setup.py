@@ -17,19 +17,28 @@ import tomli_w
 HOME = Path.home()
 CLAUDE_DIR = HOME / ".claude"
 CODEX_DIR = HOME / ".codex"
+WRITTEN_DENIES_FILE = "misticos-written-denies.json"
 INSTALLED_PLUGINS = CLAUDE_DIR / "plugins" / "installed_plugins.json"
 WEB_GUIDANCE_PLUGIN = "modern-web-guidance@googlechrome"
 CLOUD_SESSION_MARK = "CCR_AGENT_PROXY_ENABLED"
 AUTO_COMPACT_WINDOW_TOKENS = 400_000
+REMOTE_SERVER_NAMES = ("claude-code-remote", "Claude_Code_Remote")
+REMOTE_SESSION_TOOLS = (
+    "archive_session",
+    "unarchive_session",
+    "create_session",
+    "interrupt_session",
+    "list_sessions",
+    "set_session_tags",
+    "set_session_title",
+    "list_environments",
+)
 DENIED_TOOLS = (
-    "mcp__claude-code-remote__archive_session",
-    "mcp__claude-code-remote__unarchive_session",
-    "mcp__claude-code-remote__create_session",
-    "mcp__claude-code-remote__interrupt_session",
-    "mcp__claude-code-remote__list_sessions",
-    "mcp__claude-code-remote__set_session_tags",
-    "mcp__claude-code-remote__set_session_title",
-    "mcp__claude-code-remote__list_environments",
+    *(
+        f"mcp__{server}__{tool}"
+        for server in REMOTE_SERVER_NAMES
+        for tool in REMOTE_SESSION_TOOLS
+    ),
     "ScheduleWakeup",
     "ShowOnboardingRolePicker",
     "SuggestSkills",
@@ -93,10 +102,14 @@ def configure_claude_settings():
     wanted["autoMemoryEnabled"] = False
     wanted["autoCompactWindow"] = AUTO_COMPACT_WINDOW_TOKENS
     permissions = dict(settings.get("permissions", {}))
-    existing_denies = permissions.get("deny", [])
-    permissions["deny"] = existing_denies + [
-        tool for tool in DENIED_TOOLS if tool not in existing_denies
+    written_denies_path = CLAUDE_DIR / WRITTEN_DENIES_FILE
+    written_denies = read_json(written_denies_path).get("deny", [])
+    retired_denies = [tool for tool in written_denies if tool not in DENIED_TOOLS]
+    kept_denies = [
+        tool for tool in permissions.get("deny", []) if tool not in retired_denies
     ]
+    added_denies = [tool for tool in DENIED_TOOLS if tool not in kept_denies]
+    permissions["deny"] = kept_denies + added_denies
     wanted["permissions"] = permissions
     wanted["env"] = {
         **settings.get("env", {}),
@@ -104,6 +117,11 @@ def configure_claude_settings():
     }
     if wanted != settings:
         write_atomically(settings_path, json.dumps(wanted, indent=2) + "\n")
+    still_written = [tool for tool in written_denies if tool in DENIED_TOOLS]
+    write_atomically(
+        written_denies_path,
+        json.dumps({"deny": still_written + added_denies}, indent=2) + "\n",
+    )
 
 
 def install_web_guidance_plugin():
