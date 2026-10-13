@@ -33,17 +33,25 @@ install_uv_once() {
 }
 
 hash_file() {
-  { sha256sum "$1" 2>/dev/null || shasum -a 256 "$1"; } | cut -d' ' -f1
+  { sha256sum "$1" || shasum -a 256 "$1"; } 2>/dev/null | cut -d' ' -f1
+}
+
+setup_key() {
+  local hash boot_id
+  hash=$(hash_file "$1") && [ -n "$hash" ] || return 1
+  boot_id=$(cat "${SETUP_BOOT_ID_FILE:-/proc/sys/kernel/random/boot_id}" 2>/dev/null || true)
+  echo "$hash $boot_id"
 }
 
 hooks_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
 remember_setup=false
 if [ "${1-}" = setup.py ] && [ -n "${CLAUDE_PLUGIN_DATA-}" ]; then
-  remember_setup=true
   setup_marker="$CLAUDE_PLUGIN_DATA/setup-complete"
-  setup_hash=$(hash_file "$hooks_dir/setup.py")
-  [ "$(cat "$setup_marker" 2>/dev/null)" = "$setup_hash" ] && exit 0
+  if setup_key_value=$(setup_key "$hooks_dir/setup.py"); then
+    remember_setup=true
+    [ "$(cat "$setup_marker" 2>/dev/null)" = "$setup_key_value" ] && exit 0
+  fi
 fi
 
 command -v uv >/dev/null || install_uv_once
@@ -58,4 +66,4 @@ fi
 
 uv run "$@"
 mkdir -p "$CLAUDE_PLUGIN_DATA"
-printf '%s\n' "$setup_hash" > "$setup_marker"
+echo "$setup_key_value" > "$setup_marker"
