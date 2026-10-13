@@ -41,12 +41,16 @@ def run_pipeline(script):
     run("bash", "-o", "pipefail", "-c", script)
 
 
+def web_guidance_plugin_choice():
+    enabled = read_json_file(CLAUDE_SETTINGS).get("enabledPlugins", {})
+    return enabled.get(WEB_GUIDANCE_PLUGIN)
+
+
 def web_guidance_plugin_wanted():
     installed = read_json_file(INSTALLED_PLUGINS).get("plugins", {})
-    enabled = read_json_file(CLAUDE_SETTINGS).get("enabledPlugins", {})
     return (
         WEB_GUIDANCE_PLUGIN not in installed
-        and enabled.get(WEB_GUIDANCE_PLUGIN) is not False
+        and web_guidance_plugin_choice() is not False
     )
 
 
@@ -102,14 +106,21 @@ def reapply_settings():
     run(str(HOOKS_DIR / "run.sh"), "setup_settings.py")
 
 
-def main():
-    if web_guidance_plugin_wanted():
-        try:
-            install_web_guidance_plugin()
-        finally:
-            reapply_settings()
+def set_up_web_guidance_plugin():
+    try:
+        install_web_guidance_plugin()
+    finally:
+        reapply_settings()
+    if web_guidance_plugin_choice() is not True:
         enable_web_guidance_plugin()
-    install_cloud_tools()
+
+
+def main():
+    try:
+        if web_guidance_plugin_wanted():
+            set_up_web_guidance_plugin()
+    finally:
+        install_cloud_tools()
 
 
 if __name__ == "__main__":
