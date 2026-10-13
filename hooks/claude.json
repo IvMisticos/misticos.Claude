@@ -172,7 +172,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/run.sh\" agent_scratch.py"
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/run.sh\" agent_scratch.py",
+            "async": true
           }
         ]
       },
@@ -190,7 +191,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/run.sh\" agent_scratch.py"
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/run.sh\" agent_scratch.py",
+            "async": true
           }
         ]
       }
