@@ -16,9 +16,8 @@ from hook_io import (
 from plugin_paths import DATA_ROOT
 from session_state import locked_session_file, read_record, write_record
 
-CALL_COUNT_DIR = DATA_ROOT / "note-calls"
-THROTTLED_NOTES = {"notifications"}
-NOTE_EVERY_CALLS = 5
+NOTIFICATION_CALLS_DIR = DATA_ROOT / "notification-calls"
+NOTIFICATIONS_NOTE_EVERY_CALLS = 5
 
 NOTES = {
     "agent-roles": (
@@ -39,24 +38,30 @@ NOTES = {
 }
 
 
-class CallCount(NamedTuple):
-    calls: int = 0
+class NotificationCalls(NamedTuple):
+    notifications: int = 0
 
 
-def is_due(name, agent_key):
-    if name not in THROTTLED_NOTES or agent_key is None:
+def is_notifications_note_due(agent_key):
+    if agent_key is None:
         return True
-    with locked_session_file(CALL_COUNT_DIR, f"{agent_key}-{name}") as state_file:
-        previous_calls = read_record(state_file, CallCount()).calls
-        write_record(state_file, CallCount(previous_calls + 1))
-    return previous_calls % NOTE_EVERY_CALLS == 0
+    with locked_session_file(NOTIFICATION_CALLS_DIR, agent_key) as state_file:
+        previous = read_record(state_file, NotificationCalls()).notifications
+        write_record(state_file, NotificationCalls(previous + 1))
+    return previous % NOTIFICATIONS_NOTE_EVERY_CALLS == 0
+
+
+def is_due(name, payload):
+    if name != "notifications":
+        return True
+    return is_notifications_note_due(agent_session_key(payload))
 
 
 def main():
     name = sys.argv[1]
     payload = read_payload()
     event = event_name_of(payload)
-    if event and is_due(name, agent_session_key(payload)):
+    if event and is_due(name, payload):
         write_context(event, NOTES[name])
 
 
