@@ -1,7 +1,6 @@
 import os
 import re
 import sys
-from itertools import batched
 from typing import NamedTuple
 
 MAX_INJECTED_CHARS = 10_000
@@ -94,7 +93,7 @@ def parts_within_budget(text, budget):
         parts = packed_parts(re.split(block_break, text), budget)
         if all(len(part) <= budget for part in parts):
             return parts
-    return ["".join(characters) for characters in batched(text, budget)]
+    return [text[at : at + budget] for at in range(0, len(text), budget)]
 
 
 def part_messages(text, budget, name, first_preamble):
