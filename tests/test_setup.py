@@ -1,11 +1,14 @@
 import hashlib
+import json
 import shutil
 import subprocess
 from pathlib import Path
 from typing import Protocol
 
 import pytest
+import setup
 from conftest import ROOT, FakeBin, installed
+from json_values import JsonObject
 
 HOOKS = ROOT / "hooks"
 FAKE_UV = """#!/usr/bin/env bash
@@ -148,3 +151,25 @@ def test_missing_hash_tool_runs_setup_without_a_marker(
     result = run_hook(path=str(tools))
     assert (ran_uv(result), result.returncode) == (True, 0)
     assert not marker.exists()
+
+
+@pytest.mark.parametrize(
+    "settings",
+    [
+        {"permissions": ["Bash"]},
+        {"permissions": {"deny": "Bash"}},
+        {"skillOverrides": "x"},
+        {"enabledPlugins": 1},
+        {"env": ["A=1"]},
+    ],
+)
+def test_malformed_claude_settings_stay_untouched(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, settings: JsonObject
+) -> None:
+    monkeypatch.setattr(setup, "CLAUDE_DIR", tmp_path)
+    settings_path = tmp_path / "settings.json"
+    stored = json.dumps(settings)
+    settings_path.write_text(stored)
+    with pytest.raises(TypeError):
+        setup.configure_claude_settings()
+    assert settings_path.read_text() == stored

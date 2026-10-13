@@ -17,7 +17,7 @@ import tomllib
 from pathlib import Path
 
 import tomli_w
-from json_values import JsonObject, dict_or_empty
+from json_values import JsonObject, JsonValue, dict_or_empty
 
 HOME = Path.home()
 CLAUDE_DIR = HOME / ".claude"
@@ -148,6 +148,20 @@ def read_json(path: Path) -> JsonObject:
     return value
 
 
+def object_setting(settings: JsonObject, key: str) -> JsonObject:
+    value = settings.get(key, {})
+    if not isinstance(value, dict):
+        raise TypeError(f"Claude setting {key} is not a JSON object")
+    return value
+
+
+def list_setting(settings: JsonObject, key: str) -> list[JsonValue]:
+    value = settings.get(key, [])
+    if not isinstance(value, list):
+        raise TypeError(f"Claude setting {key} is not a JSON list")
+    return value
+
+
 def configure_claude_settings() -> None:
     CLAUDE_DIR.mkdir(parents=True, exist_ok=True)
     settings_path = CLAUDE_DIR / "settings.json"
@@ -156,21 +170,20 @@ def configure_claude_settings() -> None:
     wanted["attribution"] = {"commit": "", "pr": "", "sessionUrl": False}
     wanted["autoMemoryEnabled"] = False
     wanted["autoCompactWindow"] = AUTO_COMPACT_WINDOW_TOKENS
-    permissions = dict(dict_or_empty(settings.get("permissions")))
-    denied = permissions.get("deny")
-    denied = denied if isinstance(denied, list) else []
+    permissions = dict(object_setting(settings, "permissions"))
+    denied = list_setting(permissions, "deny")
     permissions["deny"] = denied + [tool for tool in DENIED_TOOLS if tool not in denied]
     wanted["permissions"] = permissions
     wanted["skillOverrides"] = {
         **dict.fromkeys(USER_INVOCABLE_ONLY_SKILLS, USER_INVOCABLE_ONLY),
-        **dict_or_empty(settings.get("skillOverrides")),
+        **object_setting(settings, "skillOverrides"),
     }
     wanted["enabledPlugins"] = {
         **dict.fromkeys(DISABLED_PLUGINS, False),
-        **dict_or_empty(settings.get("enabledPlugins")),
+        **object_setting(settings, "enabledPlugins"),
     }
     wanted["env"] = {
-        **dict_or_empty(settings.get("env")),
+        **object_setting(settings, "env"),
         "CLAUDE_CODE_ACT_DONT_REDERIVE": "0",
         "CLAUDE_CODE_ARTIFACT_COMMENT_FAST_ACK": "0",
         "CLAUDE_CODE_ARTIFACT_COMMENT_FAST_ACK_FIXED": "0",
