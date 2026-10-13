@@ -1,80 +1,109 @@
-import importlib.util
+import hashlib
 import shutil
 import subprocess
-import sys
-import types
 
 import pytest
 from conftest import ROOT
 
 HOOKS = ROOT / "hooks"
-MARKER_NAME = ".setup-complete"
-STEPS = (
-    "install_web_guidance_plugin",
-    "configure_claude_settings",
-    "configure_codex",
-    "install_cloud_tools",
-)
+FAKE_UV = """#!/usr/bin/env bash
+echo "uv $*"
+exit "${UV_STATUS-0}"
+"""
 
 
 @pytest.fixture
-def setup_module(monkeypatch, tmp_path):
-    monkeypatch.setitem(sys.modules, "tomli_w", types.ModuleType("tomli_w"))
-    monkeypatch.syspath_prepend(str(HOOKS))
-    spec = importlib.util.spec_from_file_location("setup_hook", HOOKS / "setup.py")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    assert module.SETUP_MARKER == ROOT / MARKER_NAME
-    monkeypatch.setattr(module, "SETUP_MARKER", tmp_path / MARKER_NAME)
-    return module
+def plugin_data(tmp_path):
+    return tmp_path / "plugin-data"
 
 
 @pytest.fixture
-def steps_run(monkeypatch, setup_module):
-    calls = []
-    for step in STEPS:
-        monkeypatch.setattr(setup_module, step, lambda step=step: calls.append(step))
-    return calls
+def marker(plugin_data):
+    return plugin_data / "setup-complete"
 
 
-def test_marker_is_ignored_by_git():
-    assert MARKER_NAME in (ROOT / ".gitignore").read_text().splitlines()
+@pytest.fixture
+def current_hash():
+    return hashlib.sha256((HOOKS / "setup.py").read_bytes()).hexdigest()
 
 
-def test_does_nothing_when_the_marker_exists(setup_module, steps_run):
-    setup_module.SETUP_MARKER.touch()
-    setup_module.main()
-    assert steps_run == []
+@pytest.fixture
+def run_hook(tmp_path, home, fake_bin, plugin_data):
+    bin_dir = fake_bin("uv", FAKE_UV)
+    scripts = tmp_path / "scripts"
+    scripts.mkdir()
+    shutil.copy(HOOKS / "run.sh", scripts / "run.sh")
+    shutil.copy(HOOKS / "setup.py", scripts / "setup.py")
+    (scripts / "other.py").touch()
+
+    def run(script="setup.py", **extra_environment):
+        environment = {
+            "HOME": str(home),
+            "PATH": f"{bin_dir}:/usr/bin:/bin",
+            "CLAUDE_PLUGIN_DATA": str(plugin_data),
+            **extra_environment,
+        }
+        return subprocess.run(
+            [scripts / "run.sh", script],
+            env={name: value for name, value in environment.items() if value},
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+    return run
 
 
-def test_a_successful_run_writes_the_marker(setup_module, steps_run):
-    setup_module.main()
-    assert steps_run == list(STEPS)
-    assert setup_module.SETUP_MARKER.exists()
+def ran_uv(result):
+    return result.stdout.startswith("uv run ")
 
 
-def test_a_failed_run_leaves_no_marker(monkeypatch, setup_module, steps_run):
-    def fail():
-        raise subprocess.CalledProcessError(1, "apt-get")
-
-    monkeypatch.setattr(setup_module, "install_cloud_tools", fail)
-    with pytest.raises(subprocess.CalledProcessError):
-        setup_module.main()
-    assert not setup_module.SETUP_MARKER.exists()
+def write_marker(plugin_data, marker, content):
+    plugin_data.mkdir()
+    marker.write_text(content)
 
 
-def test_run_script_skips_setup_when_the_marker_exists(tmp_path):
-    hooks = tmp_path / "plugin" / "hooks"
-    hooks.mkdir(parents=True)
-    shutil.copy(HOOKS / "run.sh", hooks / "run.sh")
-    (hooks / "setup.py").touch()
-    (hooks.parent / MARKER_NAME).touch()
-    result = subprocess.run(
-        [hooks / "run.sh", "setup.py"],
-        env={"HOME": str(tmp_path / "home"), "PATH": "/usr/bin:/bin"},
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-    assert (result.stdout, result.stderr) == ("", "")
-    assert not (tmp_path / "home").exists()
+def test_matching_marker_skips_setup(run_hook, plugin_data, marker, current_hash):
+    write_marker(plugin_data, marker, current_hash + "\n")
+    result = run_hook()
+    assert (result.returncode, result.stdout) == (0, "")
+
+
+def test_missing_marker_runs_setup_and_writes_it(run_hook, marker, current_hash):
+    assert ran_uv(run_hook())
+    assert marker.read_text().strip() == current_hash
+
+
+def test_stale_marker_runs_setup_and_rewrites_it(
+    run_hook, plugin_data, marker, current_hash
+):
+    write_marker(plugin_data, marker, "stale\n")
+    assert ran_uv(run_hook())
+    assert marker.read_text().strip() == current_hash
+
+
+def test_failed_setup_writes_no_marker(run_hook, marker):
+    result = run_hook(UV_STATUS="3")
+    assert (ran_uv(result), result.returncode) == (True, 3)
+    assert not marker.exists()
+
+
+def test_failed_setup_keeps_a_stale_marker_stale(run_hook, plugin_data, marker):
+    write_marker(plugin_data, marker, "stale\n")
+    run_hook(UV_STATUS="3")
+    assert marker.read_text() == "stale\n"
+
+
+def test_other_scripts_never_skip(run_hook, plugin_data, marker, current_hash):
+    write_marker(plugin_data, marker, current_hash + "\n")
+    assert ran_uv(run_hook("other.py"))
+
+
+def test_other_scripts_write_no_marker(run_hook, marker):
+    run_hook("other.py")
+    assert not marker.exists()
+
+
+def test_unset_plugin_data_always_runs_setup(run_hook, tmp_path):
+    assert ran_uv(run_hook(CLAUDE_PLUGIN_DATA=""))
+    assert not (tmp_path / "setup-complete").exists()

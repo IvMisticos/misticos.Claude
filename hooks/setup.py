@@ -14,9 +14,7 @@ import tomllib
 from pathlib import Path
 
 import tomli_w
-from plugin_paths import PLUGIN_ROOT
 
-SETUP_MARKER = PLUGIN_ROOT / ".setup-complete"
 HOME = Path.home()
 CLAUDE_DIR = HOME / ".claude"
 CODEX_DIR = HOME / ".codex"
@@ -254,13 +252,10 @@ def install_cloud_tools():
 
 
 def main():
-    if SETUP_MARKER.exists():
-        return
     install_web_guidance_plugin()
     configure_claude_settings()
     configure_codex()
     install_cloud_tools()
-    SETUP_MARKER.touch()
 
 
 if __name__ == "__main__":
