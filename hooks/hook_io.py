@@ -138,6 +138,6 @@ def run_pre_tool_use(decide: PreToolUseDecider):
 def run_hook(main):
     try:
         main()
-    except Exception:
+    except Exception:  # noqa: BLE001
         traceback.print_exc()
         sys.exit(0)
