@@ -55,6 +55,10 @@ def install_web_guidance_plugin():
     run("claude", "plugin", "install", WEB_GUIDANCE_PLUGIN, "--scope", "user")
 
 
+def enable_web_guidance_plugin():
+    run("claude", "plugin", "enable", WEB_GUIDANCE_PLUGIN, "--scope", "user")
+
+
 def install_apt_packages():
     packages = ("git-lfs", "curl", "jq", "gh", "unzip")
     if any(shutil.which(package) is None for package in packages):
@@ -104,6 +108,7 @@ def main():
             install_web_guidance_plugin()
         finally:
             reapply_settings()
+        enable_web_guidance_plugin()
     install_cloud_tools()
 
 

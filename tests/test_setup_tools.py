@@ -10,6 +10,7 @@ WEB_GUIDANCE_PLUGIN = "modern-web-guidance@googlechrome"
 MARKETPLACE_ADD = "claude plugin marketplace add GoogleChrome/modern-web-guidance"
 INSTALL = f"claude plugin install {WEB_GUIDANCE_PLUGIN} --scope user"
 REAPPLY_SETTINGS = "run.sh setup_settings.py"
+ENABLE = f"claude plugin enable {WEB_GUIDANCE_PLUGIN} --scope user"
 FAKE_CLAUDE = """#!/usr/bin/env bash
 echo "claude $*" >> "$HOME/calls"
 [ "$2" != "${CLAUDE_FAILS_AT-}" ]
@@ -59,8 +60,11 @@ def write_json(path, value):
     path.write_text(json.dumps(value))
 
 
-def test_settings_are_reapplied_after_the_plugin_install(set_up_tools):
-    assert set_up_tools() == (0, [MARKETPLACE_ADD, INSTALL, REAPPLY_SETTINGS])
+def test_plugin_is_enabled_after_settings_are_reapplied(set_up_tools):
+    assert set_up_tools() == (
+        0,
+        [MARKETPLACE_ADD, INSTALL, REAPPLY_SETTINGS, ENABLE],
+    )
 
 
 def test_failed_install_still_reapplies_settings(set_up_tools):
