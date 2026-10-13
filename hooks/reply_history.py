@@ -1,3 +1,4 @@
+import copy
 from typing import NamedTuple
 
 from json_values import dict_or_empty
@@ -35,7 +36,7 @@ class EventLog(NamedTuple):
         prompt = Prompt(prompt_id)
         if prompt not in self.history:
             return self
-        return self._replace(history=self.history[self.history.index(prompt) :])
+        return copy.replace(self, history=self.history[self.history.index(prompt) :])
 
     def to_json(self):
         return {
@@ -134,7 +135,7 @@ def windows(history):
         if isinstance(item, Prompt):
             found.append(Window(item.id, 0))
         elif found:
-            found[-1] = found[-1]._replace(reply_count=found[-1].reply_count + 1)
+            found[-1] = copy.replace(found[-1], reply_count=found[-1].reply_count + 1)
     return found
 
 
@@ -144,4 +145,6 @@ def window_under_review(history, remembered, unseen_reply_count):
         return found[-1]
     if not remembered.prompt_id:
         return None
-    return remembered._replace(reply_count=remembered.reply_count + unseen_reply_count)
+    return copy.replace(
+        remembered, reply_count=remembered.reply_count + unseen_reply_count
+    )

@@ -1,4 +1,5 @@
 import contextlib
+import copy
 import os
 from enum import StrEnum
 from typing import NamedTuple
@@ -65,7 +66,7 @@ def next_action(
     if tokens - baselines.pointed_at >= POINTER_EVERY_TOKENS:
         pointed = Baselines(tokens, baselines.copied_at, fire, Action.POINTER)
         return Action.POINTER, pointed
-    return Action.IDLE, baselines._replace(fire=fire, action=Action.IDLE)
+    return Action.IDLE, copy.replace(baselines, fire=fire, action=Action.IDLE)
 
 
 def action_for_fire(
@@ -84,7 +85,7 @@ def claim_action(session_id, fire, can_copy, tokens=None, added_tokens=0) -> Act
             seen = stored.seen if stored else 0
             tokens = seen if already_this_fire else seen + added_tokens
         action, baselines = action_for_fire(stored, fire, tokens, can_copy)
-        write_json(baseline_file, baselines._replace(seen=tokens)._asdict())
+        write_json(baseline_file, copy.replace(baselines, seen=tokens)._asdict())
         return action
 
 

@@ -3,6 +3,7 @@
 # requires-python = ">=3.13"
 # ///
 
+import copy
 import uuid
 from typing import NamedTuple
 
@@ -130,12 +131,12 @@ def repeated_updates_nag(history, memory, unseen):
     nagged_at = memory.nagged_at if memory.window == window.prompt_id else 0
     due_at = nagged_at + MESSAGES_BETWEEN_NAGS if nagged_at else FIRST_NAG_AT_MESSAGES
     count = window.reply_count
-    memory = memory._replace(
-        window=window.prompt_id, window_replies=count, submitted_prompt=""
+    memory = copy.replace(
+        memory, window=window.prompt_id, window_replies=count, submitted_prompt=""
     )
     if count < due_at:
-        return None, memory._replace(nagged_at=nagged_at)
-    return REPEATED_UPDATES.format(count=count), memory._replace(nagged_at=count)
+        return None, copy.replace(memory, nagged_at=nagged_at)
+    return REPEATED_UPDATES.format(count=count), copy.replace(memory, nagged_at=count)
 
 
 def due_nags(history, memory):
@@ -143,7 +144,7 @@ def due_nags(history, memory):
     unseen = unseen_replies(replies, memory.seen_reply)
     repeated_updates, memory = repeated_updates_nag(history, memory, unseen)
     if replies:
-        memory = memory._replace(seen_reply=replies[-1].id)
+        memory = copy.replace(memory, seen_reply=replies[-1].id)
     return DueNags(long_reply_nag(unseen) or "", repeated_updates or ""), memory
 
 
@@ -153,8 +154,8 @@ def nags_from_transcript(event, payload, state):
     history = transcript_history(payload.get("transcript_path"))
     nags, memory = due_nags(history, state.memory)
     if event in PROMPT_EVENTS and not is_wake_prompt(payload.get("prompt")):
-        memory = memory._replace(submitted_prompt=submitted_prompt_id(payload))
-    return nags.texts(), state._replace(memory=memory)
+        memory = copy.replace(memory, submitted_prompt=submitted_prompt_id(payload))
+    return nags.texts(), copy.replace(state, memory=memory)
 
 
 def submitted_prompt_id(payload):
@@ -174,7 +175,7 @@ def nags_from_events(event, payload, state):
     if isinstance(reply_text, str) and reply_text.strip():
         log = log.with_reply(reply_text)
     if event not in NAG_EVENTS | PROMPT_EVENTS:
-        return [], state._replace(log=log)
+        return [], copy.replace(state, log=log)
     due, memory = due_nags(log.history, state.memory)
     log = log.starting_at(memory.window)
     if event in PROMPT_EVENTS:
