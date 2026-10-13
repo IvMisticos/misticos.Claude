@@ -13,6 +13,11 @@ ROOT = Path(__file__).resolve().parent.parent
 REPLY_NAGS = ROOT / "hooks" / "reply_nags.py"
 LONG = "word " * 250
 SHORT = "done"
+WAKE_PROMPTS = [
+    "<task-notification>\n<task-id>b343utgl5</task-id>",
+    '\n<agent-message from="worker">done</agent-message>',
+    "Another Claude session sent a message:\ndone",
+]
 
 
 @pytest.mark.parametrize(
@@ -62,9 +67,20 @@ class Transcript:
             {"type": "user", "origin": {"kind": "human"}, "message": {"content": text}}
         )
 
-    def wake(self):
+    def wake(self, text=WAKE_PROMPTS[0]):
         origin = {"kind": "task-notification"}
-        self.add({"type": "user", "origin": origin, "message": {"content": "<wake/>"}})
+        self.add({"type": "user", "origin": origin, "message": {"content": text}})
+
+    def queued(self, kind, text):
+        origin = {"kind": kind}
+        attachment = {"type": "queued_command", "origin": origin, "prompt": text}
+        self.add({"type": "attachment", "attachment": attachment})
+
+    def queued_wake(self, text=WAKE_PROMPTS[0]):
+        self.queued("task-notification", text)
+
+    def queued_human(self, text="queued"):
+        self.queued("human", text)
 
     def reply(self, text, message_id=None):
         message_id = message_id or f"m{self.count}"
@@ -77,13 +93,23 @@ class Transcript:
         message = {"id": message_id, "model": "claude-opus-5-5", "content": content}
         self.add({"type": "assistant", "message": message})
 
-    def fire(self, home, event="PostToolBatch"):
+    def fire(self, home, event="PostToolBatch", **fields):
         payload = {
             "hook_event_name": event,
             "session_id": "s1",
             "transcript_path": str(self.path),
+            **fields,
         }
         return claude_context(run_hook(home, payload))
+
+    def submit(self, home, prompt):
+        prompt_id = f"prompt-{self.count}"
+        return self.fire(home, "UserPromptSubmit", prompt=prompt, prompt_id=prompt_id)
+
+    def submit_human(self, home, text="hi"):
+        nag = self.submit(home, text)
+        self.human(text)
+        return nag
 
 
 @pytest.fixture
@@ -119,8 +145,7 @@ def test_catches_a_long_reply_before_the_next_prompt(home, transcript):
     transcript.reply(SHORT)
     transcript.fire(home)
     transcript.reply(LONG)
-    transcript.human()
-    assert "at least 1249 characters" in transcript.fire(home, "UserPromptSubmit")
+    assert "at least 1249 characters" in transcript.submit_human(home)
 
 
 def test_nags_after_2_messages_then_after_6_more(home, transcript):
@@ -134,13 +159,65 @@ def test_nags_after_2_messages_then_after_6_more(home, transcript):
     assert nagged_at == [2, 8, 14]
 
 
+@pytest.mark.parametrize("prompt", WAKE_PROMPTS)
+@pytest.mark.parametrize("add_wake", [Transcript.wake, Transcript.queued_wake])
+def test_wakes_that_submit_a_prompt_keep_the_cadence(
+    home, transcript, prompt, add_wake
+):
+    transcript.submit_human(home)
+    nagged_at = []
+    for count in range(1, 15):
+        transcript.reply(SHORT)
+        nags = [transcript.fire(home), transcript.submit(home, prompt)]
+        add_wake(transcript, prompt)
+        nags.append(transcript.fire(home))
+        nagged_at += [count for nag in nags if nag]
+    assert nagged_at == [2, 8, 14]
+
+
+def test_wakes_with_an_unknown_start_keep_the_cadence(home, transcript):
+    transcript.submit_human(home)
+    nagged_at = []
+    for count in range(1, 15):
+        transcript.reply(SHORT)
+        nags = [transcript.fire(home), transcript.submit(home, "<unknown-wake>")]
+        transcript.wake("<unknown-wake>")
+        nags.append(transcript.fire(home))
+        nagged_at += [count for nag in nags if nag]
+    assert nagged_at == [2, 8, 14]
+
+
+def test_a_wake_after_a_new_prompt_ignores_the_old_count(home, transcript):
+    transcript.submit_human(home)
+    for _ in range(3):
+        transcript.reply(SHORT)
+        transcript.fire(home)
+    transcript.submit_human(home)
+    transcript.tool_call("tools")
+    transcript.fire(home)
+    assert transcript.submit(home, WAKE_PROMPTS[0]) is None
+
+
+def test_a_human_prompt_after_wakes_restarts_the_cadence(home, transcript):
+    transcript.submit_human(home)
+    for _ in range(5):
+        transcript.reply(SHORT)
+        transcript.fire(home)
+        transcript.submit(home, WAKE_PROMPTS[0])
+        transcript.wake()
+    transcript.submit_human(home)
+    transcript.reply(SHORT)
+    assert transcript.fire(home) is None
+    transcript.reply(SHORT)
+    assert "2 messages in a row" in transcript.fire(home)
+
+
 def test_counts_messages_sent_before_the_user_wrote_again(home, transcript):
     transcript.human()
     transcript.reply(SHORT)
     transcript.wake()
     transcript.reply(SHORT)
-    transcript.human()
-    nag = transcript.fire(home, "UserPromptSubmit")
+    nag = transcript.submit_human(home)
     assert "2 messages in a row" in nag
     assert transcript.fire(home) is None
 
@@ -179,8 +256,40 @@ def test_counts_replies_that_left_the_transcript_tail(home, transcript):
 def test_a_prompt_missing_from_the_tail_still_starts_a_new_count(home, transcript):
     transcript.human()
     transcript.reply(SHORT)
-    transcript.fire(home, "UserPromptSubmit")
+    transcript.submit(home, "hi")
     transcript.path.write_text("")
+    transcript.reply(SHORT)
+    assert transcript.fire(home) is None
+
+
+def test_a_prompt_larger_than_the_tail_starts_a_new_count(home, transcript):
+    transcript.human()
+    transcript.reply(SHORT)
+    transcript.fire(home)
+    transcript.submit_human(home, "x" * (2 << 20))
+    transcript.reply(SHORT)
+    assert transcript.fire(home) is None
+
+
+@pytest.mark.parametrize("submitted", [False, True])
+def test_a_message_typed_mid_turn_starts_a_new_count(home, transcript, submitted):
+    transcript.human()
+    transcript.reply(SHORT)
+    transcript.fire(home)
+    if submitted:
+        transcript.submit(home, "queued")
+    transcript.queued_human()
+    transcript.reply(SHORT)
+    assert transcript.fire(home) is None
+
+
+def test_a_message_drained_with_a_wake_starts_a_new_count(home, transcript):
+    transcript.human()
+    transcript.reply(SHORT)
+    transcript.fire(home)
+    transcript.submit(home, WAKE_PROMPTS[0])
+    transcript.queued_human()
+    transcript.queued_wake()
     transcript.reply(SHORT)
     assert transcript.fire(home) is None
 

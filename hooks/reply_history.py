@@ -68,14 +68,22 @@ def parsed_event_log(stored):
     return EventLog(next_id, tuple(item for item in items if item))
 
 
+def is_wake(message):
+    kind = dict_or_empty(message.get("origin")).get("kind")
+    return isinstance(kind, str) and kind != "human"
+
+
+def is_queued_human_message(entry):
+    attachment = dict_or_empty(entry.get("attachment"))
+    return attachment.get("type") == "queued_command" and not is_wake(attachment)
+
+
 def is_human_prompt(entry):
-    origin = dict_or_empty(entry.get("origin"))
-    return (
-        entry.get("type") == "user"
-        and not entry.get("isSidechain")
-        and origin.get("kind") == "human"
-        and isinstance(entry.get("uuid"), str)
-    )
+    if entry.get("isSidechain") or not isinstance(entry.get("uuid"), str):
+        return False
+    if entry.get("type") == "user":
+        return dict_or_empty(entry.get("origin")).get("kind") == "human"
+    return is_queued_human_message(entry)
 
 
 def reply_text(entry):
@@ -118,13 +126,6 @@ def transcript_history(transcript_path):
         Reply(item, prose_length(reply_texts[item])) if isinstance(item, str) else item
         for item in history
     ]
-
-
-def without_trailing_prompts(history):
-    end = len(history)
-    while end and isinstance(history[end - 1], Prompt):
-        end -= 1
-    return history[:end]
 
 
 def windows(history):
