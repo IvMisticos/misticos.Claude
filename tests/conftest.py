@@ -149,11 +149,30 @@ def fake_bin(tmp_path: Path) -> FakeBin:
     return add
 
 
+def is_shim_directory(directory: str) -> bool:
+    return (Path(directory).parent / "hooks" / "work_queue.py").exists()
+
+
+def real_uv_directories() -> list[str]:
+    searched = [
+        directory
+        for directory in os.environ.get("PATH", "").split(os.pathsep)
+        if not is_shim_directory(directory)
+    ]
+    uv = shutil.which("uv", path=os.pathsep.join(searched))
+    return [os.path.dirname(uv)] if uv else []
+
+
 @pytest.fixture
 def shim_runner(fake_bin: FakeBin) -> ShimRunner:
+    uv_directories = real_uv_directories()
+
     def runner(name: str, fake_script: str, **base_environment: str) -> ShimRun:
         environment = without_session_variables(os.environ)
-        environment["PATH"] = f"{SHIMS}:{fake_bin(name, fake_script)}:/usr/bin:/bin"
+        environment["PATH"] = os.pathsep.join(
+            [str(SHIMS), str(fake_bin(name, fake_script)), "/usr/bin", "/bin"]
+            + uv_directories
+        )
         environment.update(base_environment)
 
         def run(

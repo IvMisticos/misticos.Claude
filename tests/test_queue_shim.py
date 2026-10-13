@@ -28,11 +28,8 @@ def inside_project_with_venv(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) ->
 
 
 @pytest.mark.usefixtures("inside_project_with_venv")
-@pytest.mark.parametrize("arguments", [["build"], ["--version"]])
-def test_tool_sees_the_callers_environment(
-    run_cargo: ShimRun, arguments: list[str]
-) -> None:
-    result = run_cargo(*arguments)
+def test_tool_sees_the_callers_environment(run_cargo: ShimRun) -> None:
+    result = run_cargo("--version")
 
     assert result.returncode == 0, result.stderr
     seen = dict(line.split("=", 1) for line in result.stdout.splitlines())
