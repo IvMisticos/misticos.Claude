@@ -32,11 +32,31 @@ install_uv_once() {
   release_install_lock
 }
 
-command -v uv >/dev/null || install_uv_once
+hash_file() {
+  { sha256sum "$1" || shasum -a 256 "$1"; } 2>/dev/null | cut -d' ' -f1
+}
 
 hooks_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+
+remember_setup=false
+if [ "${1-}" = setup.py ] && [ -n "${CLAUDE_PLUGIN_DATA-}" ]; then
+  setup_marker="$CLAUDE_PLUGIN_DATA/setup-complete"
+  if setup_hash=$(hash_file "$hooks_dir/setup.py") && [ -n "$setup_hash" ]; then
+    remember_setup=true
+    [ "$(cat "$setup_marker" 2>/dev/null)" = "$setup_hash" ] && exit 0
+  fi
+fi
+
+command -v uv >/dev/null || install_uv_once
+
 if [ $# -gt 0 ] && [ -f "$hooks_dir/$1" ]; then
   set -- "$hooks_dir/$1" "${@:2}"
 fi
 
-exec uv run "$@"
+if [ "$remember_setup" = false ]; then
+  exec uv run "$@"
+fi
+
+uv run "$@"
+mkdir -p "$CLAUDE_PLUGIN_DATA"
+echo "$setup_hash" > "$setup_marker"
