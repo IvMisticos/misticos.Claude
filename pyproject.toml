@@ -1,0 +1,15 @@
+[tool.ruff]
+target-version = "py313"
+
+[tool.ruff.lint]
+extend-select = ["ANN"]
+
+[tool.ty.environment]
+python-version = "3.13"
+root = ["hooks", "mcp", "tests"]
+
+[tool.ty.src]
+include = ["hooks", "mcp", "tests"]
+
+[dependency-groups]
+dev = ["mcp>=2", "pytest", "tomli-w"]

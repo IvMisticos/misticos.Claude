@@ -2,6 +2,9 @@
 # /// script
 # requires-python = ">=3.13"
 # dependencies = ["mcp>=2"]
+# [tool.ty.environment]
+# root = ["."]
+# python = "../.venv"
 # ///
 
 import atexit

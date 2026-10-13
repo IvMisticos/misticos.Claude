@@ -2,6 +2,9 @@
 # /// script
 # requires-python = ">=3.13"
 # dependencies = ["tomli-w"]
+# [tool.ty.environment]
+# root = ["."]
+# python = "../.venv"
 # ///
 
 import json
