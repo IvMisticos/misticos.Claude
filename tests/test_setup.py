@@ -23,20 +23,13 @@ def marker(plugin_data):
 
 
 @pytest.fixture
-def boot_id_file(tmp_path):
-    path = tmp_path / "boot_id"
-    path.write_text("boot-one\n")
-    return path
-
-
-@pytest.fixture
-def current_key(boot_id_file):
+def current_key():
     digest = hashlib.sha256((HOOKS / "setup.py").read_bytes()).hexdigest()
-    return f"{digest} boot-one\n"
+    return f"{digest}\n"
 
 
 @pytest.fixture
-def run_hook(tmp_path, home, fake_bin, plugin_data, boot_id_file):
+def run_hook(tmp_path, home, fake_bin, plugin_data):
     bin_dir = fake_bin("uv", FAKE_UV)
     scripts = tmp_path / "scripts"
     scripts.mkdir()
@@ -48,7 +41,6 @@ def run_hook(tmp_path, home, fake_bin, plugin_data, boot_id_file):
         environment = {
             "HOME": str(home),
             "PATH": path,
-            "SETUP_BOOT_ID_FILE": str(boot_id_file),
             "CLAUDE_PLUGIN_DATA": str(plugin_data),
             **extra_environment,
         }
@@ -116,24 +108,6 @@ def test_other_scripts_write_no_marker(run_hook, marker):
 def test_unset_plugin_data_always_runs_setup(run_hook, tmp_path):
     assert ran_uv(run_hook(CLAUDE_PLUGIN_DATA=""))
     assert not (tmp_path / "setup-complete").exists()
-
-
-def test_new_boot_runs_setup_again(
-    run_hook, plugin_data, marker, boot_id_file, current_key
-):
-    write_marker(plugin_data, marker, current_key)
-    boot_id_file.write_text("boot-two\n")
-    assert ran_uv(run_hook())
-    assert marker.read_text().endswith(" boot-two\n")
-
-
-def test_unreadable_boot_id_still_skips_when_marker_matches(
-    run_hook, plugin_data, marker, boot_id_file
-):
-    boot_id_file.unlink()
-    assert ran_uv(run_hook())
-    assert not run_hook().stdout
-    assert marker.read_text().endswith(" \n")
 
 
 def test_missing_hash_tool_runs_setup_without_a_marker(
