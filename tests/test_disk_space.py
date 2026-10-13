@@ -10,6 +10,7 @@ from cleanup_policy import (
     needs_cleanup,
     write_most_free_since_cleanup,
 )
+from disk_space import needs_warning
 from disks import Disk
 
 GIB = 1 << 30
@@ -27,6 +28,14 @@ def test_cleans_up_below_5_gib_or_a_quarter_of_a_small_disk(
     total_gib, free_gib, cleans_up
 ):
     assert needs_cleanup(disk(total_gib, free_gib), {}) == cleans_up
+
+
+@pytest.mark.parametrize(
+    ("total_gib", "free_gib", "warns"),
+    [(250, 1.9, True), (250, 2, False), (4, 0.5, False), (4, 0.3, True)],
+)
+def test_warns_below_2_gib_or_a_tenth_of_a_small_disk(total_gib, free_gib, warns):
+    assert needs_warning(disk(total_gib, free_gib)) == warns
 
 
 @pytest.mark.parametrize(
