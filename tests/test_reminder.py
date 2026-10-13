@@ -53,6 +53,10 @@ def prompt(transcript, prompt_id):
     }
 
 
+def tool_batch(transcript, prompt_id):
+    return {**prompt(transcript, prompt_id), "hook_event_name": "PostToolBatch"}
+
+
 def test_session_start_sends_the_whole_file_in_parts(home):
     parts = all_parts(home, {"hook_event_name": "SessionStart", "session_id": "s1"})
     sent = [part for part in parts if part]
@@ -143,7 +147,7 @@ def test_growth_sends_a_pointer_then_a_full_copy(home, tmp_path):
     transcript = transcript_at(tmp_path, 10_000)
     assert all_parts(home, prompt(transcript, "p1")) == [None] * PARTS
     transcript_at(tmp_path, 40_000)
-    pointer = all_parts(home, prompt(transcript, "p2"))
+    pointer = all_parts(home, tool_batch(transcript, "p2"))
     assert pointer[0] and pointer[1:] == [None] * (PARTS - 1)
     transcript_at(tmp_path, 45_000)
     assert all_parts(home, prompt(transcript, "p3")) == [None] * PARTS
@@ -168,3 +172,18 @@ def test_cursor_shape(home):
 def test_session_start_with_a_non_text_session_id_still_sends_the_rules(home):
     payload = {"hook_event_name": "SessionStart", "session_id": 1}
     assert context(reminder(home, 1, payload))
+
+
+def test_prompt_without_a_token_count_gets_nothing(home, tmp_path):
+    missing = tmp_path / "missing.jsonl"
+    assert all_parts(home, prompt(missing, "p1")) == [None] * PARTS
+
+
+def test_a_prompt_gets_the_copy_but_not_the_pointer(home, tmp_path):
+    transcript = transcript_at(tmp_path, 10_000)
+    assert all_parts(home, prompt(transcript, "p1")) == [None] * PARTS
+    transcript_at(tmp_path, 40_000)
+    assert all_parts(home, prompt(transcript, "p2")) == [None] * PARTS
+    transcript_at(tmp_path, 120_000)
+    copy = all_parts(home, prompt(transcript, "p3"))
+    assert copy[0] and copy[1]

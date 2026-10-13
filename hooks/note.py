@@ -4,8 +4,20 @@
 # ///
 
 import sys
+from typing import NamedTuple
 
-from hook_io import event_name_of, read_payload, run_hook, write_context
+from hook_io import (
+    agent_session_key,
+    event_name_of,
+    read_payload,
+    run_hook,
+    write_context,
+)
+from plugin_paths import DATA_ROOT
+from session_state import locked_session_file, read_record, write_record
+
+NOTIFICATION_CALLS_DIR = DATA_ROOT / "notification-calls"
+NOTIFICATIONS_NOTE_EVERY_CALLS = 5
 
 NOTES = {
     "agent-roles": (
@@ -26,11 +38,31 @@ NOTES = {
 }
 
 
+class NotificationCalls(NamedTuple):
+    notifications: int = 0
+
+
+def is_notifications_note_due(agent_key):
+    if agent_key is None:
+        return True
+    with locked_session_file(NOTIFICATION_CALLS_DIR, agent_key) as state_file:
+        previous = read_record(state_file, NotificationCalls()).notifications
+        write_record(state_file, NotificationCalls(previous + 1))
+    return previous % NOTIFICATIONS_NOTE_EVERY_CALLS == 0
+
+
+def is_due(name, payload):
+    if name != "notifications":
+        return True
+    return is_notifications_note_due(agent_session_key(payload))
+
+
 def main():
-    note = NOTES[sys.argv[1]]
-    event = event_name_of(read_payload())
-    if event:
-        write_context(event, note)
+    name = sys.argv[1]
+    payload = read_payload()
+    event = event_name_of(payload)
+    if event and is_due(name, payload):
+        write_context(event, NOTES[name])
 
 
 if __name__ == "__main__":

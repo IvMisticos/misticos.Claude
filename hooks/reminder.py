@@ -28,15 +28,21 @@ from rules_copy import (
     pointer_reminder,
     rules_at,
 )
-from transcript import context_tokens, payload_tokens, transcript_fits_in_tail
+from transcript import context_tokens, payload_tokens
 
 from agents import ALL_SECTIONS, rule_sections_for
 
 RULES_PATH = str(PLUGIN_ROOT / "INSTRUCTIONS.md")
 
 
-def message_for_part(action, part, messages, rules):
+def is_prompt_event(payload):
+    return event_name_of(payload).lower() == "userpromptsubmit"
+
+
+def message_for_part(action, part, messages, rules, payload):
     if action == Action.POINTER:
+        if is_prompt_event(payload):
+            return None
         return pointer_reminder(rules) if part == 1 else None
     if action != Action.COPY or not 1 <= part <= len(messages):
         return None
@@ -55,21 +61,15 @@ def growth_reminder(rules, payload, options):
     if options.harness.context_from == ContextSource.PAYLOAD:
         added = payload_tokens(payload)
         action = claim_action(session_id, fire, can_copy, added_tokens=added)
-        return message_for_part(action, options.part, messages, rules)
+        return message_for_part(action, options.part, messages, rules, payload)
     transcript_path = payload.get("transcript_path")
     if not transcript_path:
         return None
     tokens = context_tokens(transcript_path, options.harness.context_from)
     if tokens is None:
-        if options.part != 1 or event_name_of(payload).lower() != "userpromptsubmit":
-            return None
-        return (
-            pointer_reminder(rules)
-            if transcript_fits_in_tail(transcript_path)
-            else None
-        )
+        return None
     action = claim_action(session_id, fire, can_copy, tokens)
-    return message_for_part(action, options.part, messages, rules)
+    return message_for_part(action, options.part, messages, rules, payload)
 
 
 def is_subagent_start(payload):
@@ -91,7 +91,7 @@ def session_start_reminder(rules, payload, options):
     )
     if len(messages) > options.entries:
         return pointer_reminder(rules) if options.part == 1 else None
-    return message_for_part(Action.COPY, options.part, messages, rules)
+    return message_for_part(Action.COPY, options.part, messages, rules, payload)
 
 
 def reminder_for(event, payload, options):

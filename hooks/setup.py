@@ -36,6 +36,7 @@ REMOTE_SESSION_TOOLS = (
     "set_session_title",
     "unarchive_session",
     "unwatch_url",
+    "update_trigger",
     "watch_url",
 )
 DISABLED_PLUGINS = ("cowork-plugin-management@synced",)
