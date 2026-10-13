@@ -21,7 +21,7 @@ find_python() {
 }
 
 if ! python=$(find_python 2>/dev/null); then
-  "$uv" python install --no-config --no-bin 3.13 >&2
+  "$uv" python install --no-bin 3.13 >&2
   python=$(find_python)
 fi
 exec "$python" "$bin_dir/../hooks/work_queue.py" "$@"
