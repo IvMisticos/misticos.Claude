@@ -33,7 +33,7 @@ from session_state import (
     write_json,
 )
 
-PROSE_LIMIT = 300
+PROSE_LIMIT = 1000
 FIRST_NAG_AT_MESSAGES = 2
 MESSAGES_BETWEEN_NAGS = 6
 STATE_DIR = DATA_ROOT / "reply-nags"

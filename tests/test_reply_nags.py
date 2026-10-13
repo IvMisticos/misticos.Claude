@@ -11,7 +11,7 @@ from reply_history import EventLog, Prompt, Reply, transcript_history
 
 ROOT = Path(__file__).resolve().parent.parent
 REPLY_NAGS = ROOT / "hooks" / "reply_nags.py"
-LONG = "word " * 70
+LONG = "word " * 250
 SHORT = "done"
 
 
@@ -104,7 +104,7 @@ def test_nags_once_about_a_long_reply(home, transcript):
     transcript.human()
     transcript.reply(LONG)
     nag = transcript.fire(home)
-    assert "at least 349 characters" in nag
+    assert "at least 1249 characters" in nag
     assert transcript.fire(home) is None
 
 
@@ -120,7 +120,7 @@ def test_catches_a_long_reply_before_the_next_prompt(home, transcript):
     transcript.fire(home)
     transcript.reply(LONG)
     transcript.human()
-    assert "at least 349 characters" in transcript.fire(home, "UserPromptSubmit")
+    assert "at least 1249 characters" in transcript.fire(home, "UserPromptSubmit")
 
 
 def test_nags_after_2_messages_then_after_6_more(home, transcript):
@@ -205,7 +205,7 @@ def codex(home, event, **fields):
 def test_codex_nags_about_the_last_turn_on_the_next_prompt(home):
     codex(home, "UserPromptSubmit", prompt="go")
     assert codex(home, "Stop", last_assistant_message=LONG) is None
-    assert "at least 349 characters" in codex(home, "UserPromptSubmit", prompt="next")
+    assert "at least 1249 characters" in codex(home, "UserPromptSubmit", prompt="next")
 
 
 def cursor(home, event, **fields):
@@ -220,7 +220,7 @@ def test_cursor_keeps_long_replies_from_turns_without_tools(home):
     cursor(home, "beforeSubmitPrompt", prompt="next")
     cursor(home, "afterAgentResponse", text=SHORT)
     cursor(home, "beforeSubmitPrompt", prompt="again")
-    assert "at least 349 characters" in cursor(home, "postToolUse")
+    assert "at least 1249 characters" in cursor(home, "postToolUse")
 
 
 def test_cursor_counts_the_answer_after_the_last_tool(home):
