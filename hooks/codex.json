@@ -89,7 +89,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/run.sh\" disk_space.py"
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/run.sh\" disk_space.py",
+            "async": true
           }
         ]
       }
