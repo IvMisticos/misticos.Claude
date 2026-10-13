@@ -54,7 +54,7 @@
           },
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/run.sh\" --once setup_tools.py",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/run.sh\" --once --after setup_settings.py setup_tools.py",
             "async": true
           }
         ]
