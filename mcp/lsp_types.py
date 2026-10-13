@@ -80,6 +80,30 @@ class CallHierarchyItem(TypedDict):
     selectionRange: Range
 
 
+class TextEdit(TypedDict):
+    range: Range
+    newText: str
+
+
+class VersionedTextDocumentIdentifier(TypedDict):
+    uri: str
+    version: int | None
+
+
+class TextDocumentEdit(TypedDict):
+    textDocument: VersionedTextDocumentIdentifier
+    edits: list[TextEdit]
+
+
+class ResourceOperation(TypedDict):
+    kind: str
+
+
+class WorkspaceEdit(TypedDict, total=False):
+    changes: dict[str, list[TextEdit]]
+    documentChanges: list[TextDocumentEdit | ResourceOperation]
+
+
 class FileEvent(TypedDict):
     uri: str
     type: int

@@ -10,6 +10,8 @@
 import atexit
 from pathlib import Path
 
+from lsp_client import LanguageServer
+from lsp_types import LSPAny
 from mcp.server.mcpserver import MCPServer
 from result_formatting import (
     Call,
@@ -26,24 +28,30 @@ from workspace_edits import apply_workspace_edit
 mcp = MCPServer("code-navigation")
 
 
-def resolved(file):
+def resolved(file: str) -> Path:
     path = Path(file).expanduser().resolve()
     if not path.is_file():
         raise ValueError(f"{file} is not a file")
     return path
 
 
-async def server_at(file):
+async def server_at(file: str) -> tuple[Path, LanguageServer]:
     path = resolved(file)
     return path, await server_for(path)
 
 
-async def at_position(method, file, line, column, extra=None):
+async def at_position(
+    method: str,
+    file: str,
+    line: int,
+    column: int,
+    extra: dict[str, LSPAny] | None = None,
+) -> LSPAny:
     path, server = await server_at(file)
     return await server.at_position(method, path, line, column, extra)
 
 
-async def about_document(method, path, server):
+async def about_document(method: str, path: Path, server: LanguageServer) -> LSPAny:
     server.documents.open(path)
     return await server.request(method, {"textDocument": {"uri": to_uri(path)}})
 
@@ -117,7 +125,7 @@ CALL_DIRECTIONS = {
 }
 
 
-async def hierarchy_calls(direction, file, line, column):
+async def hierarchy_calls(direction: str, file: str, line: int, column: int) -> str:
     method, other_end = CALL_DIRECTIONS[direction]
     path, server = await server_at(file)
     functions = await server.at_position(
@@ -125,7 +133,7 @@ async def hierarchy_calls(direction, file, line, column):
     )
     if not functions:
         raise ValueError(f"no function at {path}:{line}:{column}")
-    calls = []
+    calls: list[Call] = []
     for function in functions:
         for call in await server.request(method, {"item": function}) or []:
             call_site_owner = call.get("from", function)

@@ -58,7 +58,7 @@ EXTENSION_TO_SERVER = {
 TOOLCHAIN_BIN_DIRS = (".local/bin", ".bun/bin", ".dotnet/tools", ".dotnet")
 
 
-def toolchain_environment():
+def toolchain_environment() -> dict[str, str]:
     home = Path.home()
     environment = dict(os.environ)
     bin_dirs = [str(home / directory) for directory in TOOLCHAIN_BIN_DIRS]
@@ -68,7 +68,7 @@ def toolchain_environment():
 
 
 INSTALL_TIMEOUT_SECONDS = 600.0
-installs = {}
+installs: dict[str, asyncio.Future[None]] = {}
 
 
 def installed_binary(
@@ -77,7 +77,7 @@ def installed_binary(
     return shutil.which(spec["command"][0], path=environment["PATH"])
 
 
-async def ensure_installed(name):
+async def ensure_installed(name: str) -> None:
     spec = LANGUAGE_SERVERS[name]
     environment = toolchain_environment()
     if installed_binary(spec, environment):

@@ -9,7 +9,6 @@ from lsp_types import (
     FileEvent,
     LSPAny,
     Message,
-    Request,
     RequestId,
     Response,
     ResponseError,
@@ -176,8 +175,9 @@ class LanguageServer:
         if "method" not in message:
             self.resolve_pending(message)
             return
-        if "id" in message:
-            self.answer_server_request(message)
+        match message:
+            case {"id": int() | str() as request_id, "method": str() as method}:
+                self.answer_server_request(request_id, method, message.get("params"))
 
     def resolve_pending(self, response: Response) -> None:
         future = self.pending.pop(response["id"], None)
@@ -189,10 +189,11 @@ class LanguageServer:
             return
         future.set_result(response.get("result"))
 
-    def answer_server_request(self, request: Request) -> None:
-        method = request["method"]
+    def answer_server_request(
+        self, request_id: RequestId, method: str, params: LSPAny
+    ) -> None:
         if method == "workspace/configuration":
-            result = [None for _ in request.get("params", {}).get("items", [])]
+            result = [None for _ in (params or {}).get("items", [])]
         elif method == "workspace/applyEdit":
             result = {"applied": False}
         elif method.startswith(("window/workDoneProgress", "client/")):
@@ -202,9 +203,9 @@ class LanguageServer:
                 "code": METHOD_NOT_FOUND,
                 "message": f"{method} is not supported",
             }
-            self.send({"jsonrpc": "2.0", "id": request["id"], "error": error})
+            self.send({"jsonrpc": "2.0", "id": request_id, "error": error})
             return
-        self.send({"jsonrpc": "2.0", "id": request["id"], "result": result})
+        self.send({"jsonrpc": "2.0", "id": request_id, "result": result})
 
     def apply_file_changes(self, events: list[FileEvent]) -> None:
         if not events:
@@ -213,7 +214,14 @@ class LanguageServer:
             self.documents.close(event["uri"])
         self.notify("workspace/didChangeWatchedFiles", {"changes": events})
 
-    async def at_position(self, method, path, line, column, extra=None):
+    async def at_position(
+        self,
+        method: str,
+        path: pathlib.Path,
+        line: int,
+        column: int,
+        extra: dict[str, LSPAny] | None = None,
+    ) -> LSPAny:
         text = self.documents.open(path)
         position = lsp_position(text, line, column)
         params = {"textDocument": {"uri": to_uri(path)}, "position": position}
