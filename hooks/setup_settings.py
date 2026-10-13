@@ -90,7 +90,7 @@ DENIED_TOOLS = (
     "SuggestSkills",
 )
 
-TURN_ENDING_TOOLS = "ReadNotifications,SendMessage"
+TURN_ENDING_TOOLS = "Agent,ReadNotifications,SendMessage,TaskStop"
 
 
 def write_atomically(path, text):
