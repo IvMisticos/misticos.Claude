@@ -21,6 +21,7 @@ INSTALLED_PLUGINS = CLAUDE_DIR / "plugins" / "installed_plugins.json"
 WEB_GUIDANCE_PLUGIN = "modern-web-guidance@googlechrome"
 CLOUD_SESSION_MARK = "CCR_AGENT_PROXY_ENABLED"
 AUTO_COMPACT_WINDOW_TOKENS = 400_000
+TURN_ENDING_TOOLS = "ReadNotifications,SendMessage"
 
 
 TOOLCHAIN_BIN_DIRS = (
@@ -68,6 +69,10 @@ def configure_claude_settings():
     wanted["attribution"] = {"commit": "", "pr": "", "sessionUrl": False}
     wanted["autoMemoryEnabled"] = False
     wanted["autoCompactWindow"] = AUTO_COMPACT_WINDOW_TOKENS
+    wanted["env"] = {
+        **settings.get("env", {}),
+        "CLAUDE_CODE_TERMINAL_MCP_TOOLS": TURN_ENDING_TOOLS,
+    }
     if wanted != settings:
         write_atomically(settings_path, json.dumps(wanted, indent=2) + "\n")
 
