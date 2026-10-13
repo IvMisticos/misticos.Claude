@@ -76,6 +76,18 @@ DENIED_TOOLS = (
     "mcp__github__fork_repository",
     "mcp__github__request_copilot_review",
     "mcp__github__run_secret_scanning",
+    "ReportFindings",
+    "EnterPlanMode",
+    "ExitPlanMode",
+    "NotebookEdit",
+    "ArtifactData",
+    "mcp__github__issue_read",
+    "mcp__github__issue_write",
+    "mcp__github__list_issues",
+    "mcp__github__search_issues",
+    "mcp__github__list_issue_fields",
+    "mcp__github__list_issue_types",
+    "mcp__github__sub_issue_write",
 )
 
 TURN_ENDING_TOOLS = "ReadNotifications,SendMessage"
