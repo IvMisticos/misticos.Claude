@@ -74,44 +74,18 @@ completion_key_of() {
   hash_script_and_local_imports "$1" | hash_stdin | cut -d' ' -f1
 }
 
-completion_marker_of() {
-  echo "$CLAUDE_PLUGIN_DATA/${1%.py}-complete"
-}
-
-wait_for_completion_of() {
-  [ -n "${CLAUDE_PLUGIN_DATA-}" ] && [ -f "$hooks_dir/$1" ] || return 0
-  local key attempts=300
-  key=$(completion_key_of "$1") && [ -n "$key" ] || return 0
-  until [ "$(cat "$(completion_marker_of "$1")" 2>/dev/null)" = "$key" ]; do
-    attempts=$((attempts - 1))
-    [ "$attempts" -gt 0 ] || return 0
-    sleep 0.2
-  done
-}
-
 hooks_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
-run_once=false
-run_after=""
-while true; do
-  case "${1-}" in
-    --once) run_once=true; shift ;;
-    --after) run_after=$2; shift 2 ;;
-    *) break ;;
-  esac
-done
-
 remember_completion=false
-if [ "$run_once" = true ] && [ -n "${CLAUDE_PLUGIN_DATA-}" ] && [ -f "$hooks_dir/${1-}" ]; then
-  completion_marker=$(completion_marker_of "$1")
-  if completion_key=$(completion_key_of "$1") && [ -n "$completion_key" ]; then
-    remember_completion=true
-    [ "$(cat "$completion_marker" 2>/dev/null)" = "$completion_key" ] && exit 0
+if [ "${1-}" = --once ]; then
+  shift
+  if [ -n "${CLAUDE_PLUGIN_DATA-}" ] && [ -f "$hooks_dir/${1-}" ]; then
+    completion_marker="$CLAUDE_PLUGIN_DATA/${1%.py}-complete"
+    if completion_key=$(completion_key_of "$1") && [ -n "$completion_key" ]; then
+      remember_completion=true
+      [ "$(cat "$completion_marker" 2>/dev/null)" = "$completion_key" ] && exit 0
+    fi
   fi
-fi
-
-if [ -n "$run_after" ]; then
-  wait_for_completion_of "$run_after"
 fi
 
 command -v uv >/dev/null || install_uv_once

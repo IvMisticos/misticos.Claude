@@ -14,6 +14,7 @@ from pathlib import Path
 
 import tomli_w
 from json_values import read_json_file
+from plugin_names import WEB_GUIDANCE_PLUGIN
 
 HOME = Path.home()
 CLAUDE_DIR = HOME / ".claude"
@@ -125,6 +126,7 @@ def configure_claude_settings():
     }
     wanted["enabledPlugins"] = {
         **dict.fromkeys(DISABLED_PLUGINS, False),
+        WEB_GUIDANCE_PLUGIN: True,
         **settings.get("enabledPlugins", {}),
     }
     wanted["env"] = {

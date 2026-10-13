@@ -1,13 +1,11 @@
 import shutil
 import subprocess
-import time
 
 import pytest
 from conftest import ROOT
 
 FAKE_UV = """#!/usr/bin/env bash
 echo "uv $*"
-echo "${*##*/}" >> "$HOME/uv-calls"
 exit "${UV_STATUS-0}"
 """
 SCRIPTS = {
@@ -44,84 +42,41 @@ def hooks_copy(tmp_path):
     return hooks
 
 
-def hook_command(scripts, script, *, once=True, after=None):
-    once_flag = ["--once"] if once else []
-    after_flag = ["--after", after] if after else []
-    return [scripts / "run.sh", *once_flag, *after_flag, script]
-
-
-def hook_environment(home, path, plugin_data, extra_environment):
-    environment = {
-        "HOME": str(home),
-        "PATH": path,
-        "CLAUDE_PLUGIN_DATA": str(plugin_data),
-        **extra_environment,
-    }
-    return {name: value for name, value in environment.items() if value}
-
-
 def runner(scripts, home, bin_dir, plugin_data):
     def run(
         script="settings.py",
         *,
         once=True,
-        after=None,
         path=f"{bin_dir}:/usr/bin:/bin",
         **extra_environment,
     ):
+        environment = {
+            "HOME": str(home),
+            "PATH": path,
+            "CLAUDE_PLUGIN_DATA": str(plugin_data),
+            **extra_environment,
+        }
+        once_flag = ["--once"] if once else []
         return subprocess.run(
-            hook_command(scripts, script, once=once, after=after),
-            env=hook_environment(home, path, plugin_data, extra_environment),
+            [scripts / "run.sh", *once_flag, script],
+            env={name: value for name, value in environment.items() if value},
             capture_output=True,
             text=True,
             check=False,
+            timeout=10,
         )
 
     return run
 
 
 @pytest.fixture
-def uv_bin(fake_bin):
-    return fake_bin("uv", FAKE_UV)
+def run_hook(home, fake_bin, plugin_data, scripts):
+    return runner(scripts, home, fake_bin("uv", FAKE_UV), plugin_data)
 
 
 @pytest.fixture
-def run_hook(home, uv_bin, plugin_data, scripts):
-    return runner(scripts, home, uv_bin, plugin_data)
-
-
-@pytest.fixture
-def run_real_hook(home, uv_bin, plugin_data, hooks_copy):
-    return runner(hooks_copy, home, uv_bin, plugin_data)
-
-
-@pytest.fixture
-def start_tools_after_settings(home, uv_bin, plugin_data, scripts):
-    def start():
-        return subprocess.Popen(
-            hook_command(scripts, "tools.py", after="settings.py"),
-            env=hook_environment(home, f"{uv_bin}:/usr/bin:/bin", plugin_data, {}),
-            stdout=subprocess.DEVNULL,
-        )
-
-    return start
-
-
-def fake_sleep(fake_bin, *, sleeps):
-    real_sleep = f'exec {shutil.which("sleep")} "$@"' if sleeps else ""
-    fake_bin("sleep", f'#!/usr/bin/env bash\ntouch "$HOME/waited"\n{real_sleep}\n')
-
-
-def wait_for(path):
-    deadline = time.monotonic() + 10
-    while not path.exists():
-        assert time.monotonic() < deadline, f"{path} never appeared"
-        time.sleep(0.05)
-
-
-def uv_calls(home):
-    calls = home / "uv-calls"
-    return calls.read_text().splitlines() if calls.exists() else []
+def run_real_hook(home, fake_bin, plugin_data, hooks_copy):
+    return runner(hooks_copy, home, fake_bin("uv", FAKE_UV), plugin_data)
 
 
 def ran_uv(result):
@@ -171,12 +126,11 @@ def test_every_module_in_an_import_list_counts(run_hook, scripts, edited):
     assert ran_uv(run_hook("listed.py"))
 
 
-def test_real_setup_markers_cover_shared_modules(run_real_hook, hooks_copy):
-    setup_scripts = ("setup_settings.py", "setup_tools.py")
-    for script in setup_scripts:
-        run_real_hook(script)
-    edit(hooks_copy, "json_values.py")
-    assert [ran_uv(run_real_hook(script)) for script in setup_scripts] == [True, True]
+@pytest.mark.parametrize("edited", ["json_values.py", "plugin_names.py"])
+def test_real_tools_marker_covers_shared_modules(run_real_hook, hooks_copy, edited):
+    run_real_hook("setup_tools.py")
+    edit(hooks_copy, edited)
+    assert ran_uv(run_real_hook("setup_tools.py"))
 
 
 def test_editing_another_script_keeps_the_marker(run_hook, scripts):
@@ -245,36 +199,3 @@ def test_missing_hash_tool_runs_without_a_marker(
     result = run_hook(path=str(tools))
     assert (ran_uv(result), result.returncode) == (True, 0)
     assert not marker_of(plugin_data, "settings.py").exists()
-
-
-def test_after_waits_until_the_other_script_completes(
-    run_hook, start_tools_after_settings, fake_bin, home
-):
-    fake_sleep(fake_bin, sleeps=True)
-    tools = start_tools_after_settings()
-    wait_for(home / "waited")
-    assert uv_calls(home) == []
-    run_hook("settings.py")
-    assert tools.wait(timeout=10) == 0
-    assert uv_calls(home) == ["run settings.py", "run tools.py"]
-
-
-def test_after_runs_at_once_when_the_other_script_already_completed(
-    run_hook, fake_bin, home
-):
-    fake_sleep(fake_bin, sleeps=True)
-    run_hook("settings.py")
-    assert ran_uv(run_hook("tools.py", after="settings.py"))
-    assert not (home / "waited").exists()
-
-
-def test_after_stops_waiting_eventually(run_hook, fake_bin, home):
-    fake_sleep(fake_bin, sleeps=False)
-    assert ran_uv(run_hook("tools.py", after="settings.py"))
-    assert (home / "waited").exists()
-
-
-def test_after_does_not_wait_without_plugin_data(run_hook, fake_bin, home):
-    fake_sleep(fake_bin, sleeps=True)
-    assert ran_uv(run_hook("tools.py", after="settings.py", CLAUDE_PLUGIN_DATA=""))
-    assert not (home / "waited").exists()

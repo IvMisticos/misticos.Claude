@@ -10,10 +10,10 @@ import sys
 from pathlib import Path
 
 from json_values import read_json_file
+from plugin_names import WEB_GUIDANCE_PLUGIN
 
 HOME = Path.home()
 INSTALLED_PLUGINS = HOME / ".claude" / "plugins" / "installed_plugins.json"
-WEB_GUIDANCE_PLUGIN = "modern-web-guidance@googlechrome"
 CLOUD_SESSION_MARK = "CCR_AGENT_PROXY_ENABLED"
 
 TOOLCHAIN_BIN_DIRS = (
