@@ -1,0 +1,25 @@
+[project]
+name = "misticos-claude"
+version = "0"
+requires-python = ">=3.13"
+
+[tool.uv]
+package = false
+
+[tool.ruff.lint]
+extend-select = ["ANN"]
+
+[tool.ty.environment]
+root = ["hooks", "mcp", "tests"]
+
+[tool.ty.src]
+include = ["hooks", "mcp", "tests"]
+
+[dependency-groups]
+dev = [
+    "mcp>=2",
+    "pytest",
+    "ruff>=0.17.0",
+    "tomli-w",
+    "ty>=0.0.86",
+]

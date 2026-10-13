@@ -1,7 +1,8 @@
 import copy
+from collections.abc import Iterable
 from typing import NamedTuple
 
-from json_values import dict_or_empty
+from json_values import JsonObject, JsonValue, dict_or_empty
 from prose import prose_length
 from transcript import is_conversation_turn, tail_entries
 
@@ -22,23 +23,23 @@ class Window(NamedTuple):
 
 class EventLog(NamedTuple):
     next_id: int = 0
-    history: tuple = ()
+    history: tuple[Prompt | Reply, ...] = ()
 
-    def with_reply(self, text):
+    def with_reply(self, text: str) -> "EventLog":
         reply = Reply(str(self.next_id), prose_length(text))
         return EventLog(self.next_id + 1, (*self.history, reply))
 
-    def with_prompt(self):
+    def with_prompt(self) -> "EventLog":
         prompt = Prompt(str(self.next_id))
         return EventLog(self.next_id + 1, (*self.history, prompt))
 
-    def starting_at(self, prompt_id):
+    def starting_at(self, prompt_id: str) -> "EventLog":
         prompt = Prompt(prompt_id)
         if prompt not in self.history:
             return self
         return copy.replace(self, history=self.history[self.history.index(prompt) :])
 
-    def to_json(self):
+    def to_json(self) -> JsonObject:
         return {
             "next_id": self.next_id,
             "history": [
@@ -50,36 +51,38 @@ class EventLog(NamedTuple):
         }
 
 
-def parsed_history_item(stored):
-    stored = dict_or_empty(stored)
-    if isinstance(stored.get("prompt"), str):
-        return Prompt(stored["prompt"])
-    if isinstance(stored.get("reply"), str) and isinstance(stored.get("length"), int):
-        return Reply(stored["reply"], stored["length"])
+def parsed_history_item(stored: JsonValue) -> Prompt | Reply | None:
+    item = dict_or_empty(stored)
+    prompt_id = item.get("prompt")
+    if isinstance(prompt_id, str):
+        return Prompt(prompt_id)
+    reply_id, length = item.get("reply"), item.get("length")
+    if isinstance(reply_id, str) and isinstance(length, int):
+        return Reply(reply_id, length)
     return None
 
 
-def parsed_event_log(stored):
-    stored = dict_or_empty(stored)
-    next_id = stored.get("next_id")
-    history = stored.get("history")
+def parsed_event_log(stored: JsonValue) -> "EventLog":
+    log = dict_or_empty(stored)
+    next_id = log.get("next_id")
+    history = log.get("history")
     if not (isinstance(next_id, int) and isinstance(history, list)):
         return EventLog()
     items = (parsed_history_item(item) for item in history)
     return EventLog(next_id, tuple(item for item in items if item))
 
 
-def is_wake(message):
+def is_wake(message: JsonObject) -> bool:
     kind = dict_or_empty(message.get("origin")).get("kind")
     return isinstance(kind, str) and kind != "human"
 
 
-def is_queued_human_message(entry):
+def is_queued_human_message(entry: JsonObject) -> bool:
     attachment = dict_or_empty(entry.get("attachment"))
     return attachment.get("type") == "queued_command" and not is_wake(attachment)
 
 
-def is_human_prompt(entry):
+def is_human_prompt(entry: JsonObject) -> bool:
     if entry.get("isSidechain") or not isinstance(entry.get("uuid"), str):
         return False
     if entry.get("type") == "user":
@@ -87,7 +90,7 @@ def is_human_prompt(entry):
     return is_queued_human_message(entry)
 
 
-def reply_text(entry):
+def reply_text(entry: JsonObject) -> str:
     if entry.get("type") != "assistant" or not is_conversation_turn(entry):
         return ""
     content = dict_or_empty(entry.get("message")).get("content")
@@ -101,18 +104,19 @@ def reply_text(entry):
     return "\n".join(text for text in texts if isinstance(text, str))
 
 
-def message_id(entry):
+def message_id(entry: JsonObject) -> JsonValue:
     return dict_or_empty(entry.get("message")).get("id") or entry.get("uuid")
 
 
-def transcript_history(transcript_path):
-    if not transcript_path:
+def transcript_history(transcript_path: JsonValue) -> list[Prompt | Reply]:
+    if not (isinstance(transcript_path, str) and transcript_path):
         return []
-    history = []
-    reply_texts = {}
+    history: list[Prompt | str] = []
+    reply_texts: dict[str, str] = {}
     for entry in tail_entries(transcript_path):
-        if is_human_prompt(entry):
-            history.append(Prompt(entry["uuid"]))
+        prompt_id = entry.get("uuid")
+        if is_human_prompt(entry) and isinstance(prompt_id, str):
+            history.append(Prompt(prompt_id))
             continue
         text = reply_text(entry)
         reply_id = message_id(entry)
@@ -129,8 +133,8 @@ def transcript_history(transcript_path):
     ]
 
 
-def windows(history):
-    found = []
+def windows(history: Iterable[Prompt | Reply]) -> list[Window]:
+    found: list[Window] = []
     for item in history:
         if isinstance(item, Prompt):
             found.append(Window(item.id, 0))
@@ -139,7 +143,9 @@ def windows(history):
     return found
 
 
-def window_under_review(history, remembered, unseen_reply_count):
+def window_under_review(
+    history: Iterable[Prompt | Reply], remembered: Window, unseen_reply_count: int
+) -> Window | None:
     found = windows(history)
     if found:
         return found[-1]

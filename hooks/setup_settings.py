@@ -2,6 +2,9 @@
 # /// script
 # requires-python = ">=3.13"
 # dependencies = ["tomli-w"]
+# [tool.ty.environment]
+# root = ["."]
+# python = "../.venv"
 # ///
 
 import json
@@ -13,6 +16,7 @@ import tomllib
 from pathlib import Path
 
 import tomli_w
+from json_values import JsonObject, JsonValue
 
 HOME = Path.home()
 CLAUDE_DIR = HOME / ".claude"
@@ -93,7 +97,7 @@ DENIED_TOOLS = (
 TURN_ENDING_TOOLS = "Agent,ReadNotifications,SendMessage,TaskStop"
 
 
-def write_atomically(path, text):
+def write_atomically(path: Path, text: str) -> None:
     mode = path.stat().st_mode & 0o777 if path.exists() else 0o644
     descriptor, staged = tempfile.mkstemp(dir=path.parent, prefix=path.name + ".")
     try:
@@ -106,15 +110,36 @@ def write_atomically(path, text):
         raise
 
 
-def read_json(path):
+def read_json(path: Path) -> JsonObject:
     try:
         text = path.read_text()
     except FileNotFoundError:
         return {}
-    return json.loads(text) if text.strip() else {}
+    value = json.loads(text) if text.strip() else {}
+    if not isinstance(value, dict):
+        raise TypeError(f"{path} does not hold a JSON object")
+    return value
 
 
-def configure_claude_settings():
+def object_setting(settings: JsonObject, key: str) -> JsonObject:
+    value = settings.get(key)
+    if value is None:
+        return {}
+    if not isinstance(value, dict):
+        raise TypeError(f"Claude setting {key} is not a JSON object")
+    return value
+
+
+def list_setting(settings: JsonObject, key: str) -> list[JsonValue]:
+    value = settings.get(key)
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        raise TypeError(f"Claude setting {key} is not a JSON list")
+    return value
+
+
+def configure_claude_settings() -> None:
     CLAUDE_DIR.mkdir(parents=True, exist_ok=True)
     settings_path = CLAUDE_DIR / "settings.json"
     settings = read_json(settings_path)
@@ -122,20 +147,20 @@ def configure_claude_settings():
     wanted["attribution"] = {"commit": "", "pr": "", "sessionUrl": False}
     wanted["autoMemoryEnabled"] = False
     wanted["autoCompactWindow"] = AUTO_COMPACT_WINDOW_TOKENS
-    permissions = dict(settings.get("permissions", {}))
-    denied = permissions.get("deny", [])
+    permissions = dict(object_setting(settings, "permissions"))
+    denied = list_setting(permissions, "deny")
     permissions["deny"] = denied + [tool for tool in DENIED_TOOLS if tool not in denied]
     wanted["permissions"] = permissions
     wanted["skillOverrides"] = {
         **dict.fromkeys(USER_INVOCABLE_ONLY_SKILLS, USER_INVOCABLE_ONLY),
-        **settings.get("skillOverrides", {}),
+        **object_setting(settings, "skillOverrides"),
     }
     wanted["enabledPlugins"] = {
         **dict.fromkeys(DISABLED_PLUGINS, False),
-        **settings.get("enabledPlugins", {}),
+        **object_setting(settings, "enabledPlugins"),
     }
     wanted["env"] = {
-        **settings.get("env", {}),
+        **object_setting(settings, "env"),
         "CLAUDE_CODE_ACT_DONT_REDERIVE": "0",
         "CLAUDE_CODE_ARTIFACT_COMMENT_FAST_ACK": "0",
         "CLAUDE_CODE_ARTIFACT_COMMENT_FAST_ACK_FIXED": "0",
@@ -157,7 +182,7 @@ def configure_claude_settings():
         write_atomically(settings_path, json.dumps(wanted, indent=2) + "\n")
 
 
-def configure_codex():
+def configure_codex() -> None:
     if shutil.which("codex") is None:
         return
     CODEX_DIR.mkdir(parents=True, exist_ok=True)
@@ -177,7 +202,7 @@ def configure_codex():
         write_atomically(config_path, tomli_w.dumps(wanted))
 
 
-def main():
+def main() -> None:
     configure_claude_settings()
     configure_codex()
 

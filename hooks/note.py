@@ -1,6 +1,8 @@
 #!/usr/bin/env -S uv run --script
 # /// script
 # requires-python = ">=3.13"
+# [tool.ty.environment]
+# root = ["."]
 # ///
 
 import sys
@@ -13,6 +15,7 @@ from hook_io import (
     run_hook,
     write_context,
 )
+from json_values import JsonObject
 from plugin_paths import DATA_ROOT
 from session_state import locked_session_file, read_record, write_record
 
@@ -42,7 +45,7 @@ class NotificationCalls(NamedTuple):
     notifications: int = 0
 
 
-def is_notifications_note_due(agent_key):
+def is_notifications_note_due(agent_key: str | None) -> bool:
     if agent_key is None:
         return True
     with locked_session_file(NOTIFICATION_CALLS_DIR, agent_key) as state_file:
@@ -51,13 +54,13 @@ def is_notifications_note_due(agent_key):
     return previous % NOTIFICATIONS_NOTE_EVERY_CALLS == 0
 
 
-def is_due(name, payload):
+def is_due(name: str, payload: JsonObject) -> bool:
     if name != "notifications":
         return True
     return is_notifications_note_due(agent_session_key(payload))
 
 
-def main():
+def main() -> None:
     name = sys.argv[1]
     payload = read_payload()
     event = event_name_of(payload)

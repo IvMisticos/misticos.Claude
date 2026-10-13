@@ -1,19 +1,19 @@
 import json
 import sys
 import time
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
 from conftest import (
+    FakeBin,
     ReviewThread,
     append_json_lines,
     graphql_review_threads,
     run_json_hook,
     write_json_lines,
 )
-
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
-
+from json_values import JsonObject, JsonValue
 from pull_requests import (
     PullRequest,
     last_activity_by_pull_request,
@@ -42,30 +42,30 @@ printf '%s\\n' "$(<"$response")"
 
 
 @pytest.fixture
-def responses(tmp_path):
+def responses(tmp_path: Path) -> Path:
     responses = tmp_path / "responses"
     responses.mkdir()
     return responses
 
 
 @pytest.fixture
-def gh_path(fake_bin, responses):
+def gh_path(fake_bin: FakeBin, responses: Path) -> str:
     return str(fake_bin("gh", FAKE_GH.format(responses=responses)))
 
 
 @pytest.fixture
-def transcript(tmp_path):
+def transcript(tmp_path: Path) -> Path:
     transcript = tmp_path / "transcript.jsonl"
     write_json_lines(transcript, tool_use(PULL_REQUEST))
     return transcript
 
 
-def add_activity(transcript):
+def add_activity(transcript: Path) -> None:
     event = f'<event>{{"pr":"{PULL_REQUEST}"}}</event>'
     append_json_lines(transcript, {"type": "user", "message": {"content": event}})
 
 
-def tool_use(pull_request):
+def tool_use(pull_request: PullRequest) -> JsonObject:
     arguments = {
         "owner": pull_request.owner,
         "repo": pull_request.repo,
@@ -78,18 +78,20 @@ def tool_use(pull_request):
     }
 
 
-def answer_graphql(responses, *threads, state="OPEN"):
+def answer_graphql(
+    responses: Path, *threads: ReviewThread, state: str = "OPEN"
+) -> None:
     response = graphql_review_threads(*threads, state=state)
     (responses / "graphql.json").write_text(json.dumps(response))
 
 
-def answer_remote(responses, *threads, state="open"):
+def answer_remote(responses: Path, *threads: ReviewThread, state: str = "open") -> None:
     (responses / "state.txt").write_text(state)
     remote_threads = [thread.as_remote() for thread in threads]
     (responses / "threads.json").write_text(json.dumps(remote_threads))
 
 
-def stop(transcript, **fields):
+def stop(transcript: Path, **fields: JsonValue) -> JsonObject:
     return {
         "hook_event_name": "Stop",
         "session_id": "s1",
@@ -99,25 +101,31 @@ def stop(transcript, **fields):
     }
 
 
-def run_hook(home, path, payload, *arguments, remote=False):
+def run_hook(
+    home: Path, path: str, payload: JsonObject, *arguments: str, remote: bool = False
+) -> JsonValue:
     environment = {"HOME": str(home), "PATH": path}
     if remote:
         environment["CLAUDE_CODE_REMOTE"] = "true"
     return run_json_hook(HOOK, payload, *arguments, env=environment)
 
 
-def blocked():
+def blocked() -> JsonObject:
     reason = f"PR {PULL_REQUEST} has unresolved review threads with new comments."
     return {"decision": "block", "reason": reason}
 
 
-def test_new_unresolved_thread_blocks_once(home, gh_path, responses, transcript):
+def test_new_unresolved_thread_blocks_once(
+    home: Path, gh_path: str, responses: Path, transcript: Path
+) -> None:
     answer_graphql(responses, ReviewThread("T1", [1]), ReviewThread("T2", [2, 3]))
     assert run_hook(home, gh_path, stop(transcript)) == blocked()
     assert run_hook(home, gh_path, stop(transcript)) is None
 
 
-def test_stop_without_new_activity_calls_no_gh(home, gh_path, responses, transcript):
+def test_stop_without_new_activity_calls_no_gh(
+    home: Path, gh_path: str, responses: Path, transcript: Path
+) -> None:
     answer_graphql(responses, ReviewThread("T1", [1]))
     run_hook(home, gh_path, stop(transcript))
     answer_graphql(responses, ReviewThread("T1", [1, 2]))
@@ -128,8 +136,8 @@ def test_stop_without_new_activity_calls_no_gh(home, gh_path, responses, transcr
 
 
 def test_new_comment_on_a_seen_thread_blocks_again(
-    home, gh_path, responses, transcript
-):
+    home: Path, gh_path: str, responses: Path, transcript: Path
+) -> None:
     answer_graphql(responses, ReviewThread("T1", [1]), ReviewThread("T2", [2]))
     run_hook(home, gh_path, stop(transcript))
     answer_graphql(responses, ReviewThread("T1", [1]), ReviewThread("T2", [2, 4]))
@@ -148,7 +156,9 @@ def test_new_comment_on_a_seen_thread_blocks_again(
         '{"seen": {}, "skipped": [1], "checked": {}, "scanned": "0"}',
     ],
 )
-def test_unreadable_state_starts_over(home, gh_path, responses, transcript, stored):
+def test_unreadable_state_starts_over(
+    home: Path, gh_path: str, responses: Path, transcript: Path, stored: str
+) -> None:
     state = home / ".claude/hooks/data/misticos.Claude/review-threads/s1"
     state.parent.mkdir(parents=True)
     state.write_text(stored)
@@ -156,22 +166,24 @@ def test_unreadable_state_starts_over(home, gh_path, responses, transcript, stor
     assert run_hook(home, gh_path, stop(transcript)) == blocked()
 
 
-def test_resolved_thread_stays_silent(home, gh_path, responses, transcript):
+def test_resolved_thread_stays_silent(
+    home: Path, gh_path: str, responses: Path, transcript: Path
+) -> None:
     answer_graphql(responses, ReviewThread("T1", [1], resolved=True))
     assert run_hook(home, gh_path, stop(transcript)) is None
 
 
 @pytest.mark.parametrize("state", ["MERGED", "CLOSED"])
 def test_finished_pull_request_stays_silent(
-    home, gh_path, responses, transcript, state
-):
+    home: Path, gh_path: str, responses: Path, transcript: Path, state: str
+) -> None:
     answer_graphql(responses, ReviewThread("T1", [1]), state=state)
     assert run_hook(home, gh_path, stop(transcript)) is None
 
 
 def test_gh_failure_stays_silent_and_retries_next_stop(
-    home, gh_path, responses, transcript
-):
+    home: Path, gh_path: str, responses: Path, transcript: Path
+) -> None:
     (responses / "error.txt").write_text("gh: Bad Gateway (HTTP 502)")
     assert run_hook(home, gh_path, stop(transcript)) is None
     (responses / "error.txt").unlink()
@@ -180,8 +192,8 @@ def test_gh_failure_stays_silent_and_retries_next_stop(
 
 
 def test_gh_failure_retries_a_pull_request_found_in_a_create_result(
-    home, gh_path, responses, tmp_path
-):
+    home: Path, gh_path: str, responses: Path, tmp_path: Path
+) -> None:
     transcript = tmp_path / "transcript.jsonl"
     write_json_lines(
         transcript,
@@ -196,8 +208,8 @@ def test_gh_failure_retries_a_pull_request_found_in_a_create_result(
 
 
 def test_missing_gh_stays_silent_and_keeps_the_activity(
-    home, gh_path, responses, tmp_path, transcript
-):
+    home: Path, gh_path: str, responses: Path, tmp_path: Path, transcript: Path
+) -> None:
     empty_bin = tmp_path / "empty"
     empty_bin.mkdir()
     assert run_hook(home, str(empty_bin), stop(transcript)) is None
@@ -206,15 +218,17 @@ def test_missing_gh_stays_silent_and_keeps_the_activity(
 
 
 def test_continuing_after_a_block_stays_silent_and_keeps_the_thread_new(
-    home, gh_path, responses, transcript
-):
+    home: Path, gh_path: str, responses: Path, transcript: Path
+) -> None:
     answer_graphql(responses, ReviewThread("T1", [1]))
     active = stop(transcript, stop_hook_active=True)
     assert run_hook(home, gh_path, active) is None
     assert run_hook(home, gh_path, stop(transcript)) == blocked()
 
 
-def test_subagent_checks_its_own_transcript(home, gh_path, responses, tmp_path):
+def test_subagent_checks_its_own_transcript(
+    home: Path, gh_path: str, responses: Path, tmp_path: Path
+) -> None:
     answer_graphql(responses, ReviewThread("T1", [1]))
     parent = tmp_path / "parent.jsonl"
     write_json_lines(parent, tool_use(PULL_REQUEST))
@@ -227,8 +241,8 @@ def test_subagent_checks_its_own_transcript(home, gh_path, responses, tmp_path):
 
 
 def test_subagent_leaves_the_parent_reminder_unclaimed(
-    home, gh_path, responses, transcript
-):
+    home: Path, gh_path: str, responses: Path, transcript: Path
+) -> None:
     answer_graphql(responses, ReviewThread("T1", [1]))
     subagent = stop(
         transcript,
@@ -240,19 +254,23 @@ def test_subagent_leaves_the_parent_reminder_unclaimed(
     assert run_hook(home, gh_path, stop(transcript)) == blocked()
 
 
-def merged(responses):
+def merged(responses: Path) -> None:
     answer_graphql(responses, state="MERGED")
 
 
-def missing(responses):
+def missing(responses: Path) -> None:
     error = "gh: Could not resolve to a Repository with the name 'acme/widgets'."
     (responses / "error.txt").write_text(error)
 
 
 @pytest.mark.parametrize("answer", [merged, missing])
 def test_merged_or_missing_pull_request_is_not_queried_again(
-    home, gh_path, responses, transcript, answer
-):
+    home: Path,
+    gh_path: str,
+    responses: Path,
+    transcript: Path,
+    answer: Callable[[Path], None],
+) -> None:
     answer(responses)
     run_hook(home, gh_path, stop(transcript))
     calls = responses / "calls.log"
@@ -262,15 +280,15 @@ def test_merged_or_missing_pull_request_is_not_queried_again(
     assert not calls.exists()
 
 
-def same_length_filler(entry):
+def same_length_filler(entry: JsonObject) -> JsonObject:
     empty = {"type": "user", "message": {"content": ""}}
     padding = len(json.dumps(entry)) - len(json.dumps(empty))
     return {"type": "user", "message": {"content": "x" * padding}}
 
 
 def test_stop_reads_only_lines_added_since_the_last_stop(
-    home, gh_path, responses, tmp_path
-):
+    home: Path, gh_path: str, responses: Path, tmp_path: Path
+) -> None:
     answer_graphql(responses, ReviewThread("T1", [1]))
     transcript = tmp_path / "transcript.jsonl"
     write_json_lines(transcript, same_length_filler(tool_use(PULL_REQUEST)))
@@ -282,8 +300,8 @@ def test_stop_reads_only_lines_added_since_the_last_stop(
 
 
 def test_shrunk_transcript_checks_its_activity_again(
-    home, gh_path, responses, tmp_path
-):
+    home: Path, gh_path: str, responses: Path, tmp_path: Path
+) -> None:
     answer_graphql(responses, ReviewThread("T1", [1]))
     transcript = tmp_path / "transcript.jsonl"
     filler = same_length_filler(tool_use(PULL_REQUEST))
@@ -294,7 +312,7 @@ def test_shrunk_transcript_checks_its_activity_again(
     assert run_hook(home, gh_path, stop(transcript)) == blocked()
 
 
-def test_transcript_part_ends_at_the_last_complete_line(tmp_path):
+def test_transcript_part_ends_at_the_last_complete_line(tmp_path: Path) -> None:
     transcript = tmp_path / "transcript.jsonl"
     transcript.write_bytes(b'{"a": 1}\n{"b": 2}\n{"c"')
     part = transcript_part_from(transcript, 9)
@@ -302,21 +320,21 @@ def test_transcript_part_ends_at_the_last_complete_line(tmp_path):
     assert list(positioned_entries(part)) == [(9, {"b": 2})]
 
 
-def test_transcript_part_starts_over_when_the_transcript_shrank(tmp_path):
+def test_transcript_part_starts_over_when_the_transcript_shrank(tmp_path: Path) -> None:
     transcript = tmp_path / "transcript.jsonl"
     transcript.write_bytes(b'{"a": 1}\n')
     assert transcript_part_from(transcript, 100) == TranscriptPart(0, b'{"a": 1}\n')
 
 
-def test_call_that_finished_counts_after_the_deadline():
+def test_call_that_finished_counts_after_the_deadline() -> None:
     process = started([sys.executable, "-c", "print('done')"])
     process.wait()
     assert output_by(time.monotonic() - 1, process) == "done\n"
 
 
 def test_remote_session_reads_review_threads_route(
-    home, gh_path, responses, transcript
-):
+    home: Path, gh_path: str, responses: Path, transcript: Path
+) -> None:
     answer_remote(
         responses, ReviewThread("T1", [1, 5]), ReviewThread("T2", [2], resolved=True)
     )
@@ -326,7 +344,7 @@ def test_remote_session_reads_review_threads_route(
     assert run_hook(home, gh_path, stop(transcript), remote=True) is None
 
 
-def cursor_stop(transcript, **fields):
+def cursor_stop(transcript: Path, **fields: JsonValue) -> JsonObject:
     return {
         "hook_event_name": "stop",
         "conversation_id": "c1",
@@ -335,7 +353,9 @@ def cursor_stop(transcript, **fields):
     }
 
 
-def test_cursor_gets_a_follow_up_message(home, gh_path, responses, transcript):
+def test_cursor_gets_a_follow_up_message(
+    home: Path, gh_path: str, responses: Path, transcript: Path
+) -> None:
     answer_graphql(responses, ReviewThread("T1", [1]))
     payload = cursor_stop(transcript, status="completed", loop_count=0)
     output = run_hook(home, gh_path, payload, "--harness", "cursor")
@@ -351,35 +371,35 @@ def test_cursor_gets_a_follow_up_message(home, gh_path, responses, transcript):
     ],
 )
 def test_cursor_stays_silent_after_a_follow_up_abort_or_error(
-    home, gh_path, responses, transcript, fields
-):
+    home: Path, gh_path: str, responses: Path, transcript: Path, fields: JsonObject
+) -> None:
     answer_graphql(responses, ReviewThread("T1", [1]))
     payload = cursor_stop(transcript, **fields)
     assert run_hook(home, gh_path, payload, "--harness", "cursor") is None
 
 
-def activity_in(transcript):
+def activity_in(transcript: Path) -> dict[PullRequest, int]:
     return last_activity_by_pull_request(
         positioned_entries(transcript_part_from(transcript, 0))
     )
 
 
-def assistant_call(block):
+def assistant_call(block: JsonObject) -> JsonObject:
     return {"type": "assistant", "message": {"content": [block]}}
 
 
-def tool_result(call_id, text):
+def tool_result(call_id: str, text: str) -> JsonObject:
     result = {"type": "tool_result", "tool_use_id": call_id, "content": text}
     return {"type": "user", "message": {"content": [result]}}
 
 
-def bash_call(command, call_id="b0"):
+def bash_call(command: str, call_id: str = "b0") -> JsonObject:
     command_input = {"command": command}
     return {"type": "tool_use", "id": call_id, "name": "Bash", "input": command_input}
 
 
-def test_finds_pull_requests_the_session_worked_on(tmp_path):
-    create = {
+def test_finds_pull_requests_the_session_worked_on(tmp_path: Path) -> None:
+    create: JsonObject = {
         "type": "tool_use",
         "id": "c1",
         "name": "mcp__github__create_pull_request",
@@ -387,21 +407,25 @@ def test_finds_pull_requests_the_session_worked_on(tmp_path):
     }
     created = {"id": "1", "url": "https://github.com/acme/widgets/pull/9"}
     wake = 'activity <event>{"pr":"acme/gadgets#3"}</event>'
-    notifications = {"type": "tool_use", "id": "n1", "name": "ReadNotifications"}
+    notifications: JsonObject = {
+        "type": "tool_use",
+        "id": "n1",
+        "name": "ReadNotifications",
+    }
     notified = 'Notification 1 <event>{"pr":"acme/gadgets#11"}</event>'
-    codex_call = {
+    codex_call: JsonObject = {
         "type": "function_call",
         "name": "mcp__github__pull_request_read",
         "call_id": "x1",
         "arguments": json.dumps({"owner": "acme", "repo": "tools", "pullNumber": 4}),
     }
-    codex_create = {
+    codex_create: JsonObject = {
         "type": "function_call",
         "call_id": "call_1",
         "name": "shell",
         "arguments": json.dumps({"command": ["bash", "-lc", "gh pr new --fill"]}),
     }
-    codex_created = {
+    codex_created: JsonObject = {
         "type": "function_call_output",
         "call_id": "call_1",
         "output": "https://github.com/acme/apps/pull/8\n",
@@ -439,9 +463,9 @@ def test_finds_pull_requests_the_session_worked_on(tmp_path):
     ]
 
 
-def test_ignores_pull_requests_the_session_only_mentioned(tmp_path):
+def test_ignores_pull_requests_the_session_only_mentioned(tmp_path: Path) -> None:
     link = "https://github.com/acme/widgets/pull/2"
-    listing = {
+    listing: JsonObject = {
         "type": "tool_use",
         "id": "l1",
         "name": "mcp__github__list_pull_requests",
@@ -451,14 +475,19 @@ def test_ignores_pull_requests_the_session_only_mentioned(tmp_path):
         "html_url": "https://github.com/acme/widgets/pull/1",
         "url": "https://api.github.com/repos/acme/widgets/pulls/1",
     }
-    create = {
+    create: JsonObject = {
         "type": "tool_use",
         "name": "mcp__github__create_pull_request",
         "input": {"owner": "acme", "repo": "widgets", "body": f"Follows {link}"},
     }
-    fetch = {"type": "tool_use", "name": "WebFetch", "input": {"url": link}}
-    read = {"type": "tool_use", "id": "r1", "name": "Read", "input": {"path": "t.py"}}
-    write = {
+    fetch: JsonObject = {"type": "tool_use", "name": "WebFetch", "input": {"url": link}}
+    read: JsonObject = {
+        "type": "tool_use",
+        "id": "r1",
+        "name": "Read",
+        "input": {"path": "t.py"},
+    }
+    write: JsonObject = {
         "type": "tool_use",
         "name": "Write",
         "input": {"content": f'see {link} and {{"pr":"acme/widgets#3"}}'},
@@ -481,15 +510,15 @@ def test_ignores_pull_requests_the_session_only_mentioned(tmp_path):
     assert activity_in(transcript) == {}
 
 
-def test_codex_create_result_matches_by_call_id(tmp_path):
-    create = {
+def test_codex_create_result_matches_by_call_id(tmp_path: Path) -> None:
+    create: JsonObject = {
         "type": "function_call",
         "id": "fc_1",
         "call_id": "call_1",
         "name": "mcp__github__create_pull_request",
         "arguments": json.dumps({"owner": "acme", "repo": "apps"}),
     }
-    created = {
+    created: JsonObject = {
         "type": "function_call_output",
         "call_id": "call_1",
         "output": json.dumps({"url": "https://github.com/acme/apps/pull/8"}),
@@ -503,8 +532,8 @@ def test_codex_create_result_matches_by_call_id(tmp_path):
     assert list(activity_in(transcript)) == [PullRequest("acme", "apps", 8)]
 
 
-def test_create_call_without_id_reads_no_other_entries(tmp_path):
-    create = {
+def test_create_call_without_id_reads_no_other_entries(tmp_path: Path) -> None:
+    create: JsonObject = {
         "type": "tool_use",
         "name": "mcp__github__create_pull_request",
         "input": {"owner": "acme", "repo": "widgets"},
@@ -519,7 +548,7 @@ def test_create_call_without_id_reads_no_other_entries(tmp_path):
     assert activity_in(transcript) == {}
 
 
-def test_newline_ends_a_gh_command(tmp_path):
+def test_newline_ends_a_gh_command(tmp_path: Path) -> None:
     transcript = tmp_path / "transcript.jsonl"
     write_json_lines(
         transcript,
@@ -536,7 +565,7 @@ def test_newline_ends_a_gh_command(tmp_path):
     ]
 
 
-def test_gh_pr_target_is_the_word_after_the_subcommand(tmp_path):
+def test_gh_pr_target_is_the_word_after_the_subcommand(tmp_path: Path) -> None:
     transcript = tmp_path / "transcript.jsonl"
     write_json_lines(
         transcript,
@@ -552,7 +581,7 @@ def test_gh_pr_target_is_the_word_after_the_subcommand(tmp_path):
     ]
 
 
-def test_redirections_are_not_gh_arguments(tmp_path):
+def test_redirections_are_not_gh_arguments(tmp_path: Path) -> None:
     transcript = tmp_path / "transcript.jsonl"
     write_json_lines(
         transcript,
@@ -563,6 +592,6 @@ def test_redirections_are_not_gh_arguments(tmp_path):
     assert list(activity_in(transcript)) == [PullRequest("acme", "c", 4)]
 
 
-def test_result_of_an_unknown_use_has_no_pull_requests():
-    result = {"text": "https://github.com/acme/a/pull/1"}
-    assert list(pull_requests_in_result(result, "unknown")) == []
+def test_result_of_an_unknown_use_has_no_pull_requests() -> None:
+    result: JsonObject = {"text": "https://github.com/acme/a/pull/1"}
+    assert list(pull_requests_in_result(result, None)) == []

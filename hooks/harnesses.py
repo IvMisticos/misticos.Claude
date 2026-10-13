@@ -1,6 +1,6 @@
 import argparse
 from enum import Enum, auto
-from typing import NamedTuple, override
+from typing import NamedTuple, NoReturn, override
 
 
 class ContextSource(Enum):
@@ -55,7 +55,7 @@ HARNESSES = {
 }
 
 
-def harness_named(name):
+def harness_named(name: str) -> Harness:
     try:
         return HARNESSES[name]
     except KeyError:
@@ -64,11 +64,11 @@ def harness_named(name):
 
 class QuietArgumentParser(argparse.ArgumentParser):
     @override
-    def error(self, message):
+    def error(self, message: str) -> NoReturn:
         raise ValueError(message)
 
 
-def harness_parser():
+def harness_parser() -> QuietArgumentParser:
     parser = QuietArgumentParser(add_help=False)
     parser.add_argument("--harness", type=harness_named, default=HARNESSES["claude"])
     return parser

@@ -1,6 +1,8 @@
 #!/usr/bin/env -S uv run --script
 # /// script
 # requires-python = ">=3.13"
+# [tool.ty.environment]
+# root = ["."]
 # ///
 
 import os
@@ -18,6 +20,7 @@ from hook_io import (
     write_block,
     write_context,
 )
+from json_values import JsonObject, JsonValue
 from review_thread_reminder import review_reminder
 
 AGENT_ID = re.compile(r"[A-Za-z0-9_-]+")
@@ -30,12 +33,12 @@ SCRATCH_FOLDER_NOTE = (
 )
 
 
-def agent_folders_root(payload):
+def agent_folders_root(payload: JsonObject) -> Path | None:
     scratchpad = scratchpad_of(payload)
     return Path(scratchpad) / "agents" if scratchpad else None
 
 
-def agent_folder(payload):
+def agent_folder(payload: JsonObject) -> Path | None:
     root = agent_folders_root(payload)
     agent_id = payload.get("agent_id")
     if root and isinstance(agent_id, str) and AGENT_ID.fullmatch(agent_id):
@@ -43,7 +46,7 @@ def agent_folder(payload):
     return None
 
 
-def other_tasks_in_flight(payload):
+def other_tasks_in_flight(payload: JsonObject) -> list[JsonValue] | None:
     tasks = payload.get("background_tasks")
     if not isinstance(tasks, list):
         return None
@@ -55,7 +58,7 @@ def other_tasks_in_flight(payload):
     ]
 
 
-def offer_agent_folder(payload):
+def offer_agent_folder(payload: JsonObject) -> None:
     folder = agent_folder(payload)
     if not folder:
         return
@@ -64,7 +67,7 @@ def offer_agent_folder(payload):
     write_context("SubagentStart", note, OutputShape.CLAUDE)
 
 
-def delete_in_background(folder):
+def delete_in_background(folder: Path) -> None:
     subprocess.Popen(
         [sys.executable, "-c", DELETE_FOLDER, str(folder)],
         stdin=subprocess.DEVNULL,
@@ -74,7 +77,7 @@ def delete_in_background(folder):
     )
 
 
-def delete_soon(folder):
+def delete_soon(folder: Path) -> None:
     trash = folder.with_name(f"{folder.name}-deleted-{os.getpid()}")
     try:
         folder.rename(trash)
@@ -83,13 +86,13 @@ def delete_soon(folder):
     delete_in_background(trash)
 
 
-def delete_agent_folder(payload):
+def delete_agent_folder(payload: JsonObject) -> None:
     folder = agent_folder(payload)
     if folder and other_tasks_in_flight(payload) == []:
         delete_soon(folder)
 
 
-def finish_agent(payload):
+def finish_agent(payload: JsonObject) -> None:
     reason = review_reminder(payload)
     if reason:
         write_block(reason, OutputShape.CLAUDE)
@@ -97,13 +100,13 @@ def finish_agent(payload):
     delete_agent_folder(payload)
 
 
-def delete_agent_folders_when_idle(payload):
+def delete_agent_folders_when_idle(payload: JsonObject) -> None:
     root = agent_folders_root(payload)
     if root and payload.get("background_tasks") == []:
         delete_soon(root)
 
 
-def delete_agent_folders_after_session(payload):
+def delete_agent_folders_after_session(payload: JsonObject) -> None:
     root = agent_folders_root(payload)
     if root and payload.get("reason") not in ENDS_WITH_TASKS_RUNNING:
         delete_soon(root)
@@ -117,7 +120,7 @@ HANDLERS = {
 }
 
 
-def main():
+def main() -> None:
     payload = read_payload()
     handle = HANDLERS.get(event_name_of(payload))
     if handle:

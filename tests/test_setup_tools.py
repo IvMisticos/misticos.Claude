@@ -3,9 +3,12 @@ import os
 import shutil
 import subprocess
 import sys
+from pathlib import Path
+from typing import Protocol
 
 import pytest
-from conftest import ROOT
+from conftest import ROOT, FakeBin
+from json_values import JsonValue
 
 WEB_GUIDANCE_PLUGIN = "modern-web-guidance@googlechrome"
 MARKETPLACE_ADD = "claude plugin marketplace add GoogleChrome/modern-web-guidance"
@@ -41,8 +44,12 @@ echo "$(basename "$0") $*" >> "$HOME/calls"
 """
 
 
+class SetUpTools(Protocol):
+    def __call__(self, **extra_environment: str) -> tuple[int, list[str]]: ...
+
+
 @pytest.fixture
-def hooks(tmp_path):
+def hooks(tmp_path: Path) -> Path:
     hooks = tmp_path / "hooks"
     hooks.mkdir()
     for name in ("setup_tools.py", "json_values.py"):
@@ -54,12 +61,12 @@ def hooks(tmp_path):
 
 
 @pytest.fixture
-def set_up_tools(home, fake_bin, hooks):
+def set_up_tools(home: Path, fake_bin: FakeBin, hooks: Path) -> SetUpTools:
     bin_dir = fake_bin("claude", FAKE_CLAUDE)
     fake_bin("curl", FAKE_DOWNLOAD)
     fake_bin("apt-get", FAKE_DOWNLOAD)
 
-    def set_up(**extra_environment):
+    def set_up(**extra_environment: str) -> tuple[int, list[str]]:
         result = subprocess.run(
             [sys.executable, hooks / "setup_tools.py"],
             env={
@@ -78,43 +85,49 @@ def set_up_tools(home, fake_bin, hooks):
     return set_up
 
 
-def write_json(path, value):
+def write_json(path: Path, value: JsonValue) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(value))
 
 
-def test_settings_are_reapplied_after_the_plugin_install(set_up_tools):
+def test_settings_are_reapplied_after_the_plugin_install(
+    set_up_tools: SetUpTools,
+) -> None:
     assert set_up_tools() == (0, [MARKETPLACE_ADD, INSTALL, REAPPLY_SETTINGS])
 
 
-def test_plugin_is_enabled_when_reapplied_settings_lost_it(set_up_tools):
+def test_plugin_is_enabled_when_reapplied_settings_lost_it(
+    set_up_tools: SetUpTools,
+) -> None:
     assert set_up_tools(STALE_SETTINGS="1") == (
         0,
         [MARKETPLACE_ADD, INSTALL, REAPPLY_SETTINGS, ENABLE],
     )
 
 
-def test_failed_install_still_reapplies_settings(set_up_tools):
+def test_failed_install_still_reapplies_settings(set_up_tools: SetUpTools) -> None:
     status, calls = set_up_tools(CLAUDE_FAILS_AT="install")
     assert status != 0
     assert calls == [MARKETPLACE_ADD, INSTALL, REAPPLY_SETTINGS]
 
 
 @pytest.mark.skipif(os.geteuid() != 0, reason="cloud tools install only as root")
-def test_cloud_tools_install_after_a_plugin_failure(set_up_tools):
+def test_cloud_tools_install_after_a_plugin_failure(set_up_tools: SetUpTools) -> None:
     status, calls = set_up_tools(CLAUDE_FAILS_AT="install", CCR_AGENT_PROXY_ENABLED="1")
     assert status != 0
     assert calls[:3] == [MARKETPLACE_ADD, INSTALL, REAPPLY_SETTINGS]
     assert any(call.startswith("curl ") for call in calls[3:])
 
 
-def test_installed_plugin_is_left_alone(set_up_tools, home):
+def test_installed_plugin_is_left_alone(set_up_tools: SetUpTools, home: Path) -> None:
     installed = home / ".claude" / "plugins" / "installed_plugins.json"
     write_json(installed, {"plugins": {WEB_GUIDANCE_PLUGIN: []}})
     assert set_up_tools() == (0, [])
 
 
-def test_plugin_the_user_disabled_is_not_installed(set_up_tools, home):
+def test_plugin_the_user_disabled_is_not_installed(
+    set_up_tools: SetUpTools, home: Path
+) -> None:
     settings = home / ".claude" / "settings.json"
     write_json(settings, {"enabledPlugins": {WEB_GUIDANCE_PLUGIN: False}})
     assert set_up_tools() == (0, [])

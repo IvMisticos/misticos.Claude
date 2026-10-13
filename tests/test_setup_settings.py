@@ -2,9 +2,13 @@ import json
 import os
 import shutil
 import subprocess
+from pathlib import Path
+from typing import Protocol
 
 import pytest
-from conftest import ROOT
+import setup_settings
+from conftest import ROOT, FakeBin
+from json_values import JsonObject
 
 HOOKS = ROOT / "hooks"
 ENABLED_PLUGINS = {
@@ -13,7 +17,11 @@ ENABLED_PLUGINS = {
 }
 
 
-def unshimmed_uv():
+class ConfigureSettings(Protocol):
+    def __call__(self, check: bool = True) -> subprocess.CompletedProcess[bytes]: ...
+
+
+def unshimmed_uv() -> str:
     directories = os.environ["PATH"].split(os.pathsep)
     unshimmed = [
         directory for directory in directories if not directory.endswith("shims")
@@ -25,7 +33,7 @@ def unshimmed_uv():
 
 
 @pytest.fixture(scope="module")
-def uv_environment():
+def uv_environment() -> tuple[str, dict[str, str]]:
     uv = unshimmed_uv()
     cache_dir = subprocess.run(
         [uv, "cache", "dir"], capture_output=True, text=True, check=True, timeout=30
@@ -53,11 +61,13 @@ def uv_environment():
 
 
 @pytest.fixture
-def configure_settings(home, fake_bin, uv_environment):
+def configure_settings(
+    home: Path, fake_bin: FakeBin, uv_environment: tuple[str, dict[str, str]]
+) -> ConfigureSettings:
     uv, environment = uv_environment
     bin_dir = fake_bin("placeholder", "")
 
-    def configure(check=True):
+    def configure(check: bool = True) -> subprocess.CompletedProcess[bytes]:
         return subprocess.run(
             [uv, "run", "--script", HOOKS / "setup_settings.py"],
             env={**environment, "HOME": str(home), "PATH": f"{bin_dir}:/usr/bin:/bin"},
@@ -69,7 +79,9 @@ def configure_settings(home, fake_bin, uv_environment):
     return configure
 
 
-def test_second_run_writes_nothing(configure_settings, home):
+def test_second_run_writes_nothing(
+    configure_settings: ConfigureSettings, home: Path
+) -> None:
     settings_path = home / ".claude" / "settings.json"
     settings_path.parent.mkdir(parents=True)
     settings_path.write_text(json.dumps({"enabledPlugins": ENABLED_PLUGINS}))
@@ -81,7 +93,9 @@ def test_second_run_writes_nothing(configure_settings, home):
     assert enabled.items() >= ENABLED_PLUGINS.items()
 
 
-def test_broken_settings_are_left_alone(configure_settings, home):
+def test_broken_settings_are_left_alone(
+    configure_settings: ConfigureSettings, home: Path
+) -> None:
     settings_path = home / ".claude" / "settings.json"
     settings_path.parent.mkdir(parents=True)
     settings_path.write_text("{broken")
@@ -91,7 +105,7 @@ def test_broken_settings_are_left_alone(configure_settings, home):
     assert settings_path.read_text() == "{broken"
 
 
-def test_settings_hook_runs_every_session():
+def test_settings_hook_runs_every_session() -> None:
     hooks = json.loads((HOOKS / "claude.json").read_text())["hooks"]
     commands = [
         hook["command"]
@@ -101,3 +115,46 @@ def test_settings_hook_runs_every_session():
     ]
     assert commands
     assert all("--once" not in command for command in commands)
+
+
+@pytest.mark.parametrize(
+    "settings",
+    [
+        {"permissions": ["Bash"]},
+        {"permissions": {"deny": "Bash"}},
+        {"skillOverrides": "x"},
+        {"enabledPlugins": 1},
+        {"env": ["A=1"]},
+    ],
+)
+def test_malformed_claude_settings_stay_untouched(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, settings: JsonObject
+) -> None:
+    monkeypatch.setattr(setup_settings, "CLAUDE_DIR", tmp_path)
+    settings_path = tmp_path / "settings.json"
+    stored = json.dumps(settings)
+    settings_path.write_text(stored)
+    with pytest.raises(TypeError):
+        setup_settings.configure_claude_settings()
+    assert settings_path.read_text() == stored
+
+
+@pytest.mark.parametrize(
+    "settings",
+    [
+        {"permissions": None},
+        {"permissions": {"deny": None}},
+        {"skillOverrides": None},
+        {"enabledPlugins": None},
+        {"env": None},
+    ],
+)
+def test_null_claude_settings_count_as_empty(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, settings: JsonObject
+) -> None:
+    monkeypatch.setattr(setup_settings, "CLAUDE_DIR", tmp_path)
+    settings_path = tmp_path / "settings.json"
+    settings_path.write_text(json.dumps(settings))
+    setup_settings.configure_claude_settings()
+    written = json.loads(settings_path.read_text())
+    assert written["permissions"]["deny"] == list(setup_settings.DENIED_TOOLS)

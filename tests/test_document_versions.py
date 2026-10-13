@@ -3,11 +3,14 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "mcp"))
 
+from lsp_types import LSPAny
 from open_documents import OpenDocuments
 from text_positions import to_uri
 
+type Notification = tuple[str, LSPAny]
 
-def notifying_documents():
+
+def notifying_documents() -> tuple[OpenDocuments, list[Notification]]:
     notifications = []
     documents = OpenDocuments(
         {".py": "python"}, lambda method, params: notifications.append((method, params))
@@ -15,13 +18,13 @@ def notifying_documents():
     return documents, notifications
 
 
-def sent_versions(notifications):
+def sent_versions(notifications: list[Notification]) -> list[tuple[str, LSPAny]]:
     return [
         (method, params["textDocument"]["version"]) for method, params in notifications
     ]
 
 
-def test_edits_after_opening_bump_the_version(tmp_path):
+def test_edits_after_opening_bump_the_version(tmp_path: Path) -> None:
     documents, notifications = notifying_documents()
     source = tmp_path / "main.py"
     source.write_text("a")
@@ -38,7 +41,7 @@ def test_edits_after_opening_bump_the_version(tmp_path):
     ]
 
 
-def test_closed_document_opens_again_at_the_first_version(tmp_path):
+def test_closed_document_opens_again_at_the_first_version(tmp_path: Path) -> None:
     documents, notifications = notifying_documents()
     source = tmp_path / "main.py"
     source.write_text("a")

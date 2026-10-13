@@ -1,3 +1,5 @@
+from collections.abc import Iterator, Sequence
+
 BUN_BUILD_AND_TEST = frozenset({"build", "test"})
 QUEUED_SUBCOMMANDS = {
     "dotnet": {"build", "test", "publish", "pack"},
@@ -47,7 +49,7 @@ OPTIONS_WITH_VALUE = {
 WATCH_FLAGS = {"--watch", "--hot"}
 
 
-def positionals(tool, arguments):
+def positionals(tool: str, arguments: Sequence[str]) -> Iterator[str]:
     options_with_value = OPTIONS_WITH_VALUE.get(tool, set())
     words = iter(arguments)
     for word in words:
@@ -57,7 +59,7 @@ def positionals(tool, arguments):
             yield word
 
 
-def queues(tool, arguments):
+def queues(tool: str, arguments: Sequence[str]) -> bool:
     if WATCH_FLAGS & set(arguments):
         return False
     match list(positionals(tool, arguments)):

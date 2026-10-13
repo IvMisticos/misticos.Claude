@@ -1,9 +1,10 @@
 import re
+from collections.abc import Iterable, Iterator
 from enum import Enum, auto
 from typing import NamedTuple
 
-from gh_commands import gh_api_words, gh_argument_lists, gh_pr_call
-from json_values import dict_or_empty, json_object
+from gh_commands import GhPrCall, gh_api_words, gh_argument_lists, gh_pr_call
+from json_values import JsonObject, JsonValue, dict_or_empty, json_object
 
 NAME = r"[\w.-]+"
 LINK_END = r"(?=[/?#]|$)"
@@ -42,22 +43,22 @@ class PullRequest(NamedTuple):
     repo: str
     number: int
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.owner}/{self.repo}#{self.number}"
 
 
-def matched_pull_request(match):
+def matched_pull_request(match: re.Match[str]) -> PullRequest:
     return PullRequest(match[1], match[2], int(match[3]))
 
 
-def targeted_pull_request(word):
+def targeted_pull_request(word: str) -> PullRequest | None:
     for target in PULL_REQUEST_TARGETS:
         if match := target.match(word):
             return matched_pull_request(match)
     return None
 
 
-def pull_request_in_arguments(arguments):
+def pull_request_in_arguments(arguments: JsonObject) -> PullRequest | None:
     owner = arguments.get("owner")
     repo = arguments.get("repo")
     number = arguments.get("pullNumber")
@@ -66,7 +67,7 @@ def pull_request_in_arguments(arguments):
     return None
 
 
-def nested_values(value):
+def nested_values(value: JsonValue) -> Iterator[JsonValue]:
     yield value
     if isinstance(value, dict):
         value = list(value.values())
@@ -75,26 +76,26 @@ def nested_values(value):
             yield from nested_values(item)
 
 
-def nested_texts(value):
+def nested_texts(value: JsonValue) -> Iterator[str]:
     return (item for item in nested_values(value) if isinstance(item, str))
 
 
-def block_type(block):
+def block_type(block: JsonObject) -> str:
     kind = block.get("type")
     return kind if isinstance(kind, str) else ""
 
 
-def call_id(call):
+def call_id(call: JsonObject) -> str | None:
     found = call.get("call_id") or call.get("id")
     return found if isinstance(found, str) else None
 
 
-def call_name(call):
+def call_name(call: JsonObject) -> str:
     name = call.get("name")
     return name.lower() if isinstance(name, str) else ""
 
 
-def call_arguments(call):
+def call_arguments(call: JsonObject) -> JsonObject:
     for field in ARGUMENT_FIELDS:
         value = call.get(field)
         arguments = json_object(value) if isinstance(value, str) else value
@@ -103,12 +104,12 @@ def call_arguments(call):
     return {}
 
 
-def gh_calls(call):
+def gh_calls(call: JsonObject) -> list[list[str]]:
     arguments = call_arguments(call)
     return gh_argument_lists(arguments.get("command") or arguments.get("cmd"))
 
 
-def pull_request_of_gh_pr_call(pr_call):
+def pull_request_of_gh_pr_call(pr_call: GhPrCall | None) -> PullRequest | None:
     if not pr_call or pr_call.target is None:
         return None
     if targeted := targeted_pull_request(pr_call.target):
@@ -119,19 +120,19 @@ def pull_request_of_gh_pr_call(pr_call):
     return None
 
 
-def pull_requests_in_gh_call(arguments):
+def pull_requests_in_gh_call(arguments: list[str]) -> list[PullRequest]:
     targets = [pull_request_of_gh_pr_call(gh_pr_call(arguments))]
     targets += map(targeted_pull_request, gh_api_words(arguments))
     return [target for target in targets if target]
 
 
-def pull_requests_in_github_tool(arguments):
+def pull_requests_in_github_tool(arguments: JsonObject) -> list[PullRequest]:
     targets = (arguments.get(field) for field in TARGET_FIELDS)
     found = (targeted_pull_request(t) for t in targets if isinstance(t, str))
     return [target for target in found if target]
 
 
-def pull_requests_in_call(call):
+def pull_requests_in_call(call: JsonObject) -> Iterator[PullRequest]:
     arguments = call_arguments(call)
     if named := pull_request_in_arguments(arguments):
         yield named
@@ -141,12 +142,12 @@ def pull_requests_in_call(call):
         yield from pull_requests_in_gh_call(gh_arguments)
 
 
-def creates_by_gh(call):
+def creates_by_gh(call: JsonObject) -> bool:
     pr_calls = (gh_pr_call(arguments) for arguments in gh_calls(call))
     return any(pr_call and pr_call.creates_a_pull_request() for pr_call in pr_calls)
 
 
-def result_use(call):
+def result_use(call: JsonObject) -> ResultUse | None:
     name = call_name(call)
     if name.endswith(CREATE_TOOL_SUFFIX) or creates_by_gh(call):
         return ResultUse.CREATED_PULL_REQUEST
@@ -155,23 +156,25 @@ def result_use(call):
     return None
 
 
-def answered_call_id(block):
+def answered_call_id(block: JsonObject) -> str | None:
     field = CALL_ID_FIELD_BY_RESULT_TYPE.get(block_type(block))
     answered = block.get(field) if field else None
     return answered if isinstance(answered, str) else None
 
 
-def pull_request_events_in(texts):
+def pull_request_events_in(texts: Iterable[str]) -> Iterator[PullRequest]:
     for text in texts:
         yield from map(matched_pull_request, PULL_REQUEST_EVENT.finditer(text))
 
 
-def pull_requests_linked_in(texts):
+def pull_requests_linked_in(texts: Iterable[str]) -> Iterator[PullRequest]:
     for text in texts:
         yield from map(matched_pull_request, PULL_REQUEST_URL.finditer(text))
 
 
-def pull_requests_in_result(result, use):
+def pull_requests_in_result(
+    result: JsonValue, use: ResultUse | None
+) -> Iterable[PullRequest]:
     match use:
         case ResultUse.CREATED_PULL_REQUEST:
             return pull_requests_linked_in(nested_texts(result))
@@ -181,7 +184,7 @@ def pull_requests_in_result(result, use):
             return []
 
 
-def user_texts(entry):
+def user_texts(entry: JsonObject) -> Iterator[str]:
     if block_type(entry) != USER:
         return
     content = dict_or_empty(entry.get("message")).get("content")
@@ -193,23 +196,28 @@ def user_texts(entry):
             yield from nested_texts(block.get("text"))
 
 
-def pull_requests_in_entry(entry, result_uses):
+def pull_requests_in_entry(
+    entry: JsonObject, result_uses: dict[str, ResultUse]
+) -> Iterator[PullRequest]:
     yield from pull_request_events_in(user_texts(entry))
     blocks = (item for item in nested_values(entry) if isinstance(item, dict))
     for block in blocks:
         if block_type(block) not in CALL_TYPES:
-            use = result_uses.get(answered_call_id(block))
+            answered = answered_call_id(block)
+            use = result_uses.get(answered) if answered else None
             yield from pull_requests_in_result(block, use)
             continue
         yield from pull_requests_in_call(block)
         use = result_use(block)
-        if use and call_id(block):
-            result_uses[call_id(block)] = use
+        if use and (called := call_id(block)):
+            result_uses[called] = use
 
 
-def last_activity_by_pull_request(entries_with_positions):
-    last_activity = {}
-    result_uses = {}
+def last_activity_by_pull_request(
+    entries_with_positions: Iterable[tuple[int, JsonObject]],
+) -> dict[PullRequest, int]:
+    last_activity: dict[PullRequest, int] = {}
+    result_uses: dict[str, ResultUse] = {}
     for position, entry in entries_with_positions:
         for pull_request in pull_requests_in_entry(entry, result_uses):
             last_activity[pull_request] = position

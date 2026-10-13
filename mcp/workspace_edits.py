@@ -1,3 +1,13 @@
+from collections.abc import Iterable, Sequence
+from pathlib import Path
+
+from lsp_types import (
+    Position,
+    ResourceOperation,
+    TextDocumentEdit,
+    TextEdit,
+    WorkspaceEdit,
+)
 from text_positions import (
     LINE_BREAK,
     from_uri,
@@ -7,7 +17,7 @@ from text_positions import (
 )
 
 
-def apply_workspace_edit(edit):
+def apply_workspace_edit(edit: WorkspaceEdit) -> list[str]:
     document_changes = edit.get("documentChanges")
     if document_changes is None:
         edits_by_uri = (edit.get("changes") or {}).items()
@@ -16,18 +26,20 @@ def apply_workspace_edit(edit):
     return [apply_text_edits(from_uri(uri), edits) for uri, edits in edits_by_uri]
 
 
-def text_edits_by_uri(document_changes):
+def text_edits_by_uri(
+    document_changes: Iterable[TextDocumentEdit | ResourceOperation],
+) -> list[tuple[str, list[TextEdit]]]:
+    edits_by_uri: list[tuple[str, list[TextEdit]]] = []
     for change in document_changes:
-        if "textDocument" not in change:
+        if "kind" in change:
             raise ValueError(
                 f"the language server wants a file operation ({change.get('kind')}) that this tool does not apply; nothing was written"
             )
-    return [
-        (change["textDocument"]["uri"], change["edits"]) for change in document_changes
-    ]
+        edits_by_uri.append((change["textDocument"]["uri"], change["edits"]))
+    return edits_by_uri
 
 
-def apply_text_edits(path, edits):
+def apply_text_edits(path: Path, edits: Iterable[TextEdit]) -> str:
     text = read_text(path)
     lines = LINE_BREAK.split(text)
     offsets = line_offsets(text)
@@ -44,7 +56,9 @@ def apply_text_edits(path, edits):
     return str(path)
 
 
-def text_offset(lines, offsets, position):
+def text_offset(
+    lines: Sequence[str], offsets: Sequence[int], position: Position
+) -> int:
     if position["line"] >= len(lines):
         return offsets[-1] + len(lines[-1])
     return offsets[position["line"]] + utf16_offset_to_index(
@@ -52,5 +66,5 @@ def text_offset(lines, offsets, position):
     )
 
 
-def line_offsets(text):
+def line_offsets(text: str) -> list[int]:
     return [0, *(match.end() for match in LINE_BREAK.finditer(text))]

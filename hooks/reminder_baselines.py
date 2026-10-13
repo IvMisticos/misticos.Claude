@@ -4,6 +4,7 @@ import os
 from enum import StrEnum
 from typing import NamedTuple
 
+from json_values import JsonObject
 from plugin_paths import DATA_ROOT
 from session_state import (
     locked_session_file,
@@ -32,8 +33,9 @@ class Baselines(NamedTuple):
     seen: int = 0
 
 
-def fire_id(event, payload):
-    calls = payload.get("tool_calls") or []
+def fire_id(event: str, payload: JsonObject) -> str:
+    calls = payload.get("tool_calls")
+    calls = calls if isinstance(calls, list) else []
     tool_uses = sorted(
         str(call.get("tool_use_id"))
         for call in calls
@@ -52,7 +54,7 @@ def fire_id(event, payload):
     return "|".join([event, prompt] + tool_uses)
 
 
-def context_shrank(baselines, tokens):
+def context_shrank(baselines: Baselines, tokens: int) -> bool:
     return tokens < baselines.pointed_at
 
 
@@ -77,7 +79,13 @@ def action_for_fire(
     return next_action(baselines, fire, tokens, can_copy)
 
 
-def claim_action(session_id, fire, can_copy, tokens=None, added_tokens=0) -> Action:
+def claim_action(
+    session_id: str,
+    fire: str,
+    can_copy: bool,
+    tokens: int | None = None,
+    added_tokens: int = 0,
+) -> Action:
     with locked_session_file(BASELINE_DIR, session_id) as baseline_file:
         stored = parsed_record(Baselines, read_json(baseline_file))
         if tokens is None:
@@ -89,6 +97,6 @@ def claim_action(session_id, fire, can_copy, tokens=None, added_tokens=0) -> Act
         return action
 
 
-def forget_baseline(session_id):
+def forget_baseline(session_id: str) -> None:
     with contextlib.suppress(OSError):
         os.unlink(session_file_path(BASELINE_DIR, session_id))

@@ -1,4 +1,5 @@
 import asyncio
+from pathlib import Path
 
 from language_servers import (
     EXTENSION_TO_SERVER,
@@ -11,12 +12,14 @@ from project_files import ProjectFileChanges
 from project_roots import git_root, project_root
 
 REPLACED_SERVER_GRACE_SECONDS = 120.0
-starting_servers = {}
-replaced_servers = set()
-project_file_changes = {}
+type ServerKey = tuple[str, Path]
+type StartingServer = asyncio.Future[LanguageServer]
+starting_servers: dict[ServerKey, StartingServer] = {}
+replaced_servers: set[StartingServer] = set()
+project_file_changes: dict[ServerKey, ProjectFileChanges] = {}
 
 
-async def start_server(name, root):
+async def start_server(name: str, root: Path) -> LanguageServer:
     await ensure_installed(name)
     spec = LANGUAGE_SERVERS[name]
     return await LanguageServer.start(
@@ -24,7 +27,7 @@ async def start_server(name, root):
     )
 
 
-async def server_for(path):
+async def server_for(path: Path) -> LanguageServer:
     name = EXTENSION_TO_SERVER.get(path.suffix)
     if name is None:
         raise ValueError(f"no language server for {path.suffix} files")
@@ -38,7 +41,7 @@ async def server_for(path):
     return server
 
 
-def file_changes_for(key, repo):
+def file_changes_for(key: ServerKey, repo: Path) -> ProjectFileChanges:
     if key not in project_file_changes:
         name, root = key
         spec = LANGUAGE_SERVERS[name]
@@ -48,7 +51,7 @@ def file_changes_for(key, repo):
     return project_file_changes[key]
 
 
-def replace_server(key):
+def replace_server(key: ServerKey) -> None:
     starting = starting_servers.pop(key, None)
     if starting is None:
         return
@@ -58,12 +61,12 @@ def replace_server(key):
     )
 
 
-def stop_replaced_server(starting):
+def stop_replaced_server(starting: StartingServer) -> None:
     replaced_servers.discard(starting)
     starting.add_done_callback(stop_started_server)
 
 
-async def running_server(key):
+async def running_server(key: ServerKey) -> LanguageServer:
     starting = starting_servers.get(key)
     if starting is not None and starting.done() and not started_and_alive(starting):
         stop_started_server(starting)
@@ -73,19 +76,19 @@ async def running_server(key):
     return await asyncio.shield(starting)
 
 
-def started_ok(starting):
+def started_ok(starting: StartingServer) -> bool:
     return starting.done() and not starting.cancelled() and starting.exception() is None
 
 
-def started_and_alive(starting):
+def started_and_alive(starting: StartingServer) -> bool:
     return started_ok(starting) and starting.result().alive
 
 
-def stop_started_server(starting):
+def stop_started_server(starting: StartingServer) -> None:
     if started_ok(starting):
         starting.result().stop()
 
 
-def stop_all_servers():
+def stop_all_servers() -> None:
     for starting in [*starting_servers.values(), *replaced_servers]:
         stop_started_server(starting)

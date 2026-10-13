@@ -1,9 +1,11 @@
+from conftest import ShimRunner
+
 FAKE_DOTNET = """#!/usr/bin/env bash
 echo "$MSBUILDDISABLENODEREUSE $DOTNET_CLI_USE_MSBUILD_SERVER $*"
 """
 
 
-def test_runs_dotnet_without_shared_build_nodes(shim_runner):
+def test_runs_dotnet_without_shared_build_nodes(shim_runner: ShimRunner) -> None:
     run_dotnet = shim_runner(
         "dotnet",
         FAKE_DOTNET,

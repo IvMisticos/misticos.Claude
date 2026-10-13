@@ -11,7 +11,7 @@ BARE_URL = re.compile(r"\b[a-z][a-z0-9+.-]*://\S+", re.IGNORECASE)
 WHITESPACE = re.compile(r"\s+")
 
 
-def prose_of(text):
+def prose_of(text: str) -> str:
     text = FENCED_CODE.sub(" ", text)
     text = INLINE_CODE.sub(" ", text)
     text = LINK.sub(r"\1", text)
@@ -20,5 +20,5 @@ def prose_of(text):
     return WHITESPACE.sub(" ", text).strip()
 
 
-def prose_length(text):
+def prose_length(text: str) -> int:
     return len(prose_of(text))

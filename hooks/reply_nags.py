@@ -1,10 +1,13 @@
 #!/usr/bin/env -S uv run --script
 # /// script
 # requires-python = ">=3.13"
+# [tool.ty.environment]
+# root = ["."]
 # ///
 
 import copy
 import uuid
+from collections.abc import Sequence
 from typing import NamedTuple
 
 from harnesses import ReplyHistory, harness_parser
@@ -16,10 +19,11 @@ from hook_io import (
     session_id_of,
     write_context,
 )
-from json_values import dict_or_empty
+from json_values import JsonObject, JsonValue, dict_or_empty
 from plugin_paths import DATA_ROOT
 from reply_history import (
     EventLog,
+    Prompt,
     Reply,
     Window,
     parsed_event_log,
@@ -72,13 +76,13 @@ class DueNags(NamedTuple):
     long_reply: str = ""
     repeated_updates: str = ""
 
-    def merged_over(self, older):
+    def merged_over(self, older: "DueNags") -> "DueNags":
         return DueNags(
             self.long_reply or older.long_reply,
             self.repeated_updates or older.repeated_updates,
         )
 
-    def texts(self):
+    def texts(self) -> list[str]:
         return [nag for nag in self if nag]
 
 
@@ -87,7 +91,7 @@ class NagState(NamedTuple):
     log: EventLog = EventLog()
     pending_nags: DueNags = DueNags()
 
-    def to_json(self):
+    def to_json(self) -> JsonObject:
         return {
             "memory": self.memory._asdict(),
             "log": self.log.to_json(),
@@ -95,36 +99,38 @@ class NagState(NamedTuple):
         }
 
 
-def parsed_state(stored):
-    stored = dict_or_empty(stored)
+def parsed_state(stored: JsonValue) -> NagState:
+    state = dict_or_empty(stored)
     return NagState(
-        parsed_record(NagMemory, stored.get("memory")) or NagMemory(),
-        parsed_event_log(stored.get("log")),
-        parsed_record(DueNags, stored.get("pending_nags")) or DueNags(),
+        parsed_record(NagMemory, state.get("memory")) or NagMemory(),
+        parsed_event_log(state.get("log")),
+        parsed_record(DueNags, state.get("pending_nags")) or DueNags(),
     )
 
 
-def unseen_replies(replies, seen_reply):
+def unseen_replies(replies: list[Reply], seen_reply: str) -> list[Reply]:
     ids = [reply.id for reply in replies]
     if seen_reply not in ids:
         return replies
     return replies[ids.index(seen_reply) + 1 :]
 
 
-def long_reply_nag(unseen):
+def long_reply_nag(unseen: list[Reply]) -> str | None:
     long_replies = [reply for reply in unseen if reply.prose_length > PROSE_LIMIT]
     if not long_replies:
         return None
     return LONG_REPLY.format(length=long_replies[-1].prose_length)
 
 
-def remembered_window(memory):
+def remembered_window(memory: NagMemory) -> Window:
     if memory.submitted_prompt:
         return Window(memory.submitted_prompt, 0)
     return Window(memory.window, memory.window_replies)
 
 
-def repeated_updates_nag(history, memory, unseen):
+def repeated_updates_nag(
+    history: Sequence[Prompt | Reply], memory: NagMemory, unseen: list[Reply]
+) -> tuple[str | None, NagMemory]:
     window = window_under_review(history, remembered_window(memory), len(unseen))
     if window is None:
         return None, memory
@@ -139,7 +145,9 @@ def repeated_updates_nag(history, memory, unseen):
     return REPEATED_UPDATES.format(count=count), copy.replace(memory, nagged_at=count)
 
 
-def due_nags(history, memory):
+def due_nags(
+    history: Sequence[Prompt | Reply], memory: NagMemory
+) -> tuple[DueNags, NagMemory]:
     replies = [item for item in history if isinstance(item, Reply)]
     unseen = unseen_replies(replies, memory.seen_reply)
     repeated_updates, memory = repeated_updates_nag(history, memory, unseen)
@@ -148,7 +156,9 @@ def due_nags(history, memory):
     return DueNags(long_reply_nag(unseen) or "", repeated_updates or ""), memory
 
 
-def nags_from_transcript(event, payload, state):
+def nags_from_transcript(
+    event: str, payload: JsonObject, state: NagState
+) -> tuple[list[str], NagState]:
     if event not in NAG_EVENTS:
         return [], state
     history = transcript_history(payload.get("transcript_path"))
@@ -158,20 +168,23 @@ def nags_from_transcript(event, payload, state):
     return nags.texts(), copy.replace(state, memory=memory)
 
 
-def submitted_prompt_id(payload):
+def submitted_prompt_id(payload: JsonObject) -> str:
     prompt_id = payload.get("prompt_id")
     if isinstance(prompt_id, str) and prompt_id:
         return prompt_id
     return f"submitted-{uuid.uuid4()}"
 
 
-def is_wake_prompt(prompt):
+def is_wake_prompt(prompt: JsonValue) -> bool:
     return isinstance(prompt, str) and prompt.lstrip().startswith(WAKE_PROMPT_STARTS)
 
 
-def nags_from_events(event, payload, state):
+def nags_from_events(
+    event: str, payload: JsonObject, state: NagState
+) -> tuple[list[str], NagState]:
     log = state.log
-    reply_text = payload.get(REPLY_TEXT_FIELD_BY_EVENT.get(event))
+    reply_field = REPLY_TEXT_FIELD_BY_EVENT.get(event)
+    reply_text = payload.get(reply_field) if reply_field else None
     if isinstance(reply_text, str) and reply_text.strip():
         log = log.with_reply(reply_text)
     if event not in NAG_EVENTS | PROMPT_EVENTS:
@@ -185,7 +198,7 @@ def nags_from_events(event, payload, state):
     return [], NagState(memory, log, due.merged_over(state.pending_nags))
 
 
-def main():
+def main() -> None:
     options = harness_parser().parse_args()
     payload = read_payload()
     event = event_name_of(payload)

@@ -1,9 +1,9 @@
 import pytest
-from conftest import FAKE_GH
+from conftest import FAKE_GH, ShimRun, ShimRunner
 
 
 @pytest.fixture
-def run_gh(shim_runner):
+def run_gh(shim_runner: ShimRunner) -> ShimRun:
     return shim_runner("gh", FAKE_GH)
 
 
@@ -63,7 +63,7 @@ def run_gh(shim_runner):
         ["api", "/graphql/", "-f", "query=mutation { mergePullRequest(input: {}) }"],
     ],
 )
-def test_denies_pull_request_writes(run_gh, arguments):
+def test_denies_pull_request_writes(run_gh: ShimRun, arguments: list[str]) -> None:
     assert run_gh(*arguments).returncode == 1
 
 
@@ -94,12 +94,12 @@ def test_denies_pull_request_writes(run_gh, arguments):
         ["api", "-H", "Accept: x/pulls", "repos/o/r/issues", "-f", "title=x"],
     ],
 )
-def test_runs_other_commands(run_gh, arguments):
+def test_runs_other_commands(run_gh: ShimRun, arguments: list[str]) -> None:
     result = run_gh(*arguments)
     assert result.returncode == 0
     assert result.stdout == f"ran {' '.join(arguments)}\n"
 
 
-def test_runs_pull_request_writes_on_request(run_gh):
+def test_runs_pull_request_writes_on_request(run_gh: ShimRun) -> None:
     result = run_gh("pr", "merge", "1", ALLOW_GH_PULL_REQUEST_WRITE="1")
     assert result.stdout == "ran pr merge 1\n"

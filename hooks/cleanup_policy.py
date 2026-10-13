@@ -1,8 +1,10 @@
 import contextlib
 import json
+from collections.abc import Collection, Iterable
+from pathlib import Path
 
 from disk_cleanup import cleared_caches
-from disks import BYTES_PER_MIB, disks, total_free
+from disks import BYTES_PER_MIB, Disk, disks, total_free
 from json_values import json_object
 from plugin_paths import DATA_ROOT
 
@@ -12,7 +14,7 @@ CLEAN_UP_AGAIN_AFTER_BYTES = 1 << 30
 CLEANUP_RECORD = DATA_ROOT / "disk-cleanup.json"
 
 
-def read_most_free_since_cleanup(record):
+def read_most_free_since_cleanup(record: Path) -> dict[str, int]:
     try:
         stored = json_object(record.read_bytes()) or {}
     except OSError:
@@ -20,18 +22,18 @@ def read_most_free_since_cleanup(record):
     return {device: free for device, free in stored.items() if isinstance(free, int)}
 
 
-def write_most_free_since_cleanup(record, most_free):
+def write_most_free_since_cleanup(record: Path, most_free: dict[str, int]) -> None:
     with contextlib.suppress(OSError):
         record.parent.mkdir(parents=True, exist_ok=True)
         record.write_text(json.dumps(most_free))
 
 
-def remember_free_space(record, disks):
+def remember_free_space(record: Path, disks: Iterable[Disk]) -> None:
     free = {disk.device: disk.free for disk in disks}
     write_most_free_since_cleanup(record, read_most_free_since_cleanup(record) | free)
 
 
-def most_free_since_cleanup(record, disks):
+def most_free_since_cleanup(record: Path, disks: Iterable[Disk]) -> dict[str, int]:
     stored = read_most_free_since_cleanup(record)
     free = {disk.device: disk.free for disk in disks}
     updated = {
@@ -43,7 +45,7 @@ def most_free_since_cleanup(record, disks):
     return updated
 
 
-def needs_cleanup(disk, most_free_since_cleanup):
+def needs_cleanup(disk: Disk, most_free_since_cleanup: dict[str, int]) -> bool:
     if not disk.has_free_below(CLEAN_UP_BELOW_BYTES, CLEAN_UP_BELOW_SHARE):
         return False
     most_free = most_free_since_cleanup.get(disk.device)
@@ -52,7 +54,7 @@ def needs_cleanup(disk, most_free_since_cleanup):
     return disk.free < most_free - min(CLEAN_UP_AGAIN_AFTER_BYTES, most_free / 2)
 
 
-def clean_up_low_disks(paths):
+def clean_up_low_disks(paths: Collection[str]) -> str | None:
     current = list(disks(paths))
     most_free = most_free_since_cleanup(CLEANUP_RECORD, current)
     before = [disk for disk in current if needs_cleanup(disk, most_free)]

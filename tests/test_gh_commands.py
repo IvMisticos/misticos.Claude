@@ -1,26 +1,21 @@
-import sys
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
-
 import pytest
 from gh_commands import GhPrCall, gh_api_words, gh_argument_lists, gh_pr_call
 from pull_requests import pull_request_of_gh_pr_call
 
 
-def test_missing_target_and_repo_are_none():
+def test_missing_target_and_repo_are_none() -> None:
     assert gh_pr_call(["pr", "list"]) == GhPrCall("list", None, None)
 
 
 @pytest.mark.parametrize("arguments", [["-R"], ["--repo"], ["--repo="], ["-R", ""]])
-def test_repo_flag_without_value_leaves_repo_none(arguments):
+def test_repo_flag_without_value_leaves_repo_none(arguments: list[str]) -> None:
     assert gh_pr_call(["pr", "view", "1", *arguments]) == GhPrCall("view", "1", None)
 
 
 @pytest.mark.parametrize(
     "call", [GhPrCall("list", None, "o/r"), GhPrCall("view", "1", None)]
 )
-def test_call_without_target_or_repo_names_no_pull_request(call):
+def test_call_without_target_or_repo_names_no_pull_request(call: GhPrCall) -> None:
     assert pull_request_of_gh_pr_call(call) is None
 
 
@@ -36,12 +31,14 @@ def test_call_without_target_or_repo_names_no_pull_request(call):
         ("gh pr comment --body 3", GhPrCall("comment", None, None)),
     ],
 )
-def test_pr_target_is_the_word_after_the_subcommand(command, call):
+def test_pr_target_is_the_word_after_the_subcommand(
+    command: str, call: GhPrCall
+) -> None:
     [arguments] = gh_argument_lists(command)
     assert gh_pr_call(arguments) == call
 
 
-def test_api_words_follow_api():
+def test_api_words_follow_api() -> None:
     [arguments] = gh_argument_lists("gh api repos/o/r/pulls/3/comments")
     assert gh_api_words(arguments) == ["repos/o/r/pulls/3/comments"]
 
@@ -53,7 +50,9 @@ def test_api_words_follow_api():
         ("gh pr view 1 -R o/r # note", [["pr", "view", "1", "-R", "o/r", "#", "note"]]),
     ],
 )
-def test_hash_is_an_ordinary_character(command, argument_lists):
+def test_hash_is_an_ordinary_character(
+    command: str, argument_lists: list[list[str]]
+) -> None:
     assert gh_argument_lists(command) == argument_lists
 
 
@@ -73,7 +72,9 @@ def test_hash_is_an_ordinary_character(command, argument_lists):
         ("gh pr comment 1 --body \"it's", []),
     ],
 )
-def test_commands_split_at_shell_operators(command, argument_lists):
+def test_commands_split_at_shell_operators(
+    command: str, argument_lists: list[list[str]]
+) -> None:
     assert gh_argument_lists(command) == argument_lists
 
 
@@ -90,11 +91,13 @@ def test_commands_split_at_shell_operators(command, argument_lists):
         ("gh pr view 4 >out", [["pr", "view", "4"]]),
     ],
 )
-def test_file_descriptors_are_not_arguments(command, argument_lists):
+def test_file_descriptors_are_not_arguments(
+    command: str, argument_lists: list[list[str]]
+) -> None:
     assert gh_argument_lists(command) == argument_lists
 
 
 @pytest.mark.parametrize("body", ['""', '"a; b"', "'a && b'", '"a\nb"'])
-def test_quoted_operators_stay_inside_the_gh_call(body):
+def test_quoted_operators_stay_inside_the_gh_call(body: str) -> None:
     command = f"gh pr comment 1 --body {body} -R o/r"
     assert gh_argument_lists(command)[0][-2:] == ["-R", "o/r"]

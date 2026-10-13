@@ -6,7 +6,11 @@ import re
 import sys
 import time
 import typing
+from collections.abc import Callable, Generator
 from enum import Enum
+from typing import Protocol, TextIO
+
+from json_values import JsonValue
 
 if sys.platform == "win32":
     import msvcrt
@@ -15,12 +19,18 @@ else:
 
 FORGET_AFTER_SECONDS = 7 * 24 * 60 * 60
 
+type Directory = str | os.PathLike[str]
 
-def session_file_path(directory, session_id):
+
+class Record(Protocol):
+    def _asdict(self) -> dict[str, object]: ...
+
+
+def session_file_path(directory: Directory, session_id: str) -> str:
     return os.path.join(directory, re.sub(r"[^A-Za-z0-9_-]", "-", session_id))
 
 
-def forget_stale_files(directory):
+def forget_stale_files(directory: Directory) -> None:
     cutoff = time.time() - FORGET_AFTER_SECONDS
     for name in os.listdir(directory):
         path = os.path.join(directory, name)
@@ -31,7 +41,7 @@ def forget_stale_files(directory):
             continue
 
 
-def lock_exclusively(state_file):
+def lock_exclusively(state_file: TextIO) -> None:
     if sys.platform != "win32":
         fcntl.flock(state_file, fcntl.LOCK_EX)
         return
@@ -41,7 +51,7 @@ def lock_exclusively(state_file):
 
 
 @contextlib.contextmanager
-def locked_session_file(directory, session_id):
+def locked_session_file(directory: Directory, session_id: str) -> Generator[TextIO]:
     os.makedirs(directory, exist_ok=True)
     path = session_file_path(directory, session_id)
     if not os.path.exists(path):
@@ -51,7 +61,7 @@ def locked_session_file(directory, session_id):
         yield state_file
 
 
-def read_json(state_file):
+def read_json(state_file: TextIO) -> JsonValue:
     state_file.seek(0)
     try:
         return json.loads(state_file.read())
@@ -59,13 +69,13 @@ def read_json(state_file):
         return None
 
 
-def write_json(state_file, value):
+def write_json(state_file: TextIO, value: object) -> None:
     state_file.seek(0)
     state_file.truncate()
     json.dump(value, state_file)
 
 
-def parsed_field(field_type, stored):
+def parsed_field(field_type: object, stored: JsonValue) -> object:
     match typing.get_origin(field_type), typing.get_args(field_type):
         case (builtins.dict, (key_type, value_type)) if isinstance(stored, dict):
             return {
@@ -76,14 +86,16 @@ def parsed_field(field_type, stored):
             stored, list
         ):
             return tuple(parsed_field(item_type, item) for item in stored)
-        case (None, ()) if issubclass(field_type, Enum):
+        case (None, ()) if isinstance(field_type, type) and issubclass(
+            field_type, Enum
+        ):
             return field_type(stored)
         case (None, ()) if type(stored) is field_type:
             return stored
     raise ValueError(f"stored {stored!r} is not a {field_type}")
 
 
-def parsed_record(record_type, stored):
+def parsed_record[R](record_type: Callable[..., R], stored: JsonValue) -> R | None:
     if not isinstance(stored, dict):
         return None
     field_types = typing.get_type_hints(record_type)
@@ -99,10 +111,10 @@ def parsed_record(record_type, stored):
         return None
 
 
-def read_record(state_file, empty_record):
+def read_record[R: Record](state_file: TextIO, empty_record: R) -> R:
     record = parsed_record(type(empty_record), read_json(state_file))
     return empty_record if record is None else record
 
 
-def write_record(state_file, record):
+def write_record(state_file: TextIO, record: Record) -> None:
     write_json(state_file, record._asdict())

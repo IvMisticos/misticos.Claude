@@ -1,8 +1,9 @@
 import os
 import subprocess
+from pathlib import Path
 
 import pytest
-from conftest import SHIMS, without_session_variables
+from conftest import SHIMS, ShimRun, ShimRunner, without_session_variables
 
 FAKE_GIT = """#!/usr/bin/env bash
 if [ "$1 $2" = "-C $HARNESS_PROJECT_DIR" ] && [ "$3" = rev-parse ]; then
@@ -21,21 +22,21 @@ echo "ran $*"
 
 
 @pytest.fixture
-def project(tmp_path):
+def project(tmp_path: Path) -> Path:
     project_dir = tmp_path / "project"
     (project_dir / ".git").mkdir(parents=True)
     return project_dir.resolve()
 
 
 @pytest.fixture
-def fixture_git_dir(tmp_path):
+def fixture_git_dir(tmp_path: Path) -> str:
     git_dir = tmp_path / "fixture" / ".git"
     git_dir.mkdir(parents=True)
     return str(git_dir)
 
 
 @pytest.fixture
-def run_git(shim_runner, project):
+def run_git(shim_runner: ShimRunner, project: Path) -> ShimRun:
     return shim_runner(
         "git",
         FAKE_GIT,
@@ -70,7 +71,7 @@ def run_git(shim_runner, project):
         ["commit", "--author=x <x@example.com>", "-m", "a"],
     ],
 )
-def test_denies_identity_arguments(run_git, arguments):
+def test_denies_identity_arguments(run_git: ShimRun, arguments: list[str]) -> None:
     assert run_git(*arguments).returncode == 1
 
 
@@ -90,7 +91,9 @@ def test_denies_identity_arguments(run_git, arguments):
         {"GIT_AUTHOR_NAME": "x", "HARNESS_GIT_IDENTITY": "y|||"},
     ],
 )
-def test_denies_identity_environment(run_git, environment):
+def test_denies_identity_environment(
+    run_git: ShimRun, environment: dict[str, str]
+) -> None:
     assert run_git("commit", "-m", "a", **environment).returncode == 1
 
 
@@ -110,7 +113,7 @@ def test_denies_identity_environment(run_git, environment):
         ["--config-env=core.pager=PAGER"],
     ],
 )
-def test_runs_other_commands(run_git, arguments):
+def test_runs_other_commands(run_git: ShimRun, arguments: list[str]) -> None:
     result = run_git(*arguments)
     assert result.returncode == 0
     assert result.stdout == f"ran {' '.join(arguments)}\n"
@@ -124,7 +127,9 @@ def test_runs_other_commands(run_git, arguments):
         {"GIT_AUTHOR_NAME": "x", "ALLOW_GIT_IDENTITY_CHANGE": "1"},
     ],
 )
-def test_runs_with_harness_environment(run_git, environment):
+def test_runs_with_harness_environment(
+    run_git: ShimRun, environment: dict[str, str]
+) -> None:
     assert run_git("commit", "-m", "a", **environment).returncode == 0
 
 
@@ -146,7 +151,9 @@ def test_runs_with_harness_environment(run_git, environment):
         ),
     ],
 )
-def test_runs_allowed_identity_changes(run_git, arguments, environment):
+def test_runs_allowed_identity_changes(
+    run_git: ShimRun, arguments: list[str], environment: dict[str, str]
+) -> None:
     assert run_git(*arguments, **environment).returncode == 0
 
 
@@ -159,8 +166,11 @@ def test_runs_allowed_identity_changes(run_git, arguments, environment):
     ],
 )
 def test_runs_identity_changes_outside_the_project(
-    run_git, fixture_git_dir, arguments, environment
-):
+    run_git: ShimRun,
+    fixture_git_dir: str,
+    arguments: list[str],
+    environment: dict[str, str],
+) -> None:
     result = run_git(*arguments, FAKE_TARGET_GIT_DIR=fixture_git_dir, **environment)
     assert result.returncode == 0
 
@@ -174,13 +184,15 @@ def test_runs_identity_changes_outside_the_project(
     ],
 )
 def test_denies_global_identity_changes_outside_the_project(
-    run_git, fixture_git_dir, arguments
-):
+    run_git: ShimRun, fixture_git_dir: str, arguments: list[str]
+) -> None:
     result = run_git(*arguments, FAKE_TARGET_GIT_DIR=fixture_git_dir)
     assert result.returncode == 1
 
 
-def test_runs_identity_changes_in_repositories_nested_in_the_project(run_git, project):
+def test_runs_identity_changes_in_repositories_nested_in_the_project(
+    run_git: ShimRun, project: Path
+) -> None:
     nested_git_dir = project / "nested" / ".git"
     nested_git_dir.mkdir(parents=True)
     result = run_git(
@@ -190,8 +202,8 @@ def test_runs_identity_changes_in_repositories_nested_in_the_project(run_git, pr
 
 
 def test_denies_identity_changes_through_a_symlinked_project(
-    run_git, project, tmp_path
-):
+    run_git: ShimRun, project: Path, tmp_path: Path
+) -> None:
     link = tmp_path / "link"
     link.symlink_to(project)
     result = run_git(
@@ -204,7 +216,7 @@ def test_denies_identity_changes_through_a_symlinked_project(
     assert result.returncode == 1
 
 
-def test_runs_identity_changes_in_a_repository_named_by_git_dir(tmp_path):
+def test_runs_identity_changes_in_a_repository_named_by_git_dir(tmp_path: Path) -> None:
     project_dir = tmp_path / "project"
     fixture_dir = tmp_path / "fixture"
     environment = without_session_variables(os.environ)

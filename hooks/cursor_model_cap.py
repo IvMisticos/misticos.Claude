@@ -1,18 +1,21 @@
 #!/usr/bin/env -S uv run --script
 # /// script
 # requires-python = ">=3.13"
+# [tool.ty.environment]
+# root = ["."]
 # ///
 
 import json
 import sys
 
-from hook_io import read_payload
+from hook_io import CursorPermission, read_payload
+from json_values import JsonObject
 from model_cap import outranks
 
-ALLOW = {"permission": "allow"}
+ALLOW: CursorPermission = {"permission": "allow"}
 
 
-def spawn_decision(payload):
+def spawn_decision(payload: JsonObject) -> CursorPermission:
     caller = payload.get("model")
     subagent_model = payload.get("subagent_model")
     if not outranks(subagent_model, caller):
@@ -26,7 +29,7 @@ def spawn_decision(payload):
     }
 
 
-def main():
+def main() -> None:
     try:
         payload = read_payload()
     except (OSError, UnicodeDecodeError):
