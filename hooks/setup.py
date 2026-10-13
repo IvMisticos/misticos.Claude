@@ -94,7 +94,7 @@ DENIED_TOOLS = (
     "SuggestSkills",
 )
 
-TURN_ENDING_TOOLS = "ReadNotifications,SendMessage"
+TURN_ENDING_TOOLS = "Agent,ReadNotifications,SendMessage,TaskStop"
 
 
 TOOLCHAIN_BIN_DIRS = (
