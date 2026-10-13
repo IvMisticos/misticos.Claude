@@ -4,11 +4,13 @@
 # dependencies = ["tomli-w"]
 # ///
 
+import fcntl
 import json
 import os
 import shutil
 import subprocess
 import sys
+import tempfile
 import tomllib
 from pathlib import Path
 
@@ -17,6 +19,7 @@ import tomli_w
 HOME = Path.home()
 CLAUDE_DIR = HOME / ".claude"
 CODEX_DIR = HOME / ".codex"
+SETTINGS_LOCK_FILE = "misticos-settings.lock"
 WRITTEN_DENIES_FILE = "misticos-written-denies.json"
 INSTALLED_PLUGINS = CLAUDE_DIR / "plugins" / "installed_plugins.json"
 WEB_GUIDANCE_PLUGIN = "modern-web-guidance@googlechrome"
@@ -80,8 +83,11 @@ def run_pipeline(script):
 
 
 def write_atomically(path, text):
-    staged = path.with_name(path.name + ".installing")
-    staged.write_text(text)
+    mode = path.stat().st_mode & 0o777 if path.exists() else 0o644
+    descriptor, staged = tempfile.mkstemp(dir=path.parent, prefix=path.name + ".")
+    with os.fdopen(descriptor, "w") as staged_file:
+        staged_file.write(text)
+    os.chmod(staged, mode)
     os.replace(staged, path)
 
 
@@ -101,6 +107,12 @@ def write_written_denies(path, tools):
 
 def configure_claude_settings():
     CLAUDE_DIR.mkdir(parents=True, exist_ok=True)
+    with open(CLAUDE_DIR / SETTINGS_LOCK_FILE, "w") as lock_file:
+        fcntl.flock(lock_file, fcntl.LOCK_EX)
+        write_claude_settings()
+
+
+def write_claude_settings():
     settings_path = CLAUDE_DIR / "settings.json"
     settings = read_json(settings_path)
     wanted = dict(settings)
