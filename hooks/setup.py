@@ -115,13 +115,15 @@ def configure_claude_settings():
         **settings.get("env", {}),
         "CLAUDE_CODE_TERMINAL_MCP_TOOLS": TURN_ENDING_TOOLS,
     }
-    if wanted != settings:
-        write_atomically(settings_path, json.dumps(wanted, indent=2) + "\n")
-    still_written = [tool for tool in written_denies if tool in DENIED_TOOLS]
+    recorded_denies = [
+        tool for tool in DENIED_TOOLS if tool in written_denies or tool in added_denies
+    ]
     write_atomically(
         written_denies_path,
-        json.dumps({"deny": still_written + added_denies}, indent=2) + "\n",
+        json.dumps({"deny": recorded_denies}, indent=2) + "\n",
     )
+    if wanted != settings:
+        write_atomically(settings_path, json.dumps(wanted, indent=2) + "\n")
 
 
 def install_web_guidance_plugin():
