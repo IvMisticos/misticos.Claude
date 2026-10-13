@@ -173,3 +173,24 @@ def test_malformed_claude_settings_stay_untouched(
     with pytest.raises(TypeError):
         setup.configure_claude_settings()
     assert settings_path.read_text() == stored
+
+
+@pytest.mark.parametrize(
+    "settings",
+    [
+        {"permissions": None},
+        {"permissions": {"deny": None}},
+        {"skillOverrides": None},
+        {"enabledPlugins": None},
+        {"env": None},
+    ],
+)
+def test_null_claude_settings_count_as_empty(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, settings: JsonObject
+) -> None:
+    monkeypatch.setattr(setup, "CLAUDE_DIR", tmp_path)
+    settings_path = tmp_path / "settings.json"
+    settings_path.write_text(json.dumps(settings))
+    setup.configure_claude_settings()
+    written = json.loads(settings_path.read_text())
+    assert written["permissions"]["deny"] == list(setup.DENIED_TOOLS)

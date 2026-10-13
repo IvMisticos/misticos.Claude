@@ -149,14 +149,18 @@ def read_json(path: Path) -> JsonObject:
 
 
 def object_setting(settings: JsonObject, key: str) -> JsonObject:
-    value = settings.get(key, {})
+    value = settings.get(key)
+    if value is None:
+        return {}
     if not isinstance(value, dict):
         raise TypeError(f"Claude setting {key} is not a JSON object")
     return value
 
 
 def list_setting(settings: JsonObject, key: str) -> list[JsonValue]:
-    value = settings.get(key, [])
+    value = settings.get(key)
+    if value is None:
+        return []
     if not isinstance(value, list):
         raise TypeError(f"Claude setting {key} is not a JSON list")
     return value
