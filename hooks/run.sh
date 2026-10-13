@@ -36,42 +36,11 @@ hash_stdin() {
   { sha256sum || shasum -a 256; } 2>/dev/null
 }
 
-imported_modules() {
-  local keyword names
-  while read -r keyword names; do
-    case "$keyword" in
-      from) echo "${names%%[ .]*}" ;;
-      import) modules_in_import_list "$names" ;;
-    esac
-  done < "$hooks_dir/$1"
-}
-
-modules_in_import_list() {
-  local entries entry module rest
-  IFS=, read -ra entries <<< "$1"
-  for entry in "${entries[@]}"; do
-    read -r module rest <<< "$entry"
-    echo "${module%%.*}"
-  done
-}
-
-hash_script_and_local_imports() {
-  case " $hashed_sources " in
-    *" $1 "*) return ;;
-  esac
-  hashed_sources="$hashed_sources $1"
-  hash_stdin < "$hooks_dir/$1"
-  local module
-  for module in $(imported_modules "$1"); do
-    if [ -f "$hooks_dir/$module.py" ]; then
-      hash_script_and_local_imports "$module.py"
-    fi
-  done
-}
-
-completion_key_of() {
-  local hashed_sources=""
-  hash_script_and_local_imports "$1" | hash_stdin | cut -d' ' -f1
+hooks_key() {
+  local source
+  for source in "$hooks_dir"/*.py; do
+    hash_stdin < "$source"
+  done | hash_stdin | cut -d' ' -f1
 }
 
 hooks_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -81,7 +50,7 @@ if [ "${1-}" = --once ]; then
   shift
   if [ -n "${CLAUDE_PLUGIN_DATA-}" ] && [ -f "$hooks_dir/${1-}" ]; then
     completion_marker="$CLAUDE_PLUGIN_DATA/${1%.py}-complete"
-    if completion_key=$(completion_key_of "$1") && [ -n "$completion_key" ]; then
+    if completion_key=$(hooks_key) && [ -n "$completion_key" ]; then
       remember_completion=true
       [ "$(cat "$completion_marker" 2>/dev/null)" = "$completion_key" ] && exit 0
     fi

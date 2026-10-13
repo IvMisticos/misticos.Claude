@@ -9,14 +9,9 @@ echo "uv $*"
 exit "${UV_STATUS-0}"
 """
 SCRIPTS = {
-    "settings.py": "import os\nfrom shared import helper\n",
-    "tools.py": "from shared import helper\n",
-    "listed.py": "import os, aliased as alias, dotted.inner\n",
-    "aliased.py": "value = 3\n",
-    "dotted.py": "value = 4\n",
-    "shared.py": "import json\nfrom deep import value\n",
-    "deep.py": "value = 1\n",
-    "unrelated.py": "value = 2\n",
+    "settings.py": "value = 1\n",
+    "tools.py": "value = 2\n",
+    "shared.py": "value = 3\n",
 }
 
 
@@ -36,13 +31,9 @@ def scripts(tmp_path):
 
 
 @pytest.fixture
-def hooks_copy(tmp_path):
-    hooks = tmp_path / "hooks"
-    shutil.copytree(ROOT / "hooks", hooks)
-    return hooks
+def run_hook(home, fake_bin, plugin_data, scripts):
+    bin_dir = fake_bin("uv", FAKE_UV)
 
-
-def runner(scripts, home, bin_dir, plugin_data):
     def run(
         script="settings.py",
         *,
@@ -67,16 +58,6 @@ def runner(scripts, home, bin_dir, plugin_data):
         )
 
     return run
-
-
-@pytest.fixture
-def run_hook(home, fake_bin, plugin_data, scripts):
-    return runner(scripts, home, fake_bin("uv", FAKE_UV), plugin_data)
-
-
-@pytest.fixture
-def run_real_hook(home, fake_bin, plugin_data, hooks_copy):
-    return runner(hooks_copy, home, fake_bin("uv", FAKE_UV), plugin_data)
 
 
 def ran_uv(result):
@@ -111,46 +92,16 @@ def test_completed_script_is_skipped(run_hook):
     assert (result.returncode, result.stdout) == (0, "")
 
 
-@pytest.mark.parametrize("edited", ["settings.py", "shared.py", "deep.py"])
-def test_editing_the_script_or_a_local_import_reruns_it(run_hook, scripts, edited):
+@pytest.mark.parametrize("edited", ["settings.py", "shared.py"])
+def test_editing_any_hooks_file_reruns_the_script(run_hook, scripts, edited):
     run_hook()
     edit(scripts, edited)
     assert ran_uv(run_hook())
     assert not ran_uv(run_hook())
 
 
-@pytest.mark.parametrize("edited", ["aliased.py", "dotted.py"])
-def test_every_module_in_an_import_list_counts(run_hook, scripts, edited):
-    run_hook("listed.py")
-    edit(scripts, edited)
-    assert ran_uv(run_hook("listed.py"))
-
-
-def test_real_tools_marker_covers_shared_modules(run_real_hook, hooks_copy):
-    run_real_hook("setup_tools.py")
-    edit(hooks_copy, "json_values.py")
-    assert ran_uv(run_real_hook("setup_tools.py"))
-
-
-def test_editing_another_script_keeps_the_marker(run_hook, scripts):
-    run_hook()
-    edit(scripts, "unrelated.py")
-    assert not ran_uv(run_hook())
-
-
-def test_editing_one_script_keeps_the_other_marker(run_hook, scripts):
+def test_each_script_keeps_its_own_marker(run_hook):
     run_hook("settings.py")
-    run_hook("tools.py")
-    edit(scripts, "tools.py")
-    assert not ran_uv(run_hook("settings.py"))
-    assert ran_uv(run_hook("tools.py"))
-
-
-def test_editing_shared_code_reruns_every_script_that_imports_it(run_hook, scripts):
-    run_hook("settings.py")
-    run_hook("tools.py")
-    edit(scripts, "shared.py")
-    assert ran_uv(run_hook("settings.py"))
     assert ran_uv(run_hook("tools.py"))
 
 
