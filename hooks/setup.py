@@ -164,6 +164,20 @@ def configure_claude_settings():
         **settings.get("env", {}),
         "CLAUDE_CODE_TERMINAL_MCP_TOOLS": TURN_ENDING_TOOLS,
         "CLAUDE_CODE_DISABLE_EXPLORE_PLAN_AGENTS": "1",
+        "CLAUDE_CODE_TURN_UPDATES": "0",
+        "CLAUDE_CODE_ACT_DONT_REDERIVE": "0",
+        "CLAUDE_CODE_ARTIFACT_COMMENTS": "0",
+        "CLAUDE_CODE_DISABLE_CFC_PROMPT": "1",
+        "CLAUDE_CODE_TODO_REMINDER_MODE": "off",
+        "CLAUDE_CODE_SILENT_TURN_REMINDER": "0",
+        "CLAUDE_CODE_TOTAL_TOKENS_REMINDER": "off",
+        "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1",
+        "CLAUDE_CODE_ARTIFACT_COMMENT_FAST_ACK": "0",
+        "CLAUDE_CODE_BASH_OUTPUT_AUDIENCE_NOTE": "0",
+        "CLAUDE_CODE_ARTIFACT_COMMENT_RESPONDER": "0",
+        "CLAUDE_CODE_ARTIFACT_COMMENTS_AUTOREACT": "0",
+        "CLAUDE_CODE_ENABLE_TOKEN_USAGE_ATTACHMENT": "0",
+        "CLAUDE_CODE_ARTIFACT_COMMENT_FAST_ACK_FIXED": "0",
     }
     if wanted != settings:
         write_atomically(settings_path, json.dumps(wanted, indent=2) + "\n")
