@@ -11,6 +11,7 @@ exit "${UV_STATUS-0}"
 SCRIPTS = {
     "settings.py": "import os\nfrom shared import helper\n",
     "tools.py": "from shared import helper\n",
+    "listed.py": "import os, deep.inner as inner, shared\n",
     "shared.py": "import json\nfrom deep import value\n",
     "deep.py": "value = 1\n",
     "unrelated.py": "value = 2\n",
@@ -33,9 +34,13 @@ def scripts(tmp_path):
 
 
 @pytest.fixture
-def run_hook(home, fake_bin, plugin_data, scripts):
-    bin_dir = fake_bin("uv", FAKE_UV)
+def hooks_copy(tmp_path):
+    hooks = tmp_path / "hooks"
+    shutil.copytree(ROOT / "hooks", hooks)
+    return hooks
 
+
+def runner(scripts, home, bin_dir, plugin_data):
     def run(
         script="settings.py",
         *,
@@ -59,6 +64,16 @@ def run_hook(home, fake_bin, plugin_data, scripts):
         )
 
     return run
+
+
+@pytest.fixture
+def run_hook(home, fake_bin, plugin_data, scripts):
+    return runner(scripts, home, fake_bin("uv", FAKE_UV), plugin_data)
+
+
+@pytest.fixture
+def run_real_hook(home, fake_bin, plugin_data, hooks_copy):
+    return runner(hooks_copy, home, fake_bin("uv", FAKE_UV), plugin_data)
 
 
 def ran_uv(result):
@@ -99,6 +114,22 @@ def test_editing_the_script_or_a_local_import_reruns_it(run_hook, scripts, edite
     edit(scripts, edited)
     assert ran_uv(run_hook())
     assert not ran_uv(run_hook())
+
+
+@pytest.mark.parametrize("edited", ["deep.py", "shared.py"])
+def test_every_module_in_an_import_list_counts(run_hook, scripts, edited):
+    run_hook("listed.py")
+    edit(scripts, edited)
+    assert ran_uv(run_hook("listed.py"))
+
+
+@pytest.mark.parametrize("edited", ["json_values.py", "settings_lock.py"])
+def test_real_setup_markers_cover_shared_modules(run_real_hook, hooks_copy, edited):
+    setup_scripts = ("setup_settings.py", "setup_tools.py")
+    for script in setup_scripts:
+        run_real_hook(script)
+    edit(hooks_copy, edited)
+    assert [ran_uv(run_real_hook(script)) for script in setup_scripts] == [True, True]
 
 
 def test_editing_another_script_keeps_the_marker(run_hook, scripts):

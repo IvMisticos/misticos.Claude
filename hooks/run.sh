@@ -37,12 +37,22 @@ hash_stdin() {
 }
 
 imported_modules() {
-  local keyword module rest
-  while read -r keyword module rest; do
+  local keyword names
+  while read -r keyword names; do
     case "$keyword" in
-      from | import) echo "${module%%[.,]*}" ;;
+      from) echo "${names%%[ .]*}" ;;
+      import) modules_in_import_list "$names" ;;
     esac
   done < "$hooks_dir/$1"
+}
+
+modules_in_import_list() {
+  local entries entry module rest
+  IFS=, read -ra entries <<< "$1"
+  for entry in "${entries[@]}"; do
+    read -r module rest <<< "$entry"
+    echo "${module%%.*}"
+  done
 }
 
 hash_script_and_local_imports() {
