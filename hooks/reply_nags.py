@@ -151,11 +151,8 @@ def nags_from_transcript(event, payload, state):
     if event not in NAG_EVENTS:
         return [], state
     history = transcript_history(payload.get("transcript_path"))
-    if event not in PROMPT_EVENTS:
-        nags, memory = due_nags(history, state.memory)
-        return nags.texts(), state._replace(memory=memory)
     nags, memory = due_nags(history, state.memory)
-    if not is_wake_prompt(payload.get("prompt")):
+    if event in PROMPT_EVENTS and not is_wake_prompt(payload.get("prompt")):
         memory = memory._replace(submitted_prompt=submitted_prompt_id(payload))
     return nags.texts(), state._replace(memory=memory)
 
