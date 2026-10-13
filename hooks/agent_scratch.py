@@ -7,7 +7,6 @@
 
 import os
 import re
-import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -68,10 +67,29 @@ def offer_agent_folder(payload: JsonObject) -> None:
     write_context("SubagentStart", note, OutputShape.CLAUDE)
 
 
+def delete_in_background(folder: Path) -> None:
+    subprocess.Popen(
+        [sys.executable, "-c", DELETE_FOLDER, str(folder)],
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=True,
+    )
+
+
+def delete_soon(folder: Path) -> None:
+    trash = folder.with_name(f"{folder.name}-deleted-{os.getpid()}")
+    try:
+        folder.rename(trash)
+    except OSError:
+        return
+    delete_in_background(trash)
+
+
 def delete_agent_folder(payload: JsonObject) -> None:
     folder = agent_folder(payload)
     if folder and other_tasks_in_flight(payload) == []:
-        shutil.rmtree(folder, ignore_errors=True)
+        delete_soon(folder)
 
 
 def finish_agent(payload: JsonObject) -> None:
@@ -85,29 +103,13 @@ def finish_agent(payload: JsonObject) -> None:
 def delete_agent_folders_when_idle(payload: JsonObject) -> None:
     root = agent_folders_root(payload)
     if root and payload.get("background_tasks") == []:
-        shutil.rmtree(root, ignore_errors=True)
-
-
-def delete_in_background(folder: Path) -> None:
-    subprocess.Popen(
-        [sys.executable, "-c", DELETE_FOLDER, str(folder)],
-        stdin=subprocess.DEVNULL,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        start_new_session=True,
-    )
+        delete_soon(root)
 
 
 def delete_agent_folders_after_session(payload: JsonObject) -> None:
     root = agent_folders_root(payload)
-    if not root or payload.get("reason") in ENDS_WITH_TASKS_RUNNING:
-        return
-    trash = root.with_name(f"{root.name}-deleted-{os.getpid()}")
-    try:
-        root.rename(trash)
-    except OSError:
-        return
-    delete_in_background(trash)
+    if root and payload.get("reason") not in ENDS_WITH_TASKS_RUNNING:
+        delete_soon(root)
 
 
 HANDLERS = {
