@@ -66,10 +66,16 @@ class Transcript:
         origin = {"kind": "task-notification"}
         self.add({"type": "user", "origin": origin, "message": {"content": "<wake/>"}})
 
-    def queued_wake(self):
-        origin = {"kind": "task-notification"}
-        attachment = {"type": "queued_command", "origin": origin, "prompt": "<wake/>"}
+    def queued(self, kind):
+        origin = {"kind": kind}
+        attachment = {"type": "queued_command", "origin": origin, "prompt": "queued"}
         self.add({"type": "attachment", "attachment": attachment})
+
+    def queued_wake(self):
+        self.queued("task-notification")
+
+    def queued_human(self):
+        self.queued("human")
 
     def reply(self, text, message_id=None):
         message_id = message_id or f"m{self.count}"
@@ -209,6 +215,26 @@ def test_a_prompt_larger_than_the_tail_starts_a_new_count(home, transcript):
     transcript.reply(SHORT)
     transcript.fire(home)
     transcript.human("x" * (2 << 20))
+    transcript.fire(home, "UserPromptSubmit")
+    transcript.reply(SHORT)
+    assert transcript.fire(home) is None
+
+
+def test_a_message_typed_mid_turn_starts_a_new_count(home, transcript):
+    transcript.human()
+    transcript.reply(SHORT)
+    transcript.fire(home)
+    transcript.queued_human()
+    transcript.reply(SHORT)
+    assert transcript.fire(home) is None
+
+
+def test_a_message_drained_with_a_wake_starts_a_new_count(home, transcript):
+    transcript.human()
+    transcript.reply(SHORT)
+    transcript.fire(home)
+    transcript.queued_human()
+    transcript.queued_wake()
     transcript.fire(home, "UserPromptSubmit")
     transcript.reply(SHORT)
     assert transcript.fire(home) is None
