@@ -7,10 +7,10 @@ from typing import NamedTuple
 
 from harnesses import harness_parser
 from hook_io import (
+    agent_session_key,
     event_name_of,
     read_payload,
     run_hook,
-    session_id_of,
     write_block,
 )
 from plugin_paths import DATA_ROOT
@@ -48,16 +48,6 @@ def own_transcript(payload):
     if event_name_of(payload).lower() == SUBAGENT_STOP:
         return payload.get("agent_transcript_path")
     return payload.get("transcript_path")
-
-
-def memory_key(payload):
-    session_id = session_id_of(payload)
-    agent_id = payload.get("agent_id")
-    if session_id is None:
-        return None
-    if isinstance(agent_id, str) and agent_id:
-        return f"{session_id}-{agent_id}"
-    return session_id
 
 
 def remembered(key):
@@ -157,7 +147,7 @@ def new_activity(part, memory):
 def review_reminder(payload):
     if follows_own_block(payload) or ended_without_completing(payload):
         return None
-    key = memory_key(payload)
+    key = agent_session_key(payload)
     transcript_path = own_transcript(payload)
     if not (key and isinstance(transcript_path, str) and gh_installed()):
         return None
