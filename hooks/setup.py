@@ -17,6 +17,7 @@ import tomllib
 from pathlib import Path
 
 import tomli_w
+from json_values import JsonObject, dict_or_empty
 
 HOME = Path.home()
 CLAUDE_DIR = HOME / ".claude"
@@ -110,7 +111,7 @@ TOOLCHAIN_PATH = os.pathsep.join(
 )
 
 
-def run(*command):
+def run(*command: str) -> None:
     environment = {
         "DOTNET_ROOT": str(HOME / ".dotnet"),
         **os.environ,
@@ -119,11 +120,11 @@ def run(*command):
     subprocess.run(command, check=True, stdout=sys.stderr, env=environment)
 
 
-def run_pipeline(script):
+def run_pipeline(script: str) -> None:
     run("bash", "-o", "pipefail", "-c", script)
 
 
-def write_atomically(path, text):
+def write_atomically(path: Path, text: str) -> None:
     mode = path.stat().st_mode & 0o777 if path.exists() else 0o644
     descriptor, staged = tempfile.mkstemp(dir=path.parent, prefix=path.name + ".")
     try:
@@ -136,15 +137,18 @@ def write_atomically(path, text):
         raise
 
 
-def read_json(path):
+def read_json(path: Path) -> JsonObject:
     try:
         text = path.read_text()
     except FileNotFoundError:
         return {}
-    return json.loads(text) if text.strip() else {}
+    value = json.loads(text) if text.strip() else {}
+    if not isinstance(value, dict):
+        raise TypeError(f"{path} does not hold a JSON object")
+    return value
 
 
-def configure_claude_settings():
+def configure_claude_settings() -> None:
     CLAUDE_DIR.mkdir(parents=True, exist_ok=True)
     settings_path = CLAUDE_DIR / "settings.json"
     settings = read_json(settings_path)
@@ -152,20 +156,21 @@ def configure_claude_settings():
     wanted["attribution"] = {"commit": "", "pr": "", "sessionUrl": False}
     wanted["autoMemoryEnabled"] = False
     wanted["autoCompactWindow"] = AUTO_COMPACT_WINDOW_TOKENS
-    permissions = dict(settings.get("permissions", {}))
-    denied = permissions.get("deny", [])
+    permissions = dict(dict_or_empty(settings.get("permissions")))
+    denied = permissions.get("deny")
+    denied = denied if isinstance(denied, list) else []
     permissions["deny"] = denied + [tool for tool in DENIED_TOOLS if tool not in denied]
     wanted["permissions"] = permissions
     wanted["skillOverrides"] = {
         **dict.fromkeys(USER_INVOCABLE_ONLY_SKILLS, USER_INVOCABLE_ONLY),
-        **settings.get("skillOverrides", {}),
+        **dict_or_empty(settings.get("skillOverrides")),
     }
     wanted["enabledPlugins"] = {
         **dict.fromkeys(DISABLED_PLUGINS, False),
-        **settings.get("enabledPlugins", {}),
+        **dict_or_empty(settings.get("enabledPlugins")),
     }
     wanted["env"] = {
-        **settings.get("env", {}),
+        **dict_or_empty(settings.get("env")),
         "CLAUDE_CODE_ACT_DONT_REDERIVE": "0",
         "CLAUDE_CODE_ARTIFACT_COMMENT_FAST_ACK": "0",
         "CLAUDE_CODE_ARTIFACT_COMMENT_FAST_ACK_FIXED": "0",
@@ -187,15 +192,15 @@ def configure_claude_settings():
         write_atomically(settings_path, json.dumps(wanted, indent=2) + "\n")
 
 
-def install_web_guidance_plugin():
-    installed = read_json(INSTALLED_PLUGINS).get("plugins", {})
+def install_web_guidance_plugin() -> None:
+    installed = dict_or_empty(read_json(INSTALLED_PLUGINS).get("plugins"))
     if WEB_GUIDANCE_PLUGIN in installed:
         return
     run("claude", "plugin", "marketplace", "add", "GoogleChrome/modern-web-guidance")
     run("claude", "plugin", "install", WEB_GUIDANCE_PLUGIN, "--scope", "user")
 
 
-def configure_codex():
+def configure_codex() -> None:
     if shutil.which("codex") is None:
         return
     CODEX_DIR.mkdir(parents=True, exist_ok=True)
@@ -215,24 +220,24 @@ def configure_codex():
         write_atomically(config_path, tomli_w.dumps(wanted))
 
 
-def install_apt_packages():
+def install_apt_packages() -> None:
     packages = ("git-lfs", "curl", "jq", "gh", "unzip")
     if any(shutil.which(package) is None for package in packages):
         run("apt-get", "update")
         run("apt-get", "install", "-y", *packages)
 
 
-def install_bun():
+def install_bun() -> None:
     if shutil.which("bun") is None and not (HOME / ".bun" / "bin" / "bun").exists():
         run_pipeline("curl -fsSL https://bun.sh/install | bash -s canary")
 
 
-def install_mise():
+def install_mise() -> None:
     if shutil.which("mise") is None and not (HOME / ".local" / "bin" / "mise").exists():
         run_pipeline("curl -fsSL https://mise.run | sh")
 
 
-def install_dotnet():
+def install_dotnet() -> None:
     dotnet = HOME / ".dotnet" / "dotnet"
     if not dotnet.exists():
         run_pipeline(
@@ -245,7 +250,7 @@ def install_dotnet():
     dotnet_link.symlink_to(dotnet)
 
 
-def install_cloud_tools():
+def install_cloud_tools() -> None:
     if CLOUD_SESSION_MARK not in os.environ or os.geteuid() != 0:
         return
     install_apt_packages()
@@ -254,7 +259,7 @@ def install_cloud_tools():
     install_dotnet()
 
 
-def main():
+def main() -> None:
     install_web_guidance_plugin()
     configure_claude_settings()
     configure_codex()

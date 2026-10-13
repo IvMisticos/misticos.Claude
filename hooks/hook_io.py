@@ -6,13 +6,13 @@ from collections.abc import Callable
 from typing import Literal, Required, TypedDict
 
 from harnesses import OutputShape
-from json_values import json_object
+from json_values import JsonObject, json_object
 
 
 class PreToolUseDecision(TypedDict, total=False):
     permissionDecision: Literal["allow", "deny"]
     permissionDecisionReason: str
-    updatedInput: dict
+    updatedInput: JsonObject
 
 
 class PreToolUseFields(PreToolUseDecision, total=False):
@@ -41,31 +41,37 @@ class CursorFollowup(TypedDict):
     followup_message: str
 
 
-type PreToolUseDecider = Callable[[dict], PreToolUseDecision | None]
+class CursorPermission(TypedDict, total=False):
+    permission: Required[Literal["allow", "deny"]]
+    user_message: str
+    updated_input: JsonObject
 
 
-def read_payload():
+type PreToolUseDecider = Callable[[JsonObject], PreToolUseDecision | None]
+
+
+def read_payload() -> JsonObject:
     return json_object(sys.stdin.read()) or {}
 
 
-def scratchpad_of(payload):
+def scratchpad_of(payload: JsonObject) -> str | None:
     scratchpad = payload.get("scratchpad_dir")
     if isinstance(scratchpad, str) and os.path.isabs(scratchpad):
         return scratchpad
     return None
 
 
-def event_name_of(payload):
+def event_name_of(payload: JsonObject) -> str:
     event = payload.get("hook_event_name")
     return event if isinstance(event, str) else ""
 
 
-def session_id_of(payload):
+def session_id_of(payload: JsonObject) -> str | None:
     session_id = payload.get("session_id") or payload.get("conversation_id")
     return session_id if isinstance(session_id, str) else None
 
 
-def agent_session_key(payload):
+def agent_session_key(payload: JsonObject) -> str | None:
     session_id = session_id_of(payload)
     agent_id = payload.get("agent_id")
     if session_id is None:
@@ -75,19 +81,20 @@ def agent_session_key(payload):
     return session_id
 
 
-def is_subagent(payload):
+def is_subagent(payload: JsonObject) -> bool:
     return bool(payload.get("agent_id") or payload.get("subagent_id"))
 
 
-def cwd_of(payload):
-    return payload.get("cwd") or os.getcwd()
+def cwd_of(payload: JsonObject) -> str:
+    cwd = payload.get("cwd")
+    return cwd if isinstance(cwd, str) and cwd else os.getcwd()
 
 
 def pre_tool_use_output(decision: PreToolUseDecision) -> ClaudeOutput:
     return {"hookSpecificOutput": {"hookEventName": "PreToolUse", **decision}}
 
 
-def allowed_with(updated_input: dict) -> PreToolUseDecision:
+def allowed_with(updated_input: JsonObject) -> PreToolUseDecision:
     return {"permissionDecision": "allow", "updatedInput": updated_input}
 
 
@@ -109,7 +116,9 @@ def hook_output(
             return {"hookSpecificOutput": context_fields}
 
 
-def write_context(event, context, shape=OutputShape.CLAUDE):
+def write_context(
+    event: str, context: str, shape: OutputShape = OutputShape.CLAUDE
+) -> None:
     json.dump(hook_output(event, context, shape), sys.stdout)
 
 
@@ -121,21 +130,21 @@ def block_output(reason: str, shape: OutputShape) -> ClaudeBlock | CursorFollowu
             return {"decision": "block", "reason": reason}
 
 
-def write_block(reason, shape=OutputShape.CLAUDE):
+def write_block(reason: str, shape: OutputShape = OutputShape.CLAUDE) -> None:
     json.dump(block_output(reason, shape), sys.stdout)
 
 
-def write_pre_tool_use_decision(decide: PreToolUseDecider):
+def write_pre_tool_use_decision(decide: PreToolUseDecider) -> None:
     decision = decide(read_payload())
     if decision:
         json.dump(pre_tool_use_output(decision), sys.stdout)
 
 
-def run_pre_tool_use(decide: PreToolUseDecider):
+def run_pre_tool_use(decide: PreToolUseDecider) -> None:
     run_hook(lambda: write_pre_tool_use_decision(decide))
 
 
-def run_hook(main):
+def run_hook(main: Callable[[], object]) -> None:
     try:
         main()
     except Exception:  # noqa: BLE001

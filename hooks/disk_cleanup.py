@@ -1,5 +1,6 @@
 import os
 import subprocess
+from collections.abc import Collection, Iterator, Mapping, Sequence
 
 from disks import device_of
 
@@ -12,7 +13,9 @@ PRUNE_DOCKER_BUILD_CACHE = ("docker", "builder", "prune", "-f")
 PRUNE_DANGLING_DOCKER_IMAGES = ("docker", "image", "prune", "-f")
 
 
-def output_of(command, env=None):
+def output_of(
+    command: Sequence[str], env: Mapping[str, str] | None = None
+) -> str | None:
     try:
         result = subprocess.run(
             command,
@@ -28,15 +31,15 @@ def output_of(command, env=None):
     return result.stdout.strip() if result.returncode == 0 else None
 
 
-def ran(command, env=None):
+def ran(command: Sequence[str], env: Mapping[str, str] | None = None) -> bool:
     return output_of(command, env) is not None
 
 
-def is_on(path, devices):
+def is_on(path: str | None, devices: Collection[str]) -> bool:
     return path is not None and device_of(path) in devices
 
 
-def nuget_http_cache():
+def nuget_http_cache() -> str | None:
     for line in (output_of(LIST_NUGET_HTTP_CACHE) or "").splitlines():
         name, _, path = line.partition(": ")
         if name == "http-cache":
@@ -44,7 +47,7 @@ def nuget_http_cache():
     return None
 
 
-def docker_prunes():
+def docker_prunes() -> Iterator[tuple[str, Sequence[str], Mapping[str, str] | None]]:
     daemon_builder = output_of(SHOW_DOCKER_CONTEXT)
     if daemon_builder:
         builder_env = os.environ | {"BUILDX_BUILDER": daemon_builder}
@@ -52,7 +55,7 @@ def docker_prunes():
     yield "dangling Docker images", PRUNE_DANGLING_DOCKER_IMAGES, None
 
 
-def cleared_caches(devices):
+def cleared_caches(devices: Collection[str]) -> list[str]:
     cleared = []
     if is_on(nuget_http_cache(), devices) and ran(CLEAR_NUGET_HTTP_CACHE):
         cleared.append("the NuGet HTTP cache")

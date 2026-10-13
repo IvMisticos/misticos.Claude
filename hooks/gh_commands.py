@@ -1,6 +1,9 @@
 import re
 import shlex
+from collections.abc import Iterable, Sequence
 from typing import NamedTuple
+
+from json_values import JsonValue
 
 COMMAND_SEPARATORS = "();<>|&\n"
 WORD_SEPARATORS = " \t\r"
@@ -15,11 +18,11 @@ class GhPrCall(NamedTuple):
     target: str | None
     repo: str | None
 
-    def creates_a_pull_request(self):
+    def creates_a_pull_request(self) -> bool:
         return self.subcommand in CREATE_SUBCOMMANDS
 
 
-def shell_tokens(command):
+def shell_tokens(command: str) -> list[str]:
     joined_lines = command.replace(LINE_CONTINUATION, "")
     without_descriptors = REDIRECTED_FILE_DESCRIPTOR.sub("", joined_lines)
     lexer = shlex.shlex(
@@ -36,7 +39,7 @@ def shell_tokens(command):
         return []
 
 
-def command_tokens(command):
+def command_tokens(command: JsonValue) -> list[str]:
     if isinstance(command, str):
         return shell_tokens(command)
     if isinstance(command, list):
@@ -49,17 +52,17 @@ def command_tokens(command):
     return []
 
 
-def is_command_separator(token):
+def is_command_separator(token: str) -> bool:
     return bool(token) and not token.strip(COMMAND_SEPARATORS)
 
 
-def is_gh(word):
+def is_gh(word: str) -> bool:
     return word == "gh" or word.endswith("/gh")
 
 
-def gh_argument_lists(command):
-    argument_lists = []
-    current = None
+def gh_argument_lists(command: JsonValue) -> list[list[str]]:
+    argument_lists: list[list[str]] = []
+    current: list[str] | None = None
     for token in command_tokens(command):
         if is_command_separator(token):
             current = None
@@ -71,9 +74,9 @@ def gh_argument_lists(command):
     return argument_lists
 
 
-def without_repo_flags(arguments):
-    repo = None
-    remaining = []
+def without_repo_flags(arguments: Iterable[str]) -> tuple[str | None, list[str]]:
+    repo: str | None = None
+    remaining: list[str] = []
     words = iter(arguments)
     for word in words:
         if word in REPO_FLAGS:
@@ -87,20 +90,20 @@ def without_repo_flags(arguments):
     return repo or None, remaining
 
 
-def pr_target(words_after_subcommand):
+def pr_target(words_after_subcommand: Sequence[str]) -> str | None:
     if not words_after_subcommand or words_after_subcommand[0].startswith("-"):
         return None
     return words_after_subcommand[0]
 
 
-def gh_pr_call(arguments):
+def gh_pr_call(arguments: Sequence[str]) -> GhPrCall | None:
     repo, words = without_repo_flags(arguments)
     if len(words) < 2 or words[0] != "pr":
         return None
     return GhPrCall(words[1], pr_target(words[2:]), repo)
 
 
-def gh_api_words(arguments):
+def gh_api_words(arguments: list[str]) -> list[str]:
     if arguments[:1] != ["api"]:
         return []
     return arguments[1:]

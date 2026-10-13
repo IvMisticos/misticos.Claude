@@ -13,7 +13,11 @@ import signal
 import subprocess
 import sys
 import time
+from collections.abc import Generator, Sequence
+from io import TextIOWrapper
 from pathlib import Path
+from types import FrameType
+from typing import NoReturn
 
 from core_pinning import CAN_PIN_CORES, pinned, plan_cores, restore_abandoned_pinning
 from queued_commands import queues
@@ -31,18 +35,18 @@ STOP_SIGNALS = (signal.SIGTERM, signal.SIGHUP)
 SIGNALS_PYTHON_IGNORES = (signal.SIGPIPE, signal.SIGXFSZ)
 
 
-def notice(message):
+def notice(message: str) -> None:
     print(f"queue: {message}", file=sys.stderr, flush=True)
 
 
-def open_lock_file(path):
+def open_lock_file(path: Path) -> TextIOWrapper:
     LOCK_DIR.mkdir(mode=0o700, exist_ok=True)
     if LOCK_DIR.lstat().st_uid != os.getuid():
         sys.exit(f"queue: {LOCK_DIR} belongs to another user")
     return open(path, "a")
 
 
-def lock_now(handle, operation):
+def lock_now(handle: TextIOWrapper, operation: int) -> bool:
     try:
         fcntl.flock(handle, operation | fcntl.LOCK_NB)
     except BlockingIOError:
@@ -50,7 +54,7 @@ def lock_now(handle, operation):
     return True
 
 
-def try_lock(path, operation):
+def try_lock(path: Path, operation: int) -> TextIOWrapper | None:
     handle = open_lock_file(path)
     if lock_now(handle, operation):
         return handle
@@ -59,7 +63,7 @@ def try_lock(path, operation):
 
 
 @contextlib.contextmanager
-def locked(path, operation, waiting_message):
+def locked(path: Path, operation: int, waiting_message: str) -> Generator[None]:
     with open_lock_file(path) as handle:
         if not lock_now(handle, operation):
             notice(waiting_message)
@@ -68,7 +72,7 @@ def locked(path, operation, waiting_message):
 
 
 @contextlib.contextmanager
-def machine_locked(operation, waiting_message):
+def machine_locked(operation: int, waiting_message: str) -> Generator[None]:
     with open_lock_file(MACHINE_LOCK) as machine:
         with open_lock_file(TURNSTILE_LOCK) as turnstile:
             if not (
@@ -80,7 +84,7 @@ def machine_locked(operation, waiting_message):
         yield
 
 
-def free_build_slot():
+def free_build_slot() -> TextIOWrapper | None:
     for index in range(BUILD_SLOTS):
         slot = try_lock(LOCK_DIR / f"build-{index}.lock", fcntl.LOCK_EX)
         if slot:
@@ -89,7 +93,7 @@ def free_build_slot():
 
 
 @contextlib.contextmanager
-def build_slot():
+def build_slot() -> Generator[None]:
     slot = free_build_slot()
     if slot is None:
         notice("waiting for a build slot")
@@ -100,15 +104,15 @@ def build_slot():
         yield
 
 
-def exit_status(returncode):
+def exit_status(returncode: int) -> int:
     return 128 - returncode if returncode < 0 else returncode
 
 
-def run_held(command):
+def run_held(command: Sequence[str]) -> int:
     environment = {**os.environ, HELD_VARIABLE: "1"}
     child = subprocess.Popen(command, env=environment)
 
-    def forward_to_child(signal_number, _frame):
+    def forward_to_child(signal_number: int, _frame: FrameType | None) -> None:
         child.send_signal(signal_number)
 
     for stop_signal in STOP_SIGNALS:
@@ -116,7 +120,7 @@ def run_held(command):
     return exit_status(child.wait())
 
 
-def restore_pinning_of_killed_benchmark():
+def restore_pinning_of_killed_benchmark() -> None:
     if not CAN_PIN_CORES:
         return
     benchmark = try_lock(BENCHMARK_LOCK, fcntl.LOCK_EX)
@@ -126,26 +130,26 @@ def restore_pinning_of_killed_benchmark():
         restore_abandoned_pinning(PINNING_STATE)
 
 
-def run_build(command):
+def run_build(command: Sequence[str]) -> int:
     restore_pinning_of_killed_benchmark()
     alone_message = "waiting for a benchmark that runs alone"
     with build_slot(), machine_locked(fcntl.LOCK_SH, alone_message):
         return run_held(command)
 
 
-def exec_unqueued(executable, arguments):
+def exec_unqueued(executable: str, arguments: Sequence[str]) -> NoReturn:
     for ignored_signal in SIGNALS_PYTHON_IGNORES:
         signal.signal(ignored_signal, signal.SIG_DFL)
     os.execv(executable, [executable, *arguments])
 
 
-def run_tool(executable, arguments):
+def run_tool(executable: str, arguments: Sequence[str]) -> int:
     if not queues(Path(executable).name, arguments):
         exec_unqueued(executable, arguments)
     return run_build([executable, *arguments])
 
 
-def run_benchmark(command, cores, alone):
+def run_benchmark(command: Sequence[str], cores: int, alone: bool) -> int:
     with contextlib.ExitStack() as held:
         held.enter_context(
             locked(BENCHMARK_LOCK, fcntl.LOCK_EX, "waiting for the running benchmark")
@@ -165,14 +169,14 @@ def run_benchmark(command, cores, alone):
         return run_held(command)
 
 
-def positive_count(text):
+def positive_count(text: str) -> int:
     count = int(text)
     if count < 1:
         raise argparse.ArgumentTypeError("needs at least 1")
     return count
 
 
-def parse_bench_arguments():
+def parse_bench_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(prog="queue")
     modes = parser.add_subparsers(dest="mode", required=True)
     bench = modes.add_parser("bench")
@@ -187,11 +191,11 @@ def parse_bench_arguments():
     return arguments
 
 
-def exit_on_signal(signal_number, _frame):
+def exit_on_signal(signal_number: int, _frame: FrameType | None) -> NoReturn:
     sys.exit(128 + signal_number)
 
 
-def main():
+def main() -> int:
     for stop_signal in STOP_SIGNALS:
         signal.signal(stop_signal, exit_on_signal)
     if sys.argv[1:2] == ["tool"]:

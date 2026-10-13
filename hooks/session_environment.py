@@ -15,16 +15,16 @@ SHIMS_DIR = PLUGIN_ROOT / "shims"
 SESSION_ENVIRONMENT_SCRIPT = PLUGIN_ROOT / "hooks" / "session_environment.sh"
 
 
-def project_dir():
+def project_dir() -> str:
     return os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd()
 
 
-def session_environment_command():
+def session_environment_command() -> str:
     script = str(SESSION_ENVIRONMENT_SCRIPT)
     return shlex.join([".", script, str(SHIMS_DIR), project_dir()])
 
 
-def main():
+def main() -> None:
     env_file = os.environ.get("CLAUDE_ENV_FILE")
     if os.name != "posix" or not env_file:
         return

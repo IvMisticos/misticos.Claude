@@ -18,6 +18,7 @@ from hook_io import (
     scratchpad_of,
     write_context,
 )
+from json_values import JsonObject
 
 LOW_SPACE_BYTES = 1 << 30
 LOW_SPACE_SHARE = 0.1
@@ -31,14 +32,14 @@ HOW_TO_CLEAN_UP = (
 )
 
 
-def watched_paths(payload):
+def watched_paths(payload: JsonObject) -> tuple[str, ...]:
     cwd = cwd_of(payload)
     temp_dirs = filter(None, map(os.environ.get, TEMP_DIR_VARIABLES))
     scratchpad = filter(None, [scratchpad_of(payload)])
     return (cwd, os.path.expanduser("~"), *temp_dirs, "/tmp", *scratchpad)
 
 
-def disk_warning(payload):
+def disk_warning(payload: JsonObject) -> str | None:
     low_space = [
         RUNNING_LOW.format(free=disk.free // BYTES_PER_MIB, path=disk.path)
         for disk in disks(watched_paths(payload))
@@ -49,7 +50,7 @@ def disk_warning(payload):
     return None
 
 
-def main():
+def main() -> None:
     options = harness_parser().parse_args()
     payload = read_payload()
     cleanup_note = clean_up_low_disks(watched_paths(payload))

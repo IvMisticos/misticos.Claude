@@ -1,6 +1,7 @@
 import os
 import re
 import sys
+from collections.abc import Collection, Iterable
 from typing import NamedTuple
 
 MAX_INJECTED_CHARS = 10_000
@@ -47,14 +48,14 @@ def rules_at(path: str, model_names: dict[str, str]) -> Rules:
     return Rules(expanded, os.path.basename(expanded), model_names)
 
 
-def with_model_names(text, model_names):
-    def named(match):
+def with_model_names(text: str, model_names: dict[str, str]) -> str:
+    def named(match: re.Match[str]) -> str:
         return model_names.get(match[1].lower()) or match[0]
 
     return MODEL_TIER.sub(named, text)
 
 
-def model_names_note(rules):
+def model_names_note(rules: Rules) -> str:
     meanings = [
         f"the {tier} model means {model_name}"
         for tier, model_name in rules.model_names.items()
@@ -65,12 +66,12 @@ def model_names_note(rules):
     return MODEL_NAMES_NOTE.format(name=rules.name, meanings=", ".join(meanings))
 
 
-def pointer_reminder(rules):
+def pointer_reminder(rules: Rules) -> str:
     pointer = POINTER_REMINDER.format(name=rules.name, path=rules.path)
     return pointer + model_names_note(rules)
 
 
-def preamble_for(number, total, name, first_preamble):
+def preamble_for(number: int, total: int, name: str, first_preamble: str) -> str:
     if number > 1:
         return LATER_PART_PREAMBLE.format(name=name, number=number, total=total)
     if total > 1:
@@ -78,8 +79,8 @@ def preamble_for(number, total, name, first_preamble):
     return first_preamble.format(name=name)
 
 
-def packed_parts(blocks, budget):
-    parts = []
+def packed_parts(blocks: Iterable[str], budget: int) -> list[str]:
+    parts: list[str] = []
     for block in blocks:
         if parts and len(parts[-1]) + len(block) <= budget:
             parts[-1] += block
@@ -88,7 +89,7 @@ def packed_parts(blocks, budget):
     return parts
 
 
-def parts_within_budget(text, budget):
+def parts_within_budget(text: str, budget: int) -> list[str]:
     for block_break in BLOCK_BREAKS:
         parts = packed_parts(re.split(block_break, text), budget)
         if all(len(part) <= budget for part in parts):
@@ -96,7 +97,9 @@ def parts_within_budget(text, budget):
     return [text[at : at + budget] for at in range(0, len(text), budget)]
 
 
-def part_messages(text, budget, name, first_preamble):
+def part_messages(
+    text: str, budget: int, name: str, first_preamble: str
+) -> tuple[str, ...]:
     parts = parts_within_budget(text, budget)
     return tuple(
         f"{preamble_for(number, len(parts), name, first_preamble)}\n\n{part}"
@@ -104,7 +107,7 @@ def part_messages(text, budget, name, first_preamble):
     )
 
 
-def without_sections(text, headings):
+def without_sections(text: str, headings: Collection[str]) -> str:
     sections = re.split(r"(?m)^(?=# )", text)
     kept = [
         section
@@ -114,7 +117,9 @@ def without_sections(text, headings):
     return "".join(kept).strip()
 
 
-def full_copy_messages(rules, first_preamble, skipped_sections=frozenset()):
+def full_copy_messages(
+    rules: Rules, first_preamble: str, skipped_sections: Collection[str] = frozenset()
+) -> tuple[str, ...]:
     try:
         with open(rules.path, encoding="utf-8", errors="replace") as rules_file:
             text = with_model_names(rules_file.read().strip(), rules.model_names)

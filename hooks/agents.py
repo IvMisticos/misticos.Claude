@@ -1,5 +1,6 @@
 from typing import NamedTuple
 
+from json_values import JsonValue
 from rule_sections import RuleSection
 
 ALL_SECTIONS = frozenset(RuleSection)
@@ -42,6 +43,8 @@ AGENTS = (
 AGENTS_BY_NAME = {agent.name: agent for agent in AGENTS}
 
 
-def rule_sections_for(agent_type):
+def rule_sections_for(agent_type: JsonValue) -> frozenset[RuleSection]:
+    if not isinstance(agent_type, str):
+        return ALL_SECTIONS
     agent = AGENTS_BY_NAME.get(agent_type)
     return agent.rule_sections if agent else ALL_SECTIONS

@@ -3,9 +3,11 @@ import os
 import shutil
 import subprocess
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterable, Sequence
 from enum import Enum, auto
 from typing import NamedTuple
+
+from pull_requests import PullRequest
 
 GH_TIMEOUT_SECONDS = 10
 NOT_FOUND_ERRORS = ("(HTTP 404)", "Could not resolve to a")
@@ -31,7 +33,7 @@ class ReviewThread(NamedTuple):
 
 class ReviewState(NamedTuple):
     is_open: bool
-    unresolved_threads: tuple = ()
+    unresolved_threads: tuple[ReviewThread, ...] = ()
 
 
 NOT_OPEN = ReviewState(is_open=False)
@@ -46,11 +48,11 @@ FAILURES_BY_PRIORITY = (CallFailure.RETRYABLE, CallFailure.NOT_FOUND)
 
 
 class ThreadSource(NamedTuple):
-    requests: Callable
-    parse: Callable
+    requests: Callable[[PullRequest], list[list[str]]]
+    parse: Callable[..., ReviewState | None]
 
 
-def graphql_requests(pull_request):
+def graphql_requests(pull_request: PullRequest) -> list[list[str]]:
     return [
         [
             "gh",
@@ -68,7 +70,7 @@ def graphql_requests(pull_request):
     ]
 
 
-def graphql_review_state(output):
+def graphql_review_state(output: str) -> ReviewState | None:
     try:
         pull_request = json.loads(output)["data"]["repository"]["pullRequest"]
         if pull_request["state"] != "OPEN":
@@ -85,7 +87,7 @@ def graphql_review_state(output):
         return None
 
 
-def remote_requests(pull_request):
+def remote_requests(pull_request: PullRequest) -> list[list[str]]:
     path = f"repos/{pull_request.owner}/{pull_request.repo}/pulls/{pull_request.number}"
     return [
         ["gh", "api", path, "--jq", ".state"],
@@ -93,7 +95,7 @@ def remote_requests(pull_request):
     ]
 
 
-def remote_review_state(state_output, threads_output):
+def remote_review_state(state_output: str, threads_output: str) -> ReviewState | None:
     state = state_output.strip()
     if state == "closed":
         return NOT_OPEN
@@ -116,11 +118,11 @@ GRAPHQL = ThreadSource(graphql_requests, graphql_review_state)
 REMOTE = ThreadSource(remote_requests, remote_review_state)
 
 
-def thread_source():
+def thread_source() -> ThreadSource:
     return REMOTE if os.environ.get("CLAUDE_CODE_REMOTE") == "true" else GRAPHQL
 
 
-def started(command):
+def started(command: Sequence[str]) -> subprocess.Popen[str]:
     return subprocess.Popen(
         command,
         stdin=subprocess.DEVNULL,
@@ -130,17 +132,17 @@ def started(command):
     )
 
 
-def time_left(deadline):
+def time_left(deadline: float) -> float:
     return max(FINISHED_OUTPUT_WAIT_SECONDS, deadline - time.monotonic())
 
 
-def failure_from(error):
+def failure_from(error: str) -> CallFailure:
     if any(marker in error for marker in NOT_FOUND_ERRORS):
         return CallFailure.NOT_FOUND
     return CallFailure.RETRYABLE
 
 
-def output_by(deadline, process):
+def output_by(deadline: float, process: subprocess.Popen[str]) -> str | CallFailure:
     try:
         output, error = process.communicate(timeout=time_left(deadline))
     except subprocess.TimeoutExpired:
@@ -150,11 +152,13 @@ def output_by(deadline, process):
     return output if process.returncode == 0 else failure_from(error)
 
 
-def first_failure(outputs):
+def first_failure(outputs: Sequence[str | CallFailure]) -> CallFailure | None:
     return next((f for f in FAILURES_BY_PRIORITY if f in outputs), None)
 
 
-def review_state_from(outputs, source):
+def review_state_from(
+    outputs: Sequence[str | CallFailure], source: ThreadSource
+) -> ReviewState | None:
     match first_failure(outputs):
         case CallFailure.RETRYABLE:
             return None
@@ -164,17 +168,19 @@ def review_state_from(outputs, source):
             return source.parse(*outputs)
 
 
-def gh_installed():
+def gh_installed() -> bool:
     return shutil.which("gh") is not None
 
 
-def review_states(pull_requests, source):
+def review_states(
+    pull_requests: Iterable[PullRequest], source: ThreadSource
+) -> dict[PullRequest, ReviewState]:
     running = {
         pull_request: [started(command) for command in source.requests(pull_request)]
         for pull_request in pull_requests
     }
     deadline = time.monotonic() + GH_TIMEOUT_SECONDS
-    states = {}
+    states: dict[PullRequest, ReviewState] = {}
     for pull_request, processes in running.items():
         outputs = [output_by(deadline, process) for process in processes]
         state = review_state_from(outputs, source)

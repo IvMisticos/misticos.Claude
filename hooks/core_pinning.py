@@ -2,6 +2,7 @@ import contextlib
 import json
 import os
 import sys
+from collections.abc import Collection, Generator, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from typing import NamedTuple
@@ -16,11 +17,11 @@ class CorePlan:
     reserved: frozenset[int]
 
     @property
-    def others(self):
+    def others(self) -> frozenset[int]:
         return self.everything - self.reserved
 
 
-def hyperthreads(cpu):
+def hyperthreads(cpu: int) -> set[int]:
     listing = Path(f"/sys/devices/system/cpu/cpu{cpu}/topology/thread_siblings_list")
     try:
         text = listing.read_text().strip()
@@ -33,9 +34,10 @@ def hyperthreads(cpu):
     return siblings
 
 
-def plan_cores(count, alone):
+def plan_cores(count: int, alone: bool) -> CorePlan:
     everything = frozenset(os.sched_getaffinity(0))
-    benchmark, reserved = set(), set()
+    benchmark: set[int] = set()
+    reserved: set[int] = set()
     for cpu in sorted(everything, reverse=True):
         if len(benchmark) == count:
             break
@@ -57,12 +59,12 @@ class Thread(NamedTuple):
     started: int
 
 
-def started_at(task_path):
+def started_at(task_path: str) -> int:
     fields_after_name = (Path(task_path) / "stat").read_text().rsplit(")", 1)[1]
     return int(fields_after_name.split()[19])
 
 
-def entries_of(directory):
+def entries_of(directory: str) -> list[os.DirEntry[str]]:
     try:
         with os.scandir(directory) as entries:
             return list(entries)
@@ -70,7 +72,7 @@ def entries_of(directory):
         return []
 
 
-def live_threads():
+def live_threads() -> Iterator[Thread]:
     for process in entries_of("/proc"):
         if not process.name.isdigit():
             continue
@@ -82,15 +84,17 @@ def live_threads():
             yield Thread(int(task.name), started)
 
 
-def snapshot_masks():
-    masks = {}
+def snapshot_masks() -> dict[Thread, set[int]]:
+    masks: dict[Thread, set[int]] = {}
     for thread in live_threads():
         with contextlib.suppress(OSError):
             masks[thread] = os.sched_getaffinity(thread.id)
     return masks
 
 
-def threads_born_on_reserved_cores(plan, known_threads):
+def threads_born_on_reserved_cores(
+    plan: CorePlan, known_threads: Collection[Thread]
+) -> dict[Thread, set[int]]:
     return {
         thread: mask
         for thread, mask in snapshot_masks().items()
@@ -98,7 +102,9 @@ def threads_born_on_reserved_cores(plan, known_threads):
     }
 
 
-def move_off_reserved_cores(plan, masks_before):
+def move_off_reserved_cores(
+    plan: CorePlan, masks_before: dict[Thread, set[int]]
+) -> int:
     moved = 0
     for thread, mask in masks_before.items():
         if not mask & plan.reserved:
@@ -111,11 +117,13 @@ def move_off_reserved_cores(plan, masks_before):
     return moved
 
 
-def was_moved(plan, mask_before):
+def was_moved(plan: CorePlan, mask_before: set[int]) -> bool:
     return bool(plan.others and mask_before & plan.reserved)
 
 
-def restore_thread(plan, masks_before, thread):
+def restore_thread(
+    plan: CorePlan, masks_before: dict[Thread, set[int]], thread: Thread
+) -> None:
     if thread in masks_before:
         if was_moved(plan, masks_before[thread]):
             os.sched_setaffinity(thread.id, masks_before[thread])
@@ -123,13 +131,15 @@ def restore_thread(plan, masks_before, thread):
         os.sched_setaffinity(thread.id, plan.everything)
 
 
-def restore_threads(plan, masks_before):
+def restore_threads(plan: CorePlan, masks_before: dict[Thread, set[int]]) -> None:
     for thread in live_threads():
         with contextlib.suppress(OSError):
             restore_thread(plan, masks_before, thread)
 
 
-def save_pinning(state_path, plan, masks_before):
+def save_pinning(
+    state_path: Path, plan: CorePlan, masks_before: dict[Thread, set[int]]
+) -> None:
     state = {
         "everything": sorted(plan.everything),
         "benchmark": sorted(plan.benchmark),
@@ -144,7 +154,7 @@ def save_pinning(state_path, plan, masks_before):
     os.replace(staged, state_path)
 
 
-def load_pinning(state_path):
+def load_pinning(state_path: Path) -> tuple[CorePlan, dict[Thread, set[int]]] | None:
     try:
         state = json.loads(state_path.read_text())
         plan = CorePlan(
@@ -161,14 +171,16 @@ def load_pinning(state_path):
     return plan, masks_before
 
 
-def restore_abandoned_pinning(state_path):
+def restore_abandoned_pinning(state_path: Path) -> None:
     abandoned = load_pinning(state_path)
     if abandoned:
         restore_threads(*abandoned)
     state_path.unlink(missing_ok=True)
 
 
-def clear_reserved_cores(plan, masks_before, state_path):
+def clear_reserved_cores(
+    plan: CorePlan, masks_before: dict[Thread, set[int]], state_path: Path
+) -> None:
     move_off_reserved_cores(plan, masks_before)
     while late := threads_born_on_reserved_cores(plan, masks_before):
         masks_before |= late
@@ -178,7 +190,7 @@ def clear_reserved_cores(plan, masks_before, state_path):
 
 
 @contextlib.contextmanager
-def pinned(plan, state_path):
+def pinned(plan: CorePlan, state_path: Path) -> Generator[None]:
     masks_before = snapshot_masks()
     save_pinning(state_path, plan, masks_before)
     try:

@@ -1,4 +1,8 @@
 import re
+from collections.abc import Iterator
+from pathlib import Path
+
+from json_values import JsonValue
 
 TIER_LEVELS = (
     ("haiku",),
@@ -11,11 +15,11 @@ TIER_LEVELS = (
 DATE_DIGITS = 8
 
 
-def model_words(model):
+def model_words(model: JsonValue) -> set[str]:
     return set(re.split(r"[^a-z]+", str(model or "").lower()))
 
 
-def tier_rank(model):
+def tier_rank(model: JsonValue) -> int | None:
     words = model_words(model)
     return next(
         (rank for rank, level in enumerate(TIER_LEVELS) if words.intersection(level)),
@@ -23,20 +27,20 @@ def tier_rank(model):
     )
 
 
-def tier_name(model):
+def tier_name(model: JsonValue) -> str | None:
     words = model_words(model)
     return next(
         (word for level in TIER_LEVELS for word in level if word in words), None
     )
 
 
-def version(model):
+def version(model: JsonValue) -> tuple[int, ...]:
     slug = str(model or "").split("[", 1)[0]
     numbers = re.findall(r"\d+", slug)
     return tuple(int(number) for number in numbers if len(number) < DATE_DIGITS)
 
 
-def outranks(requested, caller):
+def outranks(requested: JsonValue, caller: JsonValue) -> bool:
     requested_rank = tier_rank(requested)
     caller_rank = tier_rank(caller)
     if requested_rank is None or caller_rank is None:
@@ -46,7 +50,7 @@ def outranks(requested, caller):
     return bool(version(requested)) and version(requested) > version(caller)
 
 
-def project_folders(cwd):
+def project_folders(cwd: Path) -> Iterator[Path]:
     for folder in (cwd, *cwd.parents):
         yield folder
         if (folder / ".git").exists():
