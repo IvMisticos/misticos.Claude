@@ -14,6 +14,7 @@ from pathlib import Path
 
 import tomli_w
 from json_values import read_json_file
+from settings_lock import holding_settings_lock
 
 HOME = Path.home()
 CLAUDE_DIR = HOME / ".claude"
@@ -171,7 +172,8 @@ def configure_codex():
 
 
 def main():
-    configure_claude_settings()
+    with holding_settings_lock():
+        configure_claude_settings()
     configure_codex()
 
 

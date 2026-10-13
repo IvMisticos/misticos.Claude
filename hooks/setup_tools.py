@@ -10,6 +10,7 @@ import sys
 from pathlib import Path
 
 from json_values import read_json_file
+from settings_lock import holding_settings_lock
 
 HOME = Path.home()
 INSTALLED_PLUGINS = HOME / ".claude" / "plugins" / "installed_plugins.json"
@@ -87,7 +88,8 @@ def install_cloud_tools():
 
 
 def main():
-    install_web_guidance_plugin()
+    with holding_settings_lock():
+        install_web_guidance_plugin()
     install_cloud_tools()
 
 
