@@ -72,6 +72,7 @@ def configure_claude_settings():
     wanted["env"] = {
         **settings.get("env", {}),
         "CLAUDE_CODE_TERMINAL_MCP_TOOLS": TURN_ENDING_TOOLS,
+        "CLAUDE_CODE_DISABLE_EXPLORE_PLAN_AGENTS": "1",
     }
     if wanted != settings:
         write_atomically(settings_path, json.dumps(wanted, indent=2) + "\n")
