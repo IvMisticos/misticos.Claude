@@ -94,6 +94,8 @@ def read_json(path):
 
 
 def write_written_denies(path, tools):
+    if read_json(path).get("deny") == tools:
+        return
     write_atomically(path, json.dumps({"deny": tools}, indent=2) + "\n")
 
 
