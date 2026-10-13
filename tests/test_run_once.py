@@ -13,7 +13,9 @@ exit "${UV_STATUS-0}"
 SCRIPTS = {
     "settings.py": "import os\nfrom shared import helper\n",
     "tools.py": "from shared import helper\n",
-    "listed.py": "import os, deep.inner as inner, shared\n",
+    "listed.py": "import os, aliased as alias, dotted.inner\n",
+    "aliased.py": "value = 3\n",
+    "dotted.py": "value = 4\n",
     "shared.py": "import json\nfrom deep import value\n",
     "deep.py": "value = 1\n",
     "unrelated.py": "value = 2\n",
@@ -162,7 +164,7 @@ def test_editing_the_script_or_a_local_import_reruns_it(run_hook, scripts, edite
     assert not ran_uv(run_hook())
 
 
-@pytest.mark.parametrize("edited", ["deep.py", "shared.py"])
+@pytest.mark.parametrize("edited", ["aliased.py", "dotted.py"])
 def test_every_module_in_an_import_list_counts(run_hook, scripts, edited):
     run_hook("listed.py")
     edit(scripts, edited)
