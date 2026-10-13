@@ -32,18 +32,49 @@ install_uv_once() {
   release_install_lock
 }
 
-hash_file() {
-  { sha256sum "$1" || shasum -a 256 "$1"; } 2>/dev/null | cut -d' ' -f1
+hash_stdin() {
+  { sha256sum || shasum -a 256; } 2>/dev/null
+}
+
+imported_modules() {
+  local keyword module rest
+  while read -r keyword module rest; do
+    case "$keyword" in
+      from | import) echo "${module%%[.,]*}" ;;
+    esac
+  done < "$hooks_dir/$1"
+}
+
+hash_script_and_local_imports() {
+  case " $hashed_sources " in
+    *" $1 "*) return ;;
+  esac
+  hashed_sources="$hashed_sources $1"
+  hash_stdin < "$hooks_dir/$1"
+  local module
+  for module in $(imported_modules "$1"); do
+    if [ -f "$hooks_dir/$module.py" ]; then
+      hash_script_and_local_imports "$module.py"
+    fi
+  done
+}
+
+completion_key_of() {
+  local hashed_sources=""
+  hash_script_and_local_imports "$1" | hash_stdin | cut -d' ' -f1
 }
 
 hooks_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
-remember_setup=false
-if [ "${1-}" = setup.py ] && [ -n "${CLAUDE_PLUGIN_DATA-}" ]; then
-  setup_marker="$CLAUDE_PLUGIN_DATA/setup-complete"
-  if setup_hash=$(hash_file "$hooks_dir/setup.py") && [ -n "$setup_hash" ]; then
-    remember_setup=true
-    [ "$(cat "$setup_marker" 2>/dev/null)" = "$setup_hash" ] && exit 0
+remember_completion=false
+if [ "${1-}" = --once ]; then
+  shift
+  if [ -n "${CLAUDE_PLUGIN_DATA-}" ] && [ -f "$hooks_dir/${1-}" ]; then
+    completion_marker="$CLAUDE_PLUGIN_DATA/${1%.py}-complete"
+    if completion_key=$(completion_key_of "$1") && [ -n "$completion_key" ]; then
+      remember_completion=true
+      [ "$(cat "$completion_marker" 2>/dev/null)" = "$completion_key" ] && exit 0
+    fi
   fi
 fi
 
@@ -53,10 +84,10 @@ if [ $# -gt 0 ] && [ -f "$hooks_dir/$1" ]; then
   set -- "$hooks_dir/$1" "${@:2}"
 fi
 
-if [ "$remember_setup" = false ]; then
+if [ "$remember_completion" = false ]; then
   exec uv run "$@"
 fi
 
 uv run "$@"
 mkdir -p "$CLAUDE_PLUGIN_DATA"
-echo "$setup_hash" > "$setup_marker"
+echo "$completion_key" > "$completion_marker"
