@@ -4,7 +4,7 @@ import sys
 from pathlib import Path
 
 import pytest
-from conftest import SHIMS, ShimRun, ShimRunner
+from conftest import SHIMS, FakeBin, ShimRun, ShimRunner
 
 PRINT_ENVIRONMENT = """#!/usr/bin/env bash
 echo "PATH=$PATH"
@@ -51,7 +51,9 @@ def test_tool_sees_the_callers_environment(run_cargo: ShimRun) -> None:
 
 
 @pytest.fixture
-def inside_project_with_broken_uv_config(tmp_path, monkeypatch):
+def inside_project_with_broken_uv_config(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     project = tmp_path / "project"
     project.mkdir()
     (project / "uv.toml").write_text("this is not toml [\n")
@@ -59,7 +61,9 @@ def inside_project_with_broken_uv_config(tmp_path, monkeypatch):
 
 
 @pytest.mark.usefixtures("inside_project_with_broken_uv_config")
-def test_missing_python_installs_outside_the_project(run_cargo, fake_bin):
+def test_missing_python_installs_outside_the_project(
+    run_cargo: ShimRun, fake_bin: FakeBin
+) -> None:
     bin_dir = fake_bin("uv", UV_WITHOUT_PYTHON)
 
     result = run_cargo("--version")
