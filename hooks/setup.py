@@ -18,6 +18,7 @@ HOME = Path.home()
 CLAUDE_DIR = HOME / ".claude"
 CODEX_DIR = HOME / ".codex"
 WRITTEN_DENIES_FILE = "misticos-written-denies.json"
+WRITTEN_SKILL_OVERRIDES_FILE = "misticos-written-skill-overrides.json"
 INSTALLED_PLUGINS = CLAUDE_DIR / "plugins" / "installed_plugins.json"
 WEB_GUIDANCE_PLUGIN = "modern-web-guidance@googlechrome"
 CLOUD_SESSION_MARK = "CCR_AGENT_PROXY_ENABLED"
@@ -32,6 +33,28 @@ REMOTE_SESSION_TOOLS = (
     "set_session_tags",
     "set_session_title",
     "list_environments",
+)
+USER_INVOCABLE_ONLY_SKILLS = (
+    "session-start-hook",
+    "dataviz",
+    "artifact-design",
+    "artifact-diagramming",
+    "artifact-capabilities",
+    "update-config",
+    "keybindings-help",
+    "code-review",
+    "simplify",
+    "fewer-permission-prompts",
+    "plugin-authoring",
+    "init",
+    "security-review",
+    "loop",
+    "run",
+    "modern-web-guidance:chrome-extensions",
+    "cowork-plugin-management:cowork-plugin-customizer",
+    "cowork-plugin-management:create-cowork-plugin",
+    "anthropic-skills:chrome-browser",
+    "anthropic-skills:computer-use",
 )
 DENIED_TOOLS = (
     *(
@@ -111,6 +134,23 @@ def configure_claude_settings():
     added_denies = [tool for tool in DENIED_TOOLS if tool not in kept_denies]
     permissions["deny"] = kept_denies + added_denies
     wanted["permissions"] = permissions
+    written_skills_path = CLAUDE_DIR / WRITTEN_SKILL_OVERRIDES_FILE
+    written_skills = read_json(written_skills_path).get("skills", [])
+    retired_skills = [
+        skill for skill in written_skills if skill not in USER_INVOCABLE_ONLY_SKILLS
+    ]
+    kept_overrides = {
+        skill: mode
+        for skill, mode in settings.get("skillOverrides", {}).items()
+        if skill not in retired_skills
+    }
+    added_skills = [
+        skill for skill in USER_INVOCABLE_ONLY_SKILLS if skill not in kept_overrides
+    ]
+    wanted["skillOverrides"] = {
+        **kept_overrides,
+        **dict.fromkeys(added_skills, "user-invocable-only"),
+    }
     wanted["env"] = {
         **settings.get("env", {}),
         "CLAUDE_CODE_TERMINAL_MCP_TOOLS": TURN_ENDING_TOOLS,
@@ -121,6 +161,15 @@ def configure_claude_settings():
     write_atomically(
         written_denies_path,
         json.dumps({"deny": recorded_denies}, indent=2) + "\n",
+    )
+    recorded_skills = [
+        skill
+        for skill in USER_INVOCABLE_ONLY_SKILLS
+        if skill in written_skills or skill in added_skills
+    ]
+    write_atomically(
+        written_skills_path,
+        json.dumps({"skills": recorded_skills}, indent=2) + "\n",
     )
     if wanted != settings:
         write_atomically(settings_path, json.dumps(wanted, indent=2) + "\n")
