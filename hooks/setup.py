@@ -4,7 +4,6 @@
 # dependencies = ["tomli-w"]
 # ///
 
-import fcntl
 import json
 import os
 import shutil
@@ -19,8 +18,6 @@ import tomli_w
 HOME = Path.home()
 CLAUDE_DIR = HOME / ".claude"
 CODEX_DIR = HOME / ".codex"
-SETTINGS_LOCK_FILE = "misticos-settings.lock"
-WRITTEN_DENIES_FILE = "misticos-written-denies.json"
 INSTALLED_PLUGINS = CLAUDE_DIR / "plugins" / "installed_plugins.json"
 WEB_GUIDANCE_PLUGIN = "modern-web-guidance@googlechrome"
 CLOUD_SESSION_MARK = "CCR_AGENT_PROXY_ENABLED"
@@ -103,20 +100,8 @@ def read_json(path):
     return json.loads(text) if text.strip() else {}
 
 
-def write_written_denies(path, tools):
-    if read_json(path).get("deny") == tools:
-        return
-    write_atomically(path, json.dumps({"deny": tools}, indent=2) + "\n")
-
-
 def configure_claude_settings():
     CLAUDE_DIR.mkdir(parents=True, exist_ok=True)
-    with open(CLAUDE_DIR / SETTINGS_LOCK_FILE, "w") as lock_file:
-        fcntl.flock(lock_file, fcntl.LOCK_EX)
-        write_claude_settings()
-
-
-def write_claude_settings():
     settings_path = CLAUDE_DIR / "settings.json"
     settings = read_json(settings_path)
     wanted = dict(settings)
@@ -124,29 +109,15 @@ def write_claude_settings():
     wanted["autoMemoryEnabled"] = False
     wanted["autoCompactWindow"] = AUTO_COMPACT_WINDOW_TOKENS
     permissions = dict(settings.get("permissions", {}))
-    written_denies_path = CLAUDE_DIR / WRITTEN_DENIES_FILE
-    written_denies = read_json(written_denies_path).get("deny", [])
-    retired_denies = [tool for tool in written_denies if tool not in DENIED_TOOLS]
-    kept_denies = [
-        tool for tool in permissions.get("deny", []) if tool not in retired_denies
-    ]
-    added_denies = [tool for tool in DENIED_TOOLS if tool not in kept_denies]
-    permissions["deny"] = kept_denies + added_denies
+    denied = permissions.get("deny", [])
+    permissions["deny"] = denied + [tool for tool in DENIED_TOOLS if tool not in denied]
     wanted["permissions"] = permissions
     wanted["env"] = {
         **settings.get("env", {}),
         "CLAUDE_CODE_TERMINAL_MCP_TOOLS": TURN_ENDING_TOOLS,
     }
-    write_written_denies(
-        written_denies_path,
-        [*written_denies, *(tool for tool in added_denies if tool not in written_denies)],
-    )
     if wanted != settings:
         write_atomically(settings_path, json.dumps(wanted, indent=2) + "\n")
-    write_written_denies(
-        written_denies_path,
-        [tool for tool in DENIED_TOOLS if tool in written_denies or tool in added_denies],
-    )
 
 
 def install_web_guidance_plugin():
