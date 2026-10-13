@@ -8,7 +8,7 @@
 import os
 
 from cleanup_policy import clean_up_low_disks
-from disks import BYTES_PER_MIB, disks
+from disks import BYTES_PER_MIB, Disk, disks
 from harnesses import harness_parser
 from hook_io import (
     cwd_of,
@@ -20,7 +20,7 @@ from hook_io import (
 )
 from json_values import JsonObject
 
-LOW_SPACE_BYTES = 1 << 30
+LOW_SPACE_BYTES = 2 << 30
 LOW_SPACE_SHARE = 0.1
 TEMP_DIR_VARIABLES = ("TMPDIR", "TEMP", "TMP")
 RUNNING_LOW = "Only {free} MiB of disk is free at {path}."
@@ -39,11 +39,15 @@ def watched_paths(payload: JsonObject) -> tuple[str, ...]:
     return (cwd, os.path.expanduser("~"), *temp_dirs, "/tmp", *scratchpad)
 
 
+def needs_warning(disk: Disk) -> bool:
+    return disk.has_free_below(LOW_SPACE_BYTES, LOW_SPACE_SHARE)
+
+
 def disk_warning(payload: JsonObject) -> str | None:
     low_space = [
         RUNNING_LOW.format(free=disk.free // BYTES_PER_MIB, path=disk.path)
         for disk in disks(watched_paths(payload))
-        if disk.has_free_below(LOW_SPACE_BYTES, LOW_SPACE_SHARE)
+        if needs_warning(disk)
     ]
     if low_space:
         return " ".join([*low_space, FREE_SPACE_NOW, HOW_TO_CLEAN_UP])
