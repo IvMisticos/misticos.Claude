@@ -85,10 +85,14 @@ def run_pipeline(script):
 def write_atomically(path, text):
     mode = path.stat().st_mode & 0o777 if path.exists() else 0o644
     descriptor, staged = tempfile.mkstemp(dir=path.parent, prefix=path.name + ".")
-    with os.fdopen(descriptor, "w") as staged_file:
-        staged_file.write(text)
-    os.chmod(staged, mode)
-    os.replace(staged, path)
+    try:
+        with os.fdopen(descriptor, "w") as staged_file:
+            staged_file.write(text)
+        os.chmod(staged, mode)
+        os.replace(staged, path)
+    except BaseException:
+        Path(staged).unlink(missing_ok=True)
+        raise
 
 
 def read_json(path):
