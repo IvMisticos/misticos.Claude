@@ -85,7 +85,9 @@ def test_broken_settings_are_left_alone(configure_settings, home):
     settings_path = home / ".claude" / "settings.json"
     settings_path.parent.mkdir(parents=True)
     settings_path.write_text("{broken")
-    assert configure_settings(check=False).returncode != 0
+    result = configure_settings(check=False)
+    assert result.returncode != 0
+    assert b"JSONDecodeError" in result.stderr
     assert settings_path.read_text() == "{broken"
 
 

@@ -37,7 +37,7 @@ hash_stdin() {
 }
 
 hooks_key() {
-  local source
+  local source LC_ALL=C
   for source in "$hooks_dir"/*.py; do
     hash_stdin < "$source"
   done | hash_stdin | cut -d' ' -f1
