@@ -13,6 +13,7 @@ from json_values import read_json_file
 
 HOOKS_DIR = Path(__file__).resolve().parent
 HOME = Path.home()
+CLAUDE_SETTINGS = HOME / ".claude" / "settings.json"
 INSTALLED_PLUGINS = HOME / ".claude" / "plugins" / "installed_plugins.json"
 WEB_GUIDANCE_PLUGIN = "modern-web-guidance@googlechrome"
 CLOUD_SESSION_MARK = "CCR_AGENT_PROXY_ENABLED"
@@ -42,7 +43,11 @@ def run_pipeline(script):
 
 def web_guidance_plugin_wanted():
     installed = read_json_file(INSTALLED_PLUGINS).get("plugins", {})
-    return WEB_GUIDANCE_PLUGIN not in installed
+    enabled = read_json_file(CLAUDE_SETTINGS).get("enabledPlugins", {})
+    return (
+        WEB_GUIDANCE_PLUGIN not in installed
+        and enabled.get(WEB_GUIDANCE_PLUGIN) is not False
+    )
 
 
 def install_web_guidance_plugin():

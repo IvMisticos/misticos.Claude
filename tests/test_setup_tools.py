@@ -61,3 +61,9 @@ def test_installed_plugin_is_left_alone(set_up_tools, home):
     installed = home / ".claude" / "plugins" / "installed_plugins.json"
     write_json(installed, {"plugins": {WEB_GUIDANCE_PLUGIN: []}})
     assert set_up_tools() == []
+
+
+def test_plugin_the_user_disabled_is_not_installed(set_up_tools, home):
+    settings = home / ".claude" / "settings.json"
+    write_json(settings, {"enabledPlugins": {WEB_GUIDANCE_PLUGIN: False}})
+    assert set_up_tools() == []
