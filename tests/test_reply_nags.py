@@ -134,6 +134,19 @@ def test_nags_after_2_messages_then_after_6_more(home, transcript):
     assert nagged_at == [2, 8, 14]
 
 
+def test_wakes_that_submit_a_prompt_keep_the_cadence(home, transcript):
+    transcript.human()
+    transcript.fire(home, "UserPromptSubmit")
+    nagged_at = []
+    for count in range(1, 15):
+        transcript.reply(SHORT)
+        nags = [transcript.fire(home)]
+        transcript.wake()
+        nags += [transcript.fire(home, "UserPromptSubmit"), transcript.fire(home)]
+        nagged_at += [count for nag in nags if nag]
+    assert nagged_at == [2, 8, 14]
+
+
 def test_counts_messages_sent_before_the_user_wrote_again(home, transcript):
     transcript.human()
     transcript.reply(SHORT)
@@ -179,6 +192,7 @@ def test_counts_replies_that_left_the_transcript_tail(home, transcript):
 def test_a_prompt_missing_from_the_tail_still_starts_a_new_count(home, transcript):
     transcript.human()
     transcript.reply(SHORT)
+    transcript.human()
     transcript.fire(home, "UserPromptSubmit")
     transcript.path.write_text("")
     transcript.reply(SHORT)
