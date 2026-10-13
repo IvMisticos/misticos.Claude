@@ -1,3 +1,4 @@
+import json
 import sys
 from pathlib import Path
 
@@ -168,3 +169,20 @@ def test_cursor_shape(home):
 def test_session_start_with_a_non_text_session_id_still_sends_the_rules(home):
     payload = {"hook_event_name": "SessionStart", "session_id": 1}
     assert context(reminder(home, 1, payload))
+
+
+@pytest.mark.parametrize("config", ["claude.json", "codex.json"])
+def test_prompt_submit_does_not_run_the_reminder(config):
+    hooks = json.loads((ROOT / "hooks" / config).read_text())["hooks"]
+    commands = [
+        hook["command"]
+        for group in hooks["UserPromptSubmit"]
+        for hook in group["hooks"]
+    ]
+    assert commands
+    assert not [command for command in commands if "reminder.py" in command]
+
+
+def test_prompt_without_a_token_count_gets_nothing(home, tmp_path):
+    missing = tmp_path / "missing.jsonl"
+    assert all_parts(home, prompt(missing, "p1")) == [None] * PARTS

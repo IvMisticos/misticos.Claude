@@ -119,13 +119,6 @@ def payload_tokens(payload):
     return len(tool_text) // CHARS_PER_TOKEN_ESTIMATE
 
 
-def transcript_fits_in_tail(transcript_path):
-    try:
-        return os.path.getsize(transcript_path) <= TRANSCRIPT_TAIL_BYTES
-    except OSError:
-        return True
-
-
 def context_tokens(transcript_path, source):
     match source:
         case ContextSource.SIZE:

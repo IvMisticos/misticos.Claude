@@ -28,7 +28,7 @@ from rules_copy import (
     pointer_reminder,
     rules_at,
 )
-from transcript import context_tokens, payload_tokens, transcript_fits_in_tail
+from transcript import context_tokens, payload_tokens
 
 from agents import ALL_SECTIONS, rule_sections_for
 
@@ -61,13 +61,7 @@ def growth_reminder(rules, payload, options):
         return None
     tokens = context_tokens(transcript_path, options.harness.context_from)
     if tokens is None:
-        if options.part != 1 or event_name_of(payload).lower() != "userpromptsubmit":
-            return None
-        return (
-            pointer_reminder(rules)
-            if transcript_fits_in_tail(transcript_path)
-            else None
-        )
+        return None
     action = claim_action(session_id, fire, can_copy, tokens)
     return message_for_part(action, options.part, messages, rules)
 
