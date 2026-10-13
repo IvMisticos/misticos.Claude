@@ -44,6 +44,8 @@ DENIED_TOOLS = (
     "mcp__github__run_secret_scanning",
 )
 
+TURN_ENDING_TOOLS = "ReadNotifications,SendMessage"
+
 
 TOOLCHAIN_BIN_DIRS = (
     HOME / ".local" / "bin",
@@ -96,6 +98,10 @@ def configure_claude_settings():
         tool for tool in DENIED_TOOLS if tool not in existing_denies
     ]
     wanted["permissions"] = permissions
+    wanted["env"] = {
+        **settings.get("env", {}),
+        "CLAUDE_CODE_TERMINAL_MCP_TOOLS": TURN_ENDING_TOOLS,
+    }
     if wanted != settings:
         write_atomically(settings_path, json.dumps(wanted, indent=2) + "\n")
 
