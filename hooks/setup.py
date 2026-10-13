@@ -116,6 +116,10 @@ def read_json(path):
     return json.loads(text) if text.strip() else {}
 
 
+def write_written_denies(path, tools):
+    write_atomically(path, json.dumps({"deny": tools}, indent=2) + "\n")
+
+
 def configure_claude_settings():
     CLAUDE_DIR.mkdir(parents=True, exist_ok=True)
     settings_path = CLAUDE_DIR / "settings.json"
@@ -155,12 +159,9 @@ def configure_claude_settings():
         **settings.get("env", {}),
         "CLAUDE_CODE_TERMINAL_MCP_TOOLS": TURN_ENDING_TOOLS,
     }
-    recorded_denies = [
-        tool for tool in DENIED_TOOLS if tool in written_denies or tool in added_denies
-    ]
-    write_atomically(
+    write_written_denies(
         written_denies_path,
-        json.dumps({"deny": recorded_denies}, indent=2) + "\n",
+        [*written_denies, *(tool for tool in added_denies if tool not in written_denies)],
     )
     recorded_skills = [
         skill
@@ -173,6 +174,10 @@ def configure_claude_settings():
     )
     if wanted != settings:
         write_atomically(settings_path, json.dumps(wanted, indent=2) + "\n")
+    write_written_denies(
+        written_denies_path,
+        [tool for tool in DENIED_TOOLS if tool in written_denies or tool in added_denies],
+    )
 
 
 def install_web_guidance_plugin():
