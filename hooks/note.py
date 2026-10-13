@@ -4,8 +4,15 @@
 # ///
 
 import sys
+from typing import NamedTuple
 
-from hook_io import event_name_of, read_payload, run_hook, write_context
+from hook_io import event_name_of, read_payload, run_hook, session_id_of, write_context
+from plugin_paths import DATA_ROOT
+from session_state import locked_session_file, read_record, write_record
+
+CALL_COUNT_DIR = DATA_ROOT / "note-calls"
+THROTTLED_NOTES = {"notifications"}
+NOTE_EVERY_CALLS = 5
 
 NOTES = {
     "agent-roles": (
@@ -26,11 +33,25 @@ NOTES = {
 }
 
 
+class CallCount(NamedTuple):
+    calls: int = 0
+
+
+def is_due(name, session_id):
+    if name not in THROTTLED_NOTES or session_id is None:
+        return True
+    with locked_session_file(CALL_COUNT_DIR, f"{session_id}-{name}") as state_file:
+        previous_calls = read_record(state_file, CallCount()).calls
+        write_record(state_file, CallCount(previous_calls + 1))
+    return previous_calls % NOTE_EVERY_CALLS == 0
+
+
 def main():
-    note = NOTES[sys.argv[1]]
-    event = event_name_of(read_payload())
-    if event:
-        write_context(event, note)
+    name = sys.argv[1]
+    payload = read_payload()
+    event = event_name_of(payload)
+    if event and is_due(name, session_id_of(payload)):
+        write_context(event, NOTES[name])
 
 
 if __name__ == "__main__":
