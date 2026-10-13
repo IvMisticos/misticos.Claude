@@ -123,6 +123,8 @@ def write_written_denies(path, tools):
 
 
 def write_written_skills(path, skills):
+    if read_json(path).get("skills") == skills:
+        return
     write_atomically(path, json.dumps({"skills": skills}, indent=2) + "\n")
 
 
