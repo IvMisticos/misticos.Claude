@@ -32,9 +32,13 @@ install_uv_once() {
   release_install_lock
 }
 
+hooks_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+if [ "${1-}" = setup.py ] && [ -e "$hooks_dir/../.setup-complete" ]; then
+  exit 0
+fi
+
 command -v uv >/dev/null || install_uv_once
 
-hooks_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 if [ $# -gt 0 ] && [ -f "$hooks_dir/$1" ]; then
   set -- "$hooks_dir/$1" "${@:2}"
 fi
