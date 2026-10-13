@@ -41,7 +41,7 @@ class CursorFollowup(TypedDict):
     followup_message: str
 
 
-PreToolUseDecider = Callable[[dict], PreToolUseDecision | None]
+type PreToolUseDecider = Callable[[dict], PreToolUseDecision | None]
 
 
 def read_payload():
