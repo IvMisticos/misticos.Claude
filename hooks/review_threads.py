@@ -49,7 +49,7 @@ FAILURES_BY_PRIORITY = (CallFailure.RETRYABLE, CallFailure.NOT_FOUND)
 
 class ThreadSource(NamedTuple):
     requests: Callable[[PullRequest], list[list[str]]]
-    parse: Callable[..., ReviewState | None]
+    parse: Callable[[Sequence[str]], ReviewState | None]
 
 
 def graphql_requests(pull_request: PullRequest) -> list[list[str]]:
@@ -70,7 +70,8 @@ def graphql_requests(pull_request: PullRequest) -> list[list[str]]:
     ]
 
 
-def graphql_review_state(output: str) -> ReviewState | None:
+def graphql_review_state(outputs: Sequence[str]) -> ReviewState | None:
+    (output,) = outputs
     try:
         pull_request = json.loads(output)["data"]["repository"]["pullRequest"]
         if pull_request["state"] != "OPEN":
@@ -95,7 +96,8 @@ def remote_requests(pull_request: PullRequest) -> list[list[str]]:
     ]
 
 
-def remote_review_state(state_output: str, threads_output: str) -> ReviewState | None:
+def remote_review_state(outputs: Sequence[str]) -> ReviewState | None:
+    state_output, threads_output = outputs
     state = state_output.strip()
     if state == "closed":
         return NOT_OPEN
@@ -152,20 +154,22 @@ def output_by(deadline: float, process: subprocess.Popen[str]) -> str | CallFail
     return output if process.returncode == 0 else failure_from(error)
 
 
-def first_failure(outputs: Sequence[str | CallFailure]) -> CallFailure | None:
-    return next((f for f in FAILURES_BY_PRIORITY if f in outputs), None)
+def first_failure(failures: Sequence[CallFailure]) -> CallFailure | None:
+    return next((f for f in FAILURES_BY_PRIORITY if f in failures), None)
 
 
 def review_state_from(
     outputs: Sequence[str | CallFailure], source: ThreadSource
 ) -> ReviewState | None:
-    match first_failure(outputs):
+    texts = [output for output in outputs if isinstance(output, str)]
+    failures = [output for output in outputs if isinstance(output, CallFailure)]
+    match first_failure(failures):
         case CallFailure.RETRYABLE:
             return None
         case CallFailure.NOT_FOUND:
             return NOT_OPEN
         case None:
-            return source.parse(*outputs)
+            return source.parse(texts)
 
 
 def gh_installed() -> bool:
