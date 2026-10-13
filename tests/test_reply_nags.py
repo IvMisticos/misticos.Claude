@@ -66,6 +66,11 @@ class Transcript:
         origin = {"kind": "task-notification"}
         self.add({"type": "user", "origin": origin, "message": {"content": "<wake/>"}})
 
+    def queued_wake(self):
+        origin = {"kind": "task-notification"}
+        attachment = {"type": "queued_command", "origin": origin, "prompt": "<wake/>"}
+        self.add({"type": "attachment", "attachment": attachment})
+
     def reply(self, text, message_id=None):
         message_id = message_id or f"m{self.count}"
         content = [{"type": "text", "text": text}]
@@ -134,14 +139,15 @@ def test_nags_after_2_messages_then_after_6_more(home, transcript):
     assert nagged_at == [2, 8, 14]
 
 
-def test_wakes_that_submit_a_prompt_keep_the_cadence(home, transcript):
+@pytest.mark.parametrize("wake", [Transcript.wake, Transcript.queued_wake])
+def test_wakes_that_submit_a_prompt_keep_the_cadence(home, transcript, wake):
     transcript.human()
     transcript.fire(home, "UserPromptSubmit")
     nagged_at = []
     for count in range(1, 15):
         transcript.reply(SHORT)
         nags = [transcript.fire(home)]
-        transcript.wake()
+        wake(transcript)
         nags += [transcript.fire(home, "UserPromptSubmit"), transcript.fire(home)]
         nagged_at += [count for nag in nags if nag]
     assert nagged_at == [2, 8, 14]
@@ -192,9 +198,18 @@ def test_counts_replies_that_left_the_transcript_tail(home, transcript):
 def test_a_prompt_missing_from_the_tail_still_starts_a_new_count(home, transcript):
     transcript.human()
     transcript.reply(SHORT)
-    transcript.human()
     transcript.fire(home, "UserPromptSubmit")
     transcript.path.write_text("")
+    transcript.reply(SHORT)
+    assert transcript.fire(home) is None
+
+
+def test_a_prompt_larger_than_the_tail_starts_a_new_count(home, transcript):
+    transcript.human()
+    transcript.reply(SHORT)
+    transcript.fire(home)
+    transcript.human("x" * (2 << 20))
+    transcript.fire(home, "UserPromptSubmit")
     transcript.reply(SHORT)
     assert transcript.fire(home) is None
 

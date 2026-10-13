@@ -3,6 +3,7 @@
 # requires-python = ">=3.11"
 # ///
 
+import uuid
 from typing import NamedTuple
 
 from harnesses import ReplyHistory, harness_parser
@@ -22,6 +23,7 @@ from reply_history import (
     Reply,
     Window,
     parsed_event_log,
+    submitted_by_wake,
     transcript_history,
     window_under_review,
     without_trailing_prompts,
@@ -138,14 +140,23 @@ def due_nags(history, memory):
 def nags_from_transcript(event, payload, state):
     if event not in NAG_EVENTS:
         return [], state
-    history = transcript_history(payload.get("transcript_path"))
+    transcript_path = payload.get("transcript_path")
+    history = transcript_history(transcript_path)
     if event not in PROMPT_EVENTS:
         nags, memory = due_nags(history, state.memory)
         return nags.texts(), state._replace(memory=memory)
     nags, memory = due_nags(without_trailing_prompts(history), state.memory)
-    if history and isinstance(history[-1], Prompt):
-        memory = memory._replace(window=history[-1].id, window_replies=0, nagged_at=0)
+    if not submitted_by_wake(transcript_path):
+        memory = memory._replace(
+            window=submitted_prompt_id(history), window_replies=0, nagged_at=0
+        )
     return nags.texts(), state._replace(memory=memory)
+
+
+def submitted_prompt_id(history):
+    if history and isinstance(history[-1], Prompt):
+        return history[-1].id
+    return f"submitted-{uuid.uuid4()}"
 
 
 def nags_from_events(event, payload, state):
