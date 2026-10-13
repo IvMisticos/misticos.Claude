@@ -19,11 +19,9 @@ from json_values import dict_or_empty
 from plugin_paths import DATA_ROOT
 from reply_history import (
     EventLog,
-    Prompt,
     Reply,
     Window,
     parsed_event_log,
-    submitted_by_wake,
     transcript_history,
     window_under_review,
     without_trailing_prompts,
@@ -54,6 +52,11 @@ REPLY_TEXT_FIELD_BY_EVENT = {
     "afteragentresponse": "text",
 }
 PROMPT_EVENTS = frozenset({"userpromptsubmit", "beforesubmitprompt"})
+WAKE_PROMPT_STARTS = (
+    "<task-notification>",
+    "<agent-message",
+    "Another Claude session sent a message",
+)
 NAG_EVENTS = frozenset({"userpromptsubmit", "posttoolbatch", "posttooluse"})
 
 
@@ -140,23 +143,20 @@ def due_nags(history, memory):
 def nags_from_transcript(event, payload, state):
     if event not in NAG_EVENTS:
         return [], state
-    transcript_path = payload.get("transcript_path")
-    history = transcript_history(transcript_path)
+    history = transcript_history(payload.get("transcript_path"))
     if event not in PROMPT_EVENTS:
         nags, memory = due_nags(history, state.memory)
         return nags.texts(), state._replace(memory=memory)
     nags, memory = due_nags(without_trailing_prompts(history), state.memory)
-    if not submitted_by_wake(transcript_path):
+    if not is_wake_prompt(payload.get("prompt")):
         memory = memory._replace(
-            window=submitted_prompt_id(history), window_replies=0, nagged_at=0
+            window=f"submitted-{uuid.uuid4()}", window_replies=0, nagged_at=0
         )
     return nags.texts(), state._replace(memory=memory)
 
 
-def submitted_prompt_id(history):
-    if history and isinstance(history[-1], Prompt):
-        return history[-1].id
-    return f"submitted-{uuid.uuid4()}"
+def is_wake_prompt(prompt):
+    return isinstance(prompt, str) and prompt.lstrip().startswith(WAKE_PROMPT_STARTS)
 
 
 def nags_from_events(event, payload, state):

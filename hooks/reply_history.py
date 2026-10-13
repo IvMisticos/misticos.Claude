@@ -86,28 +86,6 @@ def is_human_prompt(entry):
     return is_queued_human_message(entry)
 
 
-def submitted_message(entry):
-    if entry.get("isSidechain"):
-        return None
-    if entry.get("type") == "user":
-        return entry
-    attachment = dict_or_empty(entry.get("attachment"))
-    if attachment.get("type") == "queued_command":
-        return attachment
-    return None
-
-
-def submitted_by_wake(transcript_path):
-    if not transcript_path:
-        return False
-    messages = [
-        message
-        for message in map(submitted_message, tail_entries(transcript_path))
-        if message is not None
-    ]
-    return bool(messages) and is_wake(messages[-1])
-
-
 def reply_text(entry):
     if entry.get("type") != "assistant" or not is_conversation_turn(entry):
         return ""
