@@ -36,6 +36,7 @@ REMOTE_SESSION_TOOLS = (
     "get_event",
     "watch_url",
     "unwatch_url",
+    "read_documentation",
 )
 DISABLED_PLUGINS = ("cowork-plugin-management@synced",)
 USER_INVOCABLE_ONLY = "user-invocable-only"
@@ -81,13 +82,15 @@ DENIED_TOOLS = (
     "ExitPlanMode",
     "NotebookEdit",
     "ArtifactData",
-    "mcp__github__issue_read",
     "mcp__github__issue_write",
     "mcp__github__list_issues",
-    "mcp__github__search_issues",
     "mcp__github__list_issue_fields",
     "mcp__github__list_issue_types",
     "mcp__github__sub_issue_write",
+    "CronCreate",
+    "CronDelete",
+    "CronList",
+    "mcp__Claude_Docs__guide",
 )
 
 TURN_ENDING_TOOLS = "ReadNotifications,SendMessage"
