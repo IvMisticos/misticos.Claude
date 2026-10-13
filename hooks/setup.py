@@ -21,6 +21,28 @@ INSTALLED_PLUGINS = CLAUDE_DIR / "plugins" / "installed_plugins.json"
 WEB_GUIDANCE_PLUGIN = "modern-web-guidance@googlechrome"
 CLOUD_SESSION_MARK = "CCR_AGENT_PROXY_ENABLED"
 AUTO_COMPACT_WINDOW_TOKENS = 400_000
+DENIED_TOOLS = (
+    "mcp__claude-code-remote__archive_session",
+    "mcp__claude-code-remote__unarchive_session",
+    "mcp__claude-code-remote__create_session",
+    "mcp__claude-code-remote__interrupt_session",
+    "mcp__claude-code-remote__list_sessions",
+    "mcp__claude-code-remote__set_session_tags",
+    "mcp__claude-code-remote__set_session_title",
+    "mcp__claude-code-remote__list_environments",
+    "ScheduleWakeup",
+    "ShowOnboardingRolePicker",
+    "SuggestSkills",
+    "DesignSync",
+    "SearchPlugins",
+    "SuggestPluginInstall",
+    "SuggestConnectors",
+    "SearchMcpRegistry",
+    "mcp__github__create_repository",
+    "mcp__github__fork_repository",
+    "mcp__github__request_copilot_review",
+    "mcp__github__run_secret_scanning",
+)
 
 
 TOOLCHAIN_BIN_DIRS = (
@@ -68,6 +90,12 @@ def configure_claude_settings():
     wanted["attribution"] = {"commit": "", "pr": "", "sessionUrl": False}
     wanted["autoMemoryEnabled"] = False
     wanted["autoCompactWindow"] = AUTO_COMPACT_WINDOW_TOKENS
+    permissions = dict(settings.get("permissions", {}))
+    existing_denies = permissions.get("deny", [])
+    permissions["deny"] = existing_denies + [
+        tool for tool in DENIED_TOOLS if tool not in existing_denies
+    ]
+    wanted["permissions"] = permissions
     if wanted != settings:
         write_atomically(settings_path, json.dumps(wanted, indent=2) + "\n")
 
