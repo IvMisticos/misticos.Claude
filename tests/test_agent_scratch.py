@@ -5,22 +5,32 @@ import time
 from pathlib import Path
 
 import pytest
+from _pytest.mark import ParameterSet
 from conftest import (
+    FakeBin,
     ReviewThread,
     graphql_review_threads,
+    json_at,
     run_json_hook,
+    text_at,
     write_json_lines,
 )
+from json_values import JsonObject, JsonValue
 
 AGENT_SCRATCH = Path(__file__).resolve().parent.parent / "hooks" / "agent_scratch.py"
-SHELL_TASK = {"id": "b1", "type": "shell", "status": "running", "command": "make"}
-SUBAGENT_TASK = {"id": "a2", "type": "subagent", "status": "running"}
-WORKFLOW_TASK = {"id": "w1", "type": "workflow", "status": "running"}
-OWN_TASK = {"id": "a1", "type": "subagent", "status": "running"}
+SHELL_TASK: JsonObject = {
+    "id": "b1",
+    "type": "shell",
+    "status": "running",
+    "command": "make",
+}
+SUBAGENT_TASK: JsonObject = {"id": "a2", "type": "subagent", "status": "running"}
+WORKFLOW_TASK: JsonObject = {"id": "w1", "type": "workflow", "status": "running"}
+OWN_TASK: JsonObject = {"id": "a1", "type": "subagent", "status": "running"}
 
 
 @pytest.fixture
-def scratchpad(tmp_path):
+def scratchpad(tmp_path: Path) -> Path:
     scratchpad = tmp_path / "scratchpad"
     (scratchpad / "agents" / "a1" / "repo" / ".git").mkdir(parents=True)
     (scratchpad / "agents" / "a2").mkdir()
@@ -28,34 +38,40 @@ def scratchpad(tmp_path):
     return scratchpad
 
 
-def run_hook(event, cwd=None, **fields):
-    payload = {"hook_event_name": event, **fields}
+def run_hook(
+    event: JsonValue, cwd: Path | None = None, /, **fields: JsonValue
+) -> JsonValue:
+    payload: JsonObject = {"hook_event_name": event, **fields}
     return run_json_hook(AGENT_SCRATCH, payload, cwd=cwd)
 
 
-def contents(folder):
+def contents(folder: Path) -> list[str]:
     return sorted(str(path.relative_to(folder)) for path in folder.iterdir())
 
 
-def test_start_creates_the_folder_and_names_it(scratchpad):
+def test_start_creates_the_folder_and_names_it(scratchpad: Path) -> None:
     output = run_hook("SubagentStart", scratchpad_dir=str(scratchpad), agent_id="a3")
-    context = output["hookSpecificOutput"]
-    assert context["hookEventName"] == "SubagentStart"
-    assert str(scratchpad / "agents" / "a3") in context["additionalContext"]
+    assert text_at(output, "hookSpecificOutput", "hookEventName") == "SubagentStart"
+    context = text_at(output, "hookSpecificOutput", "additionalContext")
+    assert str(scratchpad / "agents" / "a3") in context
     assert (scratchpad / "agents" / "a3").is_dir()
 
 
-def agent_stop(tasks, left, case_id):
-    fields = {"agent_id": "a1", "background_tasks": tasks}
+def agent_stop(
+    tasks: list[JsonValue] | None, left: list[str], case_id: str
+) -> ParameterSet:
+    fields: JsonObject = {"agent_id": "a1", "background_tasks": tasks}
     return pytest.param("SubagentStop", fields, left, id=f"agent-{case_id}")
 
 
-def session_stop(tasks, left, case_id):
-    fields = {"background_tasks": tasks}
+def session_stop(
+    tasks: list[JsonValue] | None, left: list[str], case_id: str
+) -> ParameterSet:
+    fields: JsonObject = {"background_tasks": tasks}
     return pytest.param("Stop", fields, left, id=f"session-{case_id}")
 
 
-def folders_and_agent_folders(scratchpad):
+def folders_and_agent_folders(scratchpad: Path) -> list[str]:
     paths = [*scratchpad.iterdir(), *scratchpad.glob("agents/*")]
     return sorted(str(path.relative_to(scratchpad)) for path in paths)
 
@@ -81,13 +97,13 @@ WITHOUT_AGENTS = ["notes.md"]
     ],
 )
 def test_stop_deletes_agent_folders_no_running_work_uses(
-    scratchpad, event, fields, left
-):
+    scratchpad: Path, event: JsonValue, fields: JsonObject, left: list[str]
+) -> None:
     run_hook(event, scratchpad_dir=str(scratchpad), **fields)
     assert folders_and_agent_folders(scratchpad) == left
 
 
-def is_emptied_soon(folder):
+def is_emptied_soon(folder: Path) -> bool:
     deadline = time.monotonic() + 10
     while contents(folder) != ["notes.md"] and time.monotonic() < deadline:
         time.sleep(0.01)
@@ -95,7 +111,7 @@ def is_emptied_soon(folder):
 
 
 @pytest.mark.parametrize("reason", ["prompt_input_exit", "logout", "other"])
-def test_session_end_deletes_every_agent_folder(scratchpad, reason):
+def test_session_end_deletes_every_agent_folder(scratchpad: Path, reason: str) -> None:
     run_hook("SessionEnd", scratchpad_dir=str(scratchpad), reason=reason)
     assert "agents" not in contents(scratchpad)
     assert is_emptied_soon(scratchpad)
@@ -103,15 +119,17 @@ def test_session_end_deletes_every_agent_folder(scratchpad, reason):
 
 @pytest.mark.parametrize("reason", ["clear", "resume"])
 def test_session_end_keeps_agent_folders_that_background_tasks_outlive(
-    scratchpad, reason
-):
+    scratchpad: Path, reason: str
+) -> None:
     run_hook("SessionEnd", scratchpad_dir=str(scratchpad), reason=reason)
     assert contents(scratchpad) == ["agents", "notes.md"]
     assert contents(scratchpad / "agents") == ["a1", "a2"]
 
 
 @pytest.mark.parametrize("agent_id", ["", "..", "../a1", "a/b", None])
-def test_ignores_agent_ids_that_are_not_a_folder_name(scratchpad, agent_id):
+def test_ignores_agent_ids_that_are_not_a_folder_name(
+    scratchpad: Path, agent_id: str | None
+) -> None:
     for event in ("SubagentStart", "SubagentStop"):
         output = run_hook(
             event,
@@ -125,16 +143,20 @@ def test_ignores_agent_ids_that_are_not_a_folder_name(scratchpad, agent_id):
 
 
 @pytest.mark.parametrize("scratchpad_dir", [None, "relative/scratchpad"])
-def test_ignores_a_missing_or_relative_scratchpad(tmp_path, scratchpad_dir):
+def test_ignores_a_missing_or_relative_scratchpad(
+    tmp_path: Path, scratchpad_dir: str | None
+) -> None:
     output = run_hook(
-        "SubagentStart", cwd=tmp_path, scratchpad_dir=scratchpad_dir, agent_id="a1"
+        "SubagentStart", tmp_path, scratchpad_dir=scratchpad_dir, agent_id="a1"
     )
     assert output is None
     assert list(tmp_path.iterdir()) == []
 
 
 @pytest.mark.parametrize("event", [["Stop"], {"name": "Stop"}, 1])
-def test_ignores_an_event_name_that_is_not_text(scratchpad, event):
+def test_ignores_an_event_name_that_is_not_text(
+    scratchpad: Path, event: JsonValue
+) -> None:
     payload = {"hook_event_name": event, "scratchpad_dir": str(scratchpad)}
     result = subprocess.run(
         [sys.executable, AGENT_SCRATCH],
@@ -151,14 +173,18 @@ UNRESOLVED_THREAD = graphql_review_threads(ReviewThread("T1", [1]))
 
 
 def test_agent_reminded_about_review_threads_keeps_its_folder(
-    scratchpad, tmp_path, fake_bin, home
-):
+    scratchpad: Path, tmp_path: Path, fake_bin: FakeBin, home: Path
+) -> None:
     gh_bin = fake_bin("gh", f"#!/bin/bash\necho '{json.dumps(UNRESOLVED_THREAD)}'\n")
-    pull_request = {"owner": "acme", "repo": "widgets", "pullNumber": 7}
-    call = {"type": "tool_use", "name": "pull_request_read", "input": pull_request}
+    pull_request: JsonObject = {"owner": "acme", "repo": "widgets", "pullNumber": 7}
+    call: JsonObject = {
+        "type": "tool_use",
+        "name": "pull_request_read",
+        "input": pull_request,
+    }
     transcript = tmp_path / "agent.jsonl"
     write_json_lines(transcript, {"message": {"content": [call]}})
-    payload = {
+    payload: JsonObject = {
         "hook_event_name": "SubagentStop",
         "session_id": "s1",
         "agent_id": "a1",
@@ -169,5 +195,5 @@ def test_agent_reminded_about_review_threads_keeps_its_folder(
     output = run_json_hook(
         AGENT_SCRATCH, payload, env={"HOME": str(home), "PATH": str(gh_bin)}
     )
-    assert output["decision"] == "block"
+    assert json_at(output, "decision") == "block"
     assert folders_and_agent_folders(scratchpad) == EVERYTHING

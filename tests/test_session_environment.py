@@ -1,13 +1,14 @@
 import os
 import subprocess
 import sys
+from pathlib import Path
 
 from conftest import ROOT, without_session_variables
 
 SESSION_ENVIRONMENT = ROOT / "hooks" / "session_environment.py"
 
 
-def test_records_the_shell_identity_as_the_harness_identity(tmp_path):
+def test_records_the_shell_identity_as_the_harness_identity(tmp_path: Path) -> None:
     env_file = tmp_path / "session.sh"
     environment = without_session_variables(os.environ)
     subprocess.run(

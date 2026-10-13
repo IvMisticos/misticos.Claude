@@ -1,9 +1,10 @@
 import os
 import subprocess
 import sys
+from pathlib import Path
 
 import pytest
-from conftest import SHIMS
+from conftest import SHIMS, ShimRun, ShimRunner
 
 PRINT_ENVIRONMENT = """#!/usr/bin/env bash
 echo "PATH=$PATH"
@@ -12,12 +13,12 @@ echo "VIRTUAL_ENV=${VIRTUAL_ENV-}"
 
 
 @pytest.fixture
-def run_cargo(shim_runner):
+def run_cargo(shim_runner: ShimRunner) -> ShimRun:
     return shim_runner("cargo", PRINT_ENVIRONMENT)
 
 
 @pytest.fixture
-def inside_project_with_venv(tmp_path, monkeypatch):
+def inside_project_with_venv(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     project = tmp_path / "project"
     project.mkdir()
     subprocess.run(
@@ -28,7 +29,9 @@ def inside_project_with_venv(tmp_path, monkeypatch):
 
 @pytest.mark.usefixtures("inside_project_with_venv")
 @pytest.mark.parametrize("arguments", [["build"], ["--version"]])
-def test_tool_sees_the_callers_environment(run_cargo, arguments):
+def test_tool_sees_the_callers_environment(
+    run_cargo: ShimRun, arguments: list[str]
+) -> None:
     result = run_cargo(*arguments)
 
     assert result.returncode == 0, result.stderr

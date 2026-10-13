@@ -3,6 +3,7 @@ import json
 import subprocess
 import sys
 from pathlib import Path
+from typing import NoReturn
 
 import pytest
 
@@ -12,7 +13,7 @@ sys.path.insert(0, str(HOOKS))
 import cursor_model_cap
 
 
-def test_unreadable_payload_allows_the_spawn():
+def test_unreadable_payload_allows_the_spawn() -> None:
     result = subprocess.run(
         [sys.executable, HOOKS / "cursor_model_cap.py"],
         input=b"\xff\xfe",
@@ -22,8 +23,8 @@ def test_unreadable_payload_allows_the_spawn():
     assert json.loads(result.stdout) == {"permission": "allow"}
 
 
-def test_unexpected_error_is_not_hidden(monkeypatch):
-    def broken(*_):
+def test_unexpected_error_is_not_hidden(monkeypatch: pytest.MonkeyPatch) -> None:
+    def broken(*_: object) -> NoReturn:
         raise RuntimeError
 
     monkeypatch.setattr(sys, "stdin", io.StringIO("{}"))
