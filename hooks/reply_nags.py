@@ -24,7 +24,6 @@ from reply_history import (
     parsed_event_log,
     transcript_history,
     window_under_review,
-    without_trailing_prompts,
 )
 from session_state import (
     locked_session_file,
@@ -65,6 +64,7 @@ class NagMemory(NamedTuple):
     window: str = ""
     window_replies: int = 0
     nagged_at: int = 0
+    submitted_prompt: str = ""
 
 
 class DueNags(NamedTuple):
@@ -117,15 +117,22 @@ def long_reply_nag(unseen):
     return LONG_REPLY.format(length=long_replies[-1].prose_length)
 
 
+def remembered_window(memory):
+    if memory.submitted_prompt:
+        return Window(memory.submitted_prompt, 0)
+    return Window(memory.window, memory.window_replies)
+
+
 def repeated_updates_nag(history, memory, unseen):
-    remembered = Window(memory.window, memory.window_replies)
-    window = window_under_review(history, remembered, len(unseen))
+    window = window_under_review(history, remembered_window(memory), len(unseen))
     if window is None:
         return None, memory
     nagged_at = memory.nagged_at if memory.window == window.prompt_id else 0
     due_at = nagged_at + MESSAGES_BETWEEN_NAGS if nagged_at else FIRST_NAG_AT_MESSAGES
     count = window.reply_count
-    memory = memory._replace(window=window.prompt_id, window_replies=count)
+    memory = memory._replace(
+        window=window.prompt_id, window_replies=count, submitted_prompt=""
+    )
     if count < due_at:
         return None, memory._replace(nagged_at=nagged_at)
     return REPEATED_UPDATES.format(count=count), memory._replace(nagged_at=count)
@@ -147,12 +154,17 @@ def nags_from_transcript(event, payload, state):
     if event not in PROMPT_EVENTS:
         nags, memory = due_nags(history, state.memory)
         return nags.texts(), state._replace(memory=memory)
-    nags, memory = due_nags(without_trailing_prompts(history), state.memory)
+    nags, memory = due_nags(history, state.memory)
     if not is_wake_prompt(payload.get("prompt")):
-        memory = memory._replace(
-            window=f"submitted-{uuid.uuid4()}", window_replies=0, nagged_at=0
-        )
+        memory = memory._replace(submitted_prompt=submitted_prompt_id(payload))
     return nags.texts(), state._replace(memory=memory)
+
+
+def submitted_prompt_id(payload):
+    prompt_id = payload.get("prompt_id")
+    if isinstance(prompt_id, str) and prompt_id:
+        return prompt_id
+    return f"submitted-{uuid.uuid4()}"
 
 
 def is_wake_prompt(prompt):

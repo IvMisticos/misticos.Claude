@@ -103,7 +103,8 @@ class Transcript:
         return claude_context(run_hook(home, payload))
 
     def submit(self, home, prompt):
-        return self.fire(home, "UserPromptSubmit", prompt=prompt)
+        prompt_id = f"prompt-{self.count}"
+        return self.fire(home, "UserPromptSubmit", prompt=prompt, prompt_id=prompt_id)
 
     def submit_human(self, home, text="hi"):
         nag = self.submit(home, text)
@@ -172,6 +173,29 @@ def test_wakes_that_submit_a_prompt_keep_the_cadence(
         nags.append(transcript.fire(home))
         nagged_at += [count for nag in nags if nag]
     assert nagged_at == [2, 8, 14]
+
+
+def test_wakes_with_an_unknown_start_keep_the_cadence(home, transcript):
+    transcript.submit_human(home)
+    nagged_at = []
+    for count in range(1, 15):
+        transcript.reply(SHORT)
+        nags = [transcript.fire(home), transcript.submit(home, "<unknown-wake>")]
+        transcript.wake("<unknown-wake>")
+        nags.append(transcript.fire(home))
+        nagged_at += [count for nag in nags if nag]
+    assert nagged_at == [2, 8, 14]
+
+
+def test_a_wake_after_a_new_prompt_ignores_the_old_count(home, transcript):
+    transcript.submit_human(home)
+    for _ in range(3):
+        transcript.reply(SHORT)
+        transcript.fire(home)
+    transcript.submit_human(home)
+    transcript.tool_call("tools")
+    transcript.fire(home)
+    assert transcript.submit(home, WAKE_PROMPTS[0]) is None
 
 
 def test_a_human_prompt_after_wakes_restarts_the_cadence(home, transcript):

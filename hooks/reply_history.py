@@ -128,13 +128,6 @@ def transcript_history(transcript_path):
     ]
 
 
-def without_trailing_prompts(history):
-    end = len(history)
-    while end and isinstance(history[end - 1], Prompt):
-        end -= 1
-    return history[:end]
-
-
 def windows(history):
     found = []
     for item in history:
