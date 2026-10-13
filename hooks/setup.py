@@ -120,6 +120,10 @@ def write_written_denies(path, tools):
     write_atomically(path, json.dumps({"deny": tools}, indent=2) + "\n")
 
 
+def write_written_skills(path, skills):
+    write_atomically(path, json.dumps({"skills": skills}, indent=2) + "\n")
+
+
 def configure_claude_settings():
     CLAUDE_DIR.mkdir(parents=True, exist_ok=True)
     settings_path = CLAUDE_DIR / "settings.json"
@@ -163,20 +167,26 @@ def configure_claude_settings():
         written_denies_path,
         [*written_denies, *(tool for tool in added_denies if tool not in written_denies)],
     )
-    recorded_skills = [
-        skill
-        for skill in USER_INVOCABLE_ONLY_SKILLS
-        if skill in written_skills or skill in added_skills
-    ]
-    write_atomically(
+    write_written_skills(
         written_skills_path,
-        json.dumps({"skills": recorded_skills}, indent=2) + "\n",
+        [
+            *written_skills,
+            *(skill for skill in added_skills if skill not in written_skills),
+        ],
     )
     if wanted != settings:
         write_atomically(settings_path, json.dumps(wanted, indent=2) + "\n")
     write_written_denies(
         written_denies_path,
         [tool for tool in DENIED_TOOLS if tool in written_denies or tool in added_denies],
+    )
+    write_written_skills(
+        written_skills_path,
+        [
+            skill
+            for skill in USER_INVOCABLE_ONLY_SKILLS
+            if skill in written_skills or skill in added_skills
+        ],
     )
 
 
