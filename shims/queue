@@ -15,4 +15,13 @@ if [ "${1:-}" = tool ]; then
 fi
 
 uv=$(real_tool uv)
-exec "$uv" run --quiet --no-project --python '>=3.13' -- python "$bin_dir/../hooks/work_queue.py" "$@"
+
+find_python() {
+  "$uv" python find --no-config --system '>=3.13'
+}
+
+if ! python=$(find_python 2>/dev/null); then
+  "$uv" python install --no-config --no-bin 3.13 >&2
+  python=$(find_python)
+fi
+exec "$python" "$bin_dir/../hooks/work_queue.py" "$@"
