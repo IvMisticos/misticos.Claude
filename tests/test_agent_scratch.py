@@ -1,4 +1,5 @@
 import json
+import shutil
 import subprocess
 import sys
 import time
@@ -12,7 +13,12 @@ from conftest import (
     write_json_lines,
 )
 
-AGENT_SCRATCH = Path(__file__).resolve().parent.parent / "hooks" / "agent_scratch.py"
+HOOKS = Path(__file__).resolve().parent.parent / "hooks"
+sys.path.insert(0, str(HOOKS))
+
+import agent_scratch
+
+AGENT_SCRATCH = HOOKS / "agent_scratch.py"
 SHELL_TASK = {"id": "b1", "type": "shell", "status": "running", "command": "make"}
 SUBAGENT_TASK = {"id": "a2", "type": "subagent", "status": "running"}
 WORKFLOW_TASK = {"id": "w1", "type": "workflow", "status": "running"}
@@ -60,6 +66,15 @@ def folders_and_agent_folders(scratchpad):
     return sorted(str(path.relative_to(scratchpad)) for path in paths)
 
 
+def settles_to(scratchpad, left):
+    deadline = time.monotonic() + 10
+    while folders_and_agent_folders(scratchpad) != left:
+        if time.monotonic() > deadline:
+            return False
+        time.sleep(0.01)
+    return True
+
+
 EVERYTHING = ["agents", "agents/a1", "agents/a2", "notes.md"]
 WITHOUT_A1 = ["agents", "agents/a2", "notes.md"]
 WITHOUT_AGENTS = ["notes.md"]
@@ -84,21 +99,14 @@ def test_stop_deletes_agent_folders_no_running_work_uses(
     scratchpad, event, fields, left
 ):
     run_hook(event, scratchpad_dir=str(scratchpad), **fields)
-    assert folders_and_agent_folders(scratchpad) == left
-
-
-def is_emptied_soon(folder):
-    deadline = time.monotonic() + 10
-    while contents(folder) != ["notes.md"] and time.monotonic() < deadline:
-        time.sleep(0.01)
-    return contents(folder) == ["notes.md"]
+    assert settles_to(scratchpad, left)
 
 
 @pytest.mark.parametrize("reason", ["prompt_input_exit", "logout", "other"])
 def test_session_end_deletes_every_agent_folder(scratchpad, reason):
     run_hook("SessionEnd", scratchpad_dir=str(scratchpad), reason=reason)
     assert "agents" not in contents(scratchpad)
-    assert is_emptied_soon(scratchpad)
+    assert settles_to(scratchpad, WITHOUT_AGENTS)
 
 
 @pytest.mark.parametrize("reason", ["clear", "resume"])
@@ -171,3 +179,23 @@ def test_agent_reminded_about_review_threads_keeps_its_folder(
     )
     assert output["decision"] == "block"
     assert folders_and_agent_folders(scratchpad) == EVERYTHING
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"hook_event_name": "Stop", "background_tasks": []},
+        {"hook_event_name": "SessionEnd", "reason": "other"},
+    ],
+)
+def test_slow_delete_spares_folders_new_subagents_create_meanwhile(
+    scratchpad, monkeypatch, payload
+):
+    def delete_slowly(folder):
+        (scratchpad / "agents" / "a3").mkdir(parents=True)
+        shutil.rmtree(folder)
+
+    monkeypatch.setattr(agent_scratch, "delete_in_background", delete_slowly)
+    handle = agent_scratch.HANDLERS[payload["hook_event_name"]]
+    handle({**payload, "scratchpad_dir": str(scratchpad)})
+    assert folders_and_agent_folders(scratchpad) == ["agents", "agents/a3", "notes.md"]
