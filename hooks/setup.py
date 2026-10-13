@@ -34,6 +34,7 @@ REMOTE_SESSION_TOOLS = (
     "set_session_title",
     "list_environments",
 )
+USER_INVOCABLE_ONLY = "user-invocable-only"
 USER_INVOCABLE_ONLY_SKILLS = (
     "session-start-hook",
     "dataviz",
@@ -50,9 +51,6 @@ USER_INVOCABLE_ONLY_SKILLS = (
     "security-review",
     "loop",
     "run",
-    "modern-web-guidance:chrome-extensions",
-    "cowork-plugin-management:cowork-plugin-customizer",
-    "cowork-plugin-management:create-cowork-plugin",
     "anthropic-skills:chrome-browser",
     "anthropic-skills:computer-use",
 )
@@ -116,16 +114,43 @@ def read_json(path):
     return json.loads(text) if text.strip() else {}
 
 
-def write_written_denies(path, tools):
-    if read_json(path).get("deny") == tools:
-        return
-    write_atomically(path, json.dumps({"deny": tools}, indent=2) + "\n")
+class ManagedEntries:
+    def __init__(self, file_name, key, wanted):
+        self.path = CLAUDE_DIR / file_name
+        self.key = key
+        self.wanted = wanted
+        self.recorded = read_json(self.path).get(key, [])
+        self.added = []
 
+    def retired(self, is_retirable=lambda name: True):
+        return [
+            name
+            for name in self.recorded
+            if name not in self.wanted and is_retirable(name)
+        ]
 
-def write_written_skills(path, skills):
-    if read_json(path).get("skills") == skills:
-        return
-    write_atomically(path, json.dumps({"skills": skills}, indent=2) + "\n")
+    def additions(self, kept_names):
+        self.added = [name for name in self.wanted if name not in kept_names]
+        return self.added
+
+    def record_before_settings_write(self):
+        self.write(
+            [*self.recorded, *(name for name in self.added if name not in self.recorded)]
+        )
+
+    def record_after_settings_write(self):
+        self.write(
+            [
+                name
+                for name in self.wanted
+                if name in self.recorded or name in self.added
+            ]
+        )
+
+    def write(self, names):
+        if read_json(self.path).get(self.key) == names:
+            return
+        write_atomically(self.path, json.dumps({self.key: names}, indent=2) + "\n")
 
 
 def configure_claude_settings():
@@ -136,62 +161,38 @@ def configure_claude_settings():
     wanted["attribution"] = {"commit": "", "pr": "", "sessionUrl": False}
     wanted["autoMemoryEnabled"] = False
     wanted["autoCompactWindow"] = AUTO_COMPACT_WINDOW_TOKENS
+    denies = ManagedEntries(WRITTEN_DENIES_FILE, "deny", DENIED_TOOLS)
     permissions = dict(settings.get("permissions", {}))
-    written_denies_path = CLAUDE_DIR / WRITTEN_DENIES_FILE
-    written_denies = read_json(written_denies_path).get("deny", [])
-    retired_denies = [tool for tool in written_denies if tool not in DENIED_TOOLS]
+    retired_denies = denies.retired()
     kept_denies = [
         tool for tool in permissions.get("deny", []) if tool not in retired_denies
     ]
-    added_denies = [tool for tool in DENIED_TOOLS if tool not in kept_denies]
-    permissions["deny"] = kept_denies + added_denies
+    permissions["deny"] = kept_denies + denies.additions(kept_denies)
     wanted["permissions"] = permissions
-    written_skills_path = CLAUDE_DIR / WRITTEN_SKILL_OVERRIDES_FILE
-    written_skills = read_json(written_skills_path).get("skills", [])
-    retired_skills = [
-        skill for skill in written_skills if skill not in USER_INVOCABLE_ONLY_SKILLS
-    ]
+    skills = ManagedEntries(
+        WRITTEN_SKILL_OVERRIDES_FILE, "skills", USER_INVOCABLE_ONLY_SKILLS
+    )
+    overrides = settings.get("skillOverrides", {})
+    retired_skills = skills.retired(
+        lambda skill: overrides.get(skill) == USER_INVOCABLE_ONLY
+    )
     kept_overrides = {
-        skill: mode
-        for skill, mode in settings.get("skillOverrides", {}).items()
-        if skill not in retired_skills
+        skill: mode for skill, mode in overrides.items() if skill not in retired_skills
     }
-    added_skills = [
-        skill for skill in USER_INVOCABLE_ONLY_SKILLS if skill not in kept_overrides
-    ]
     wanted["skillOverrides"] = {
         **kept_overrides,
-        **dict.fromkeys(added_skills, "user-invocable-only"),
+        **dict.fromkeys(skills.additions(kept_overrides), USER_INVOCABLE_ONLY),
     }
     wanted["env"] = {
         **settings.get("env", {}),
         "CLAUDE_CODE_TERMINAL_MCP_TOOLS": TURN_ENDING_TOOLS,
     }
-    write_written_denies(
-        written_denies_path,
-        [*written_denies, *(tool for tool in added_denies if tool not in written_denies)],
-    )
-    write_written_skills(
-        written_skills_path,
-        [
-            *written_skills,
-            *(skill for skill in added_skills if skill not in written_skills),
-        ],
-    )
+    denies.record_before_settings_write()
+    skills.record_before_settings_write()
     if wanted != settings:
         write_atomically(settings_path, json.dumps(wanted, indent=2) + "\n")
-    write_written_denies(
-        written_denies_path,
-        [tool for tool in DENIED_TOOLS if tool in written_denies or tool in added_denies],
-    )
-    write_written_skills(
-        written_skills_path,
-        [
-            skill
-            for skill in USER_INVOCABLE_ONLY_SKILLS
-            if skill in written_skills or skill in added_skills
-        ],
-    )
+    denies.record_after_settings_write()
+    skills.record_after_settings_write()
 
 
 def install_web_guidance_plugin():
