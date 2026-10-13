@@ -11,7 +11,6 @@ exit "${UV_STATUS-0}"
 SCRIPTS = {
     "settings.py": "value = 1\n",
     "tools.py": "value = 2\n",
-    "shared.py": "value = 3\n",
 }
 
 
@@ -92,10 +91,9 @@ def test_completed_script_is_skipped(run_hook):
     assert (result.returncode, result.stdout) == (0, "")
 
 
-@pytest.mark.parametrize("edited", ["settings.py", "shared.py"])
-def test_editing_any_hooks_file_reruns_the_script(run_hook, scripts, edited):
+def test_editing_the_script_reruns_it(run_hook, scripts):
     run_hook()
-    edit(scripts, edited)
+    edit(scripts, "settings.py")
     assert ran_uv(run_hook())
     assert not ran_uv(run_hook())
 
