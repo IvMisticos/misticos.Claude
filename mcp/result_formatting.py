@@ -16,7 +16,7 @@ from lsp_types import (
 )
 from text_positions import from_uri, lines_of, position_key, utf16_offset_to_index
 
-CallSiteKey = tuple[str, int, int]
+type CallSiteKey = tuple[str, int, int]
 
 
 def location_line(location: Location | LocationLink) -> str:

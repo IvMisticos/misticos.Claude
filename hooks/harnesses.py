@@ -1,6 +1,6 @@
 import argparse
 from enum import Enum, auto
-from typing import NamedTuple
+from typing import NamedTuple, override
 
 
 class ContextSource(Enum):
@@ -63,6 +63,7 @@ def harness_named(name):
 
 
 class QuietArgumentParser(argparse.ArgumentParser):
+    @override
     def error(self, message):
         raise ValueError(message)
 

@@ -1,8 +1,9 @@
 #!/usr/bin/env -S uv run --script
 # /// script
-# requires-python = ">=3.11"
+# requires-python = ">=3.13"
 # ///
 
+import copy
 from typing import NamedTuple
 
 from harnesses import harness_parser
@@ -107,7 +108,7 @@ def next_scan_start(part, activity, states):
 
 def matching_offsets(memory, part):
     if part.start < memory.scanned:
-        return memory._replace(checked={}, scanned=part.start)
+        return copy.replace(memory, checked={}, scanned=part.start)
     return memory
 
 

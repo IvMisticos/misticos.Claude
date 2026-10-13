@@ -12,7 +12,7 @@ from text_positions import to_uri
 SKIPPED_DIRECTORIES = {"bin", "obj", "node_modules"}
 CREATED, CHANGED, DELETED = 1, 2, 3
 
-FileStamp = tuple[int, int]
+type FileStamp = tuple[int, int]
 
 
 def is_skipped_directory(name: str) -> bool:

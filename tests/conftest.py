@@ -8,6 +8,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
 SHIMS = ROOT / "shims"
+REAL_TOOL_LIBRARY = SHIMS / "lib" / "real_tool.sh"
 FAKE_GH = """#!/usr/bin/env bash
 echo "ran $*"
 """
@@ -99,11 +100,26 @@ def fake_bin(tmp_path):
     return add
 
 
+def real_uv_directories():
+    found = subprocess.run(
+        ["bash", "-c", '. "$1" && real_tool uv', "bash", REAL_TOOL_LIBRARY],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return [os.path.dirname(found.stdout.strip())] if found.returncode == 0 else []
+
+
 @pytest.fixture
 def shim_runner(fake_bin):
+    uv_directories = real_uv_directories()
+
     def runner(name, fake_script, **base_environment):
         environment = without_session_variables(os.environ)
-        environment["PATH"] = f"{SHIMS}:{fake_bin(name, fake_script)}:/usr/bin:/bin"
+        environment["PATH"] = os.pathsep.join(
+            [str(SHIMS), str(fake_bin(name, fake_script)), "/usr/bin", "/bin"]
+            + uv_directories
+        )
         environment.update(base_environment)
 
         def run(*arguments, **extra_environment):

@@ -1,6 +1,6 @@
-from typing import Any, NotRequired, TypeAlias, TypedDict
+from typing import Any, NotRequired, TypedDict
 
-LSPAny: TypeAlias = Any
+type LSPAny = Any
 
 
 class Position(TypedDict):
@@ -35,8 +35,8 @@ class LanguageString(TypedDict):
     value: str
 
 
-MarkedString: TypeAlias = str | LanguageString
-HoverContents: TypeAlias = MarkedString | MarkupContent | list[MarkedString]
+type MarkedString = str | LanguageString
+type HoverContents = MarkedString | MarkupContent | list[MarkedString]
 
 
 class Hover(TypedDict):
@@ -69,7 +69,7 @@ class WorkspaceSymbol(TypedDict):
     location: Location | LocationUri
 
 
-Symbol: TypeAlias = DocumentSymbol | WorkspaceSymbol
+type Symbol = DocumentSymbol | WorkspaceSymbol
 
 
 class CallHierarchyItem(TypedDict):
@@ -90,7 +90,7 @@ class ResponseError(TypedDict):
     message: str
 
 
-RequestId: TypeAlias = int | str
+type RequestId = int | str
 
 
 class Request(TypedDict):
@@ -113,4 +113,4 @@ class Response(TypedDict):
     error: NotRequired[ResponseError]
 
 
-Message: TypeAlias = Request | Notification | Response
+type Message = Request | Notification | Response
