@@ -33,6 +33,27 @@ REMOTE_SESSION_TOOLS = (
     "set_session_title",
     "list_environments",
 )
+DISABLED_PLUGINS = ("cowork-plugin-management@synced",)
+USER_INVOCABLE_ONLY = "user-invocable-only"
+USER_INVOCABLE_ONLY_SKILLS = (
+    "session-start-hook",
+    "dataviz",
+    "artifact-design",
+    "artifact-diagramming",
+    "artifact-capabilities",
+    "update-config",
+    "keybindings-help",
+    "code-review",
+    "simplify",
+    "fewer-permission-prompts",
+    "plugin-authoring",
+    "init",
+    "security-review",
+    "loop",
+    "run",
+    "anthropic-skills:chrome-browser",
+    "anthropic-skills:computer-use",
+)
 DENIED_TOOLS = (
     *(
         f"mcp__{server}__{tool}"
@@ -112,6 +133,14 @@ def configure_claude_settings():
     denied = permissions.get("deny", [])
     permissions["deny"] = denied + [tool for tool in DENIED_TOOLS if tool not in denied]
     wanted["permissions"] = permissions
+    wanted["skillOverrides"] = {
+        **dict.fromkeys(USER_INVOCABLE_ONLY_SKILLS, USER_INVOCABLE_ONLY),
+        **settings.get("skillOverrides", {}),
+    }
+    wanted["enabledPlugins"] = {
+        **dict.fromkeys(DISABLED_PLUGINS, False),
+        **settings.get("enabledPlugins", {}),
+    }
     wanted["env"] = {
         **settings.get("env", {}),
         "CLAUDE_CODE_TERMINAL_MCP_TOOLS": TURN_ENDING_TOOLS,
