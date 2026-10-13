@@ -1,0 +1,63 @@
+import json
+import shutil
+import subprocess
+import sys
+
+import pytest
+from conftest import ROOT
+
+WEB_GUIDANCE_PLUGIN = "modern-web-guidance@googlechrome"
+FAKE_CLAUDE = """#!/usr/bin/env bash
+echo "claude $*" >> "$HOME/calls"
+"""
+FAKE_RUN = """#!/usr/bin/env bash
+echo "run.sh $*" >> "$HOME/calls"
+"""
+
+
+@pytest.fixture
+def hooks(tmp_path):
+    hooks = tmp_path / "hooks"
+    hooks.mkdir()
+    for name in ("setup_tools.py", "json_values.py"):
+        shutil.copy(ROOT / "hooks" / name, hooks / name)
+    run_sh = hooks / "run.sh"
+    run_sh.write_text(FAKE_RUN)
+    run_sh.chmod(0o755)
+    return hooks
+
+
+@pytest.fixture
+def set_up_tools(home, fake_bin, hooks):
+    bin_dir = fake_bin("claude", FAKE_CLAUDE)
+
+    def set_up():
+        subprocess.run(
+            [sys.executable, hooks / "setup_tools.py"],
+            env={"HOME": str(home), "PATH": f"{bin_dir}:/usr/bin:/bin"},
+            check=True,
+            timeout=30,
+        )
+        calls = home / "calls"
+        return calls.read_text().splitlines() if calls.exists() else []
+
+    return set_up
+
+
+def write_json(path, value):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(value))
+
+
+def test_settings_are_reapplied_after_the_plugin_install(set_up_tools):
+    assert set_up_tools() == [
+        "claude plugin marketplace add GoogleChrome/modern-web-guidance",
+        f"claude plugin install {WEB_GUIDANCE_PLUGIN} --scope user",
+        "run.sh setup_settings.py",
+    ]
+
+
+def test_installed_plugin_is_left_alone(set_up_tools, home):
+    installed = home / ".claude" / "plugins" / "installed_plugins.json"
+    write_json(installed, {"plugins": {WEB_GUIDANCE_PLUGIN: []}})
+    assert set_up_tools() == []

@@ -10,10 +10,11 @@ import sys
 from pathlib import Path
 
 from json_values import read_json_file
-from plugin_names import WEB_GUIDANCE_PLUGIN
 
+HOOKS_DIR = Path(__file__).resolve().parent
 HOME = Path.home()
 INSTALLED_PLUGINS = HOME / ".claude" / "plugins" / "installed_plugins.json"
+WEB_GUIDANCE_PLUGIN = "modern-web-guidance@googlechrome"
 CLOUD_SESSION_MARK = "CCR_AGENT_PROXY_ENABLED"
 
 TOOLCHAIN_BIN_DIRS = (
@@ -39,10 +40,12 @@ def run_pipeline(script):
     run("bash", "-o", "pipefail", "-c", script)
 
 
-def install_web_guidance_plugin():
+def web_guidance_plugin_wanted():
     installed = read_json_file(INSTALLED_PLUGINS).get("plugins", {})
-    if WEB_GUIDANCE_PLUGIN in installed:
-        return
+    return WEB_GUIDANCE_PLUGIN not in installed
+
+
+def install_web_guidance_plugin():
     run("claude", "plugin", "marketplace", "add", "GoogleChrome/modern-web-guidance")
     run("claude", "plugin", "install", WEB_GUIDANCE_PLUGIN, "--scope", "user")
 
@@ -86,8 +89,14 @@ def install_cloud_tools():
     install_dotnet()
 
 
+def reapply_settings():
+    run(str(HOOKS_DIR / "run.sh"), "setup_settings.py")
+
+
 def main():
-    install_web_guidance_plugin()
+    if web_guidance_plugin_wanted():
+        install_web_guidance_plugin()
+        reapply_settings()
     install_cloud_tools()
 
 

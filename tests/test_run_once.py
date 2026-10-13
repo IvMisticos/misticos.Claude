@@ -126,10 +126,9 @@ def test_every_module_in_an_import_list_counts(run_hook, scripts, edited):
     assert ran_uv(run_hook("listed.py"))
 
 
-@pytest.mark.parametrize("edited", ["json_values.py", "plugin_names.py"])
-def test_real_tools_marker_covers_shared_modules(run_real_hook, hooks_copy, edited):
+def test_real_tools_marker_covers_shared_modules(run_real_hook, hooks_copy):
     run_real_hook("setup_tools.py")
-    edit(hooks_copy, edited)
+    edit(hooks_copy, "json_values.py")
     assert ran_uv(run_real_hook("setup_tools.py"))
 
 

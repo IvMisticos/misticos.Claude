@@ -6,7 +6,7 @@ import subprocess
 import pytest
 from conftest import ROOT
 
-WEB_GUIDANCE_PLUGIN = "modern-web-guidance@googlechrome"
+HOOKS = ROOT / "hooks"
 
 
 def unshimmed_uv():
@@ -20,30 +20,65 @@ def unshimmed_uv():
     return uv
 
 
-@pytest.fixture
-def configure_settings(home, fake_bin):
+@pytest.fixture(scope="module")
+def uv_environment():
     uv = unshimmed_uv()
-    bin_dir = fake_bin("placeholder", "")
-    settings_path = home / ".claude" / "settings.json"
+    cache_dir = subprocess.run(
+        [uv, "cache", "dir"], capture_output=True, text=True, check=True, timeout=30
+    ).stdout.strip()
+    environment = {**os.environ, "UV_CACHE_DIR": cache_dir}
+    probe = subprocess.run(
+        [
+            uv,
+            "run",
+            "--no-project",
+            "--with",
+            "tomli-w",
+            "python",
+            "-c",
+            "import tomli_w",
+        ],
+        env=environment,
+        capture_output=True,
+        check=False,
+        timeout=120,
+    )
+    if probe.returncode != 0:
+        pytest.skip("cannot fetch tomli-w")
+    return uv, environment
 
-    def configure(settings):
-        settings_path.parent.mkdir(parents=True, exist_ok=True)
-        settings_path.write_text(json.dumps(settings))
+
+@pytest.fixture
+def configure_settings(home, fake_bin, uv_environment):
+    uv, environment = uv_environment
+    bin_dir = fake_bin("placeholder", "")
+
+    def configure():
         subprocess.run(
-            [uv, "run", "--script", ROOT / "hooks" / "setup_settings.py"],
-            env={**os.environ, "HOME": str(home), "PATH": f"{bin_dir}:/usr/bin:/bin"},
+            [uv, "run", "--script", HOOKS / "setup_settings.py"],
+            env={**environment, "HOME": str(home), "PATH": f"{bin_dir}:/usr/bin:/bin"},
             check=True,
             timeout=120,
         )
-        return json.loads(settings_path.read_text())["enabledPlugins"]
 
     return configure
 
 
-def test_lost_plugin_entry_comes_back(configure_settings):
-    assert configure_settings({})[WEB_GUIDANCE_PLUGIN] is True
+def test_second_run_writes_nothing(configure_settings, home):
+    settings_path = home / ".claude" / "settings.json"
+    configure_settings()
+    first_write = settings_path.stat().st_mtime_ns
+    configure_settings()
+    assert settings_path.stat().st_mtime_ns == first_write
 
 
-def test_user_choice_for_the_plugin_wins(configure_settings):
-    settings = {"enabledPlugins": {WEB_GUIDANCE_PLUGIN: False}}
-    assert configure_settings(settings)[WEB_GUIDANCE_PLUGIN] is False
+def test_settings_hook_runs_every_session():
+    hooks = json.loads((HOOKS / "claude.json").read_text())["hooks"]
+    commands = [
+        hook["command"]
+        for group in hooks["SessionStart"]
+        for hook in group["hooks"]
+        if "setup_settings.py" in hook["command"]
+    ]
+    assert commands
+    assert all("--once" not in command for command in commands)
