@@ -16,4 +16,10 @@ root = ["hooks", "mcp", "tests"]
 include = ["hooks", "mcp", "tests"]
 
 [dependency-groups]
-dev = ["mcp>=2", "pytest", "tomli-w"]
+dev = [
+    "mcp>=2",
+    "pytest",
+    "ruff>=0.17.0",
+    "tomli-w",
+    "ty>=0.0.86",
+]
