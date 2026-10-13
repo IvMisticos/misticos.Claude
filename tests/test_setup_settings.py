@@ -7,6 +7,10 @@ import pytest
 from conftest import ROOT
 
 HOOKS = ROOT / "hooks"
+ENABLED_PLUGINS = {
+    "modern-web-guidance@googlechrome": True,
+    "chosen-off@elsewhere": False,
+}
 
 
 def unshimmed_uv():
@@ -66,10 +70,14 @@ def configure_settings(home, fake_bin, uv_environment):
 
 def test_second_run_writes_nothing(configure_settings, home):
     settings_path = home / ".claude" / "settings.json"
+    settings_path.parent.mkdir(parents=True)
+    settings_path.write_text(json.dumps({"enabledPlugins": ENABLED_PLUGINS}))
     configure_settings()
     first_write = settings_path.stat().st_mtime_ns
     configure_settings()
     assert settings_path.stat().st_mtime_ns == first_write
+    enabled = json.loads(settings_path.read_text())["enabledPlugins"]
+    assert enabled.items() >= ENABLED_PLUGINS.items()
 
 
 def test_settings_hook_runs_every_session():

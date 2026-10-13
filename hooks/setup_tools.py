@@ -100,8 +100,10 @@ def reapply_settings():
 
 def main():
     if web_guidance_plugin_wanted():
-        install_web_guidance_plugin()
-        reapply_settings()
+        try:
+            install_web_guidance_plugin()
+        finally:
+            reapply_settings()
     install_cloud_tools()
 
 
