@@ -11,11 +11,3 @@ def json_object(text):
     except ValueError:
         return None
     return value if isinstance(value, dict) else None
-
-
-def read_json_file(path):
-    try:
-        text = path.read_text()
-    except FileNotFoundError:
-        return {}
-    return json.loads(text) if text.strip() else {}

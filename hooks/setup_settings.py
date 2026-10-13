@@ -13,7 +13,6 @@ import tomllib
 from pathlib import Path
 
 import tomli_w
-from json_values import read_json_file
 
 HOME = Path.home()
 CLAUDE_DIR = HOME / ".claude"
@@ -107,10 +106,18 @@ def write_atomically(path, text):
         raise
 
 
+def read_json(path):
+    try:
+        text = path.read_text()
+    except FileNotFoundError:
+        return {}
+    return json.loads(text) if text.strip() else {}
+
+
 def configure_claude_settings():
     CLAUDE_DIR.mkdir(parents=True, exist_ok=True)
     settings_path = CLAUDE_DIR / "settings.json"
-    settings = read_json_file(settings_path)
+    settings = read_json(settings_path)
     wanted = dict(settings)
     wanted["attribution"] = {"commit": "", "pr": "", "sessionUrl": False}
     wanted["autoMemoryEnabled"] = False

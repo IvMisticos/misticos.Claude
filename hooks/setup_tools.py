@@ -9,7 +9,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from json_values import read_json_file
+from json_values import json_object
 
 HOOKS_DIR = Path(__file__).resolve().parent
 HOME = Path.home()
@@ -41,13 +41,20 @@ def run_pipeline(script):
     run("bash", "-o", "pipefail", "-c", script)
 
 
+def read_json_leniently(path):
+    try:
+        return json_object(path.read_text()) or {}
+    except OSError:
+        return {}
+
+
 def web_guidance_plugin_choice():
-    enabled = read_json_file(CLAUDE_SETTINGS).get("enabledPlugins", {})
+    enabled = read_json_leniently(CLAUDE_SETTINGS).get("enabledPlugins", {})
     return enabled.get(WEB_GUIDANCE_PLUGIN)
 
 
 def web_guidance_plugin_wanted():
-    installed = read_json_file(INSTALLED_PLUGINS).get("plugins", {})
+    installed = read_json_leniently(INSTALLED_PLUGINS).get("plugins", {})
     return (
         WEB_GUIDANCE_PLUGIN not in installed
         and web_guidance_plugin_choice() is not False

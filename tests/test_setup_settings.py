@@ -57,11 +57,12 @@ def configure_settings(home, fake_bin, uv_environment):
     uv, environment = uv_environment
     bin_dir = fake_bin("placeholder", "")
 
-    def configure():
-        subprocess.run(
+    def configure(check=True):
+        return subprocess.run(
             [uv, "run", "--script", HOOKS / "setup_settings.py"],
             env={**environment, "HOME": str(home), "PATH": f"{bin_dir}:/usr/bin:/bin"},
-            check=True,
+            capture_output=True,
+            check=check,
             timeout=120,
         )
 
@@ -78,6 +79,14 @@ def test_second_run_writes_nothing(configure_settings, home):
     assert settings_path.stat().st_mtime_ns == first_write
     enabled = json.loads(settings_path.read_text())["enabledPlugins"]
     assert enabled.items() >= ENABLED_PLUGINS.items()
+
+
+def test_broken_settings_are_left_alone(configure_settings, home):
+    settings_path = home / ".claude" / "settings.json"
+    settings_path.parent.mkdir(parents=True)
+    settings_path.write_text("{broken")
+    assert configure_settings(check=False).returncode != 0
+    assert settings_path.read_text() == "{broken"
 
 
 def test_settings_hook_runs_every_session():
