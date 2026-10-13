@@ -9,6 +9,7 @@ import os
 import shutil
 import subprocess
 import sys
+import tempfile
 import tomllib
 from pathlib import Path
 
@@ -21,6 +22,37 @@ INSTALLED_PLUGINS = CLAUDE_DIR / "plugins" / "installed_plugins.json"
 WEB_GUIDANCE_PLUGIN = "modern-web-guidance@googlechrome"
 CLOUD_SESSION_MARK = "CCR_AGENT_PROXY_ENABLED"
 AUTO_COMPACT_WINDOW_TOKENS = 400_000
+REMOTE_SERVER_NAMES = ("claude-code-remote", "Claude_Code_Remote")
+REMOTE_SESSION_TOOLS = (
+    "archive_session",
+    "unarchive_session",
+    "create_session",
+    "interrupt_session",
+    "list_sessions",
+    "set_session_tags",
+    "set_session_title",
+    "list_environments",
+)
+DENIED_TOOLS = (
+    *(
+        f"mcp__{server}__{tool}"
+        for server in REMOTE_SERVER_NAMES
+        for tool in REMOTE_SESSION_TOOLS
+    ),
+    "ScheduleWakeup",
+    "ShowOnboardingRolePicker",
+    "SuggestSkills",
+    "DesignSync",
+    "SearchPlugins",
+    "SuggestPluginInstall",
+    "SuggestConnectors",
+    "SearchMcpRegistry",
+    "mcp__github__create_repository",
+    "mcp__github__fork_repository",
+    "mcp__github__request_copilot_review",
+    "mcp__github__run_secret_scanning",
+)
+
 TURN_ENDING_TOOLS = "ReadNotifications,SendMessage"
 
 
@@ -48,9 +80,16 @@ def run_pipeline(script):
 
 
 def write_atomically(path, text):
-    staged = path.with_name(path.name + ".installing")
-    staged.write_text(text)
-    os.replace(staged, path)
+    mode = path.stat().st_mode & 0o777 if path.exists() else 0o644
+    descriptor, staged = tempfile.mkstemp(dir=path.parent, prefix=path.name + ".")
+    try:
+        with os.fdopen(descriptor, "w") as staged_file:
+            staged_file.write(text)
+        os.chmod(staged, mode)
+        os.replace(staged, path)
+    except BaseException:
+        Path(staged).unlink(missing_ok=True)
+        raise
 
 
 def read_json(path):
@@ -69,6 +108,10 @@ def configure_claude_settings():
     wanted["attribution"] = {"commit": "", "pr": "", "sessionUrl": False}
     wanted["autoMemoryEnabled"] = False
     wanted["autoCompactWindow"] = AUTO_COMPACT_WINDOW_TOKENS
+    permissions = dict(settings.get("permissions", {}))
+    denied = permissions.get("deny", [])
+    permissions["deny"] = denied + [tool for tool in DENIED_TOOLS if tool not in denied]
+    wanted["permissions"] = permissions
     wanted["env"] = {
         **settings.get("env", {}),
         "CLAUDE_CODE_TERMINAL_MCP_TOOLS": TURN_ENDING_TOOLS,
