@@ -1,10 +1,6 @@
-import sys
 from pathlib import Path
 
 import pytest
-
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
-
 from cleanup_policy import (
     most_free_since_cleanup,
     needs_cleanup,

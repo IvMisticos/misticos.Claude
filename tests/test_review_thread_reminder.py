@@ -14,9 +14,6 @@ from conftest import (
     write_json_lines,
 )
 from json_values import JsonObject, JsonValue
-
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
-
 from pull_requests import (
     PullRequest,
     last_activity_by_pull_request,

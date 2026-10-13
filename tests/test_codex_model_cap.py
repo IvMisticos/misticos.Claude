@@ -1,13 +1,9 @@
-import sys
 from pathlib import Path
 
 import pytest
+from codex_model_cap import cap_decision
 from hook_io import PreToolUseDecision
 from json_values import JsonObject, JsonValue
-
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
-
-from codex_model_cap import cap_decision
 
 CALLER = "gpt-5-sol"
 

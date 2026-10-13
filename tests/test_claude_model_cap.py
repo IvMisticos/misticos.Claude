@@ -1,12 +1,8 @@
-import sys
 from pathlib import Path
 
 import pytest
-from json_values import JsonObject, JsonValue
-
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
-
 from claude_model_cap import agent_decision
+from json_values import JsonObject, JsonValue
 
 SCOUT: JsonObject = {"subagent_type": "misticos:scout", "prompt": "find"}
 ENGINEER: JsonObject = {"subagent_type": "misticos:engineer", "prompt": "build"}

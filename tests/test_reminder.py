@@ -1,4 +1,3 @@
-import sys
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -11,9 +10,6 @@ from conftest import (
     text_at,
 )
 from json_values import JsonObject, JsonValue
-
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
-
 from rule_sections import RuleSection
 
 from agents import AGENTS, Agent

@@ -8,7 +8,6 @@ from typing import NoReturn
 import pytest
 
 HOOKS = Path(__file__).resolve().parent.parent / "hooks"
-sys.path.insert(0, str(HOOKS))
 
 import cursor_model_cap
 

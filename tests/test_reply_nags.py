@@ -1,4 +1,3 @@
-import sys
 from collections.abc import Callable
 from pathlib import Path
 
@@ -10,9 +9,6 @@ from conftest import (
     text_at,
 )
 from json_values import JsonObject, JsonValue
-
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
-
 from prose import prose_length
 from reply_history import EventLog, Prompt, Reply, transcript_history
 

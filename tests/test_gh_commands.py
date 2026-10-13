@@ -1,8 +1,3 @@
-import sys
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
-
 import pytest
 from gh_commands import GhPrCall, gh_api_words, gh_argument_lists, gh_pr_call
 from pull_requests import pull_request_of_gh_pr_call
