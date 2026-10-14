@@ -11,8 +11,10 @@ from conftest import ROOT, FakeBin
 from json_values import JsonValue
 
 WEB_GUIDANCE_PLUGIN = "modern-web-guidance@googlechrome"
-MARKETPLACE_ADD = "claude plugin marketplace add GoogleChrome/modern-web-guidance"
-INSTALL = f"claude plugin install {WEB_GUIDANCE_PLUGIN} --scope user"
+INSTALL = (
+    "claude plugin install modern-web-guidance"
+    " --marketplace GoogleChrome/modern-web-guidance --scope user"
+)
 REAPPLY_SETTINGS = "run.sh setup_settings.py"
 ENABLE = f"claude plugin enable {WEB_GUIDANCE_PLUGIN} --scope user"
 ENABLE_IN_SETTINGS = """
@@ -31,7 +33,9 @@ FAKE_CLAUDE = f"""#!/usr/bin/env bash
 echo "claude $*" >> "$HOME/calls"
 [ "$2" != "${{CLAUDE_FAILS_AT-}}" ] || exit 1
 case "$2" in
-  install | enable)
+  install)
+    exec python3 -c '{ENABLE_IN_SETTINGS}' "$HOME/.claude/settings.json" "$3@googlechrome" "$2" ;;
+  enable)
     exec python3 -c '{ENABLE_IN_SETTINGS}' "$HOME/.claude/settings.json" "$3" "$2" ;;
 esac
 """
@@ -93,7 +97,7 @@ def write_json(path: Path, value: JsonValue) -> None:
 def test_settings_are_reapplied_after_the_plugin_install(
     set_up_tools: SetUpTools,
 ) -> None:
-    assert set_up_tools() == (0, [MARKETPLACE_ADD, INSTALL, REAPPLY_SETTINGS])
+    assert set_up_tools() == (0, [INSTALL, REAPPLY_SETTINGS])
 
 
 def test_plugin_is_enabled_when_reapplied_settings_lost_it(
@@ -101,22 +105,22 @@ def test_plugin_is_enabled_when_reapplied_settings_lost_it(
 ) -> None:
     assert set_up_tools(STALE_SETTINGS="1") == (
         0,
-        [MARKETPLACE_ADD, INSTALL, REAPPLY_SETTINGS, ENABLE],
+        [INSTALL, REAPPLY_SETTINGS, ENABLE],
     )
 
 
 def test_failed_install_still_reapplies_settings(set_up_tools: SetUpTools) -> None:
     status, calls = set_up_tools(CLAUDE_FAILS_AT="install")
     assert status != 0
-    assert calls == [MARKETPLACE_ADD, INSTALL, REAPPLY_SETTINGS]
+    assert calls == [INSTALL, REAPPLY_SETTINGS]
 
 
 @pytest.mark.skipif(os.geteuid() != 0, reason="cloud tools install only as root")
 def test_cloud_tools_install_after_a_plugin_failure(set_up_tools: SetUpTools) -> None:
     status, calls = set_up_tools(CLAUDE_FAILS_AT="install", CCR_AGENT_PROXY_ENABLED="1")
     assert status != 0
-    assert calls[:3] == [MARKETPLACE_ADD, INSTALL, REAPPLY_SETTINGS]
-    assert any(call.startswith("curl ") for call in calls[3:])
+    assert calls[:2] == [INSTALL, REAPPLY_SETTINGS]
+    assert any(call.startswith("curl ") for call in calls[2:])
 
 
 def test_installed_plugin_is_left_alone(set_up_tools: SetUpTools, home: Path) -> None:
