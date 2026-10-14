@@ -2,8 +2,7 @@ An unnecessarily opinionated setup for AI agents. Used and tested in Claude Code
 
 ## Install
 ```
-claude plugin marketplace add IvMisticos/misticos.Claude
-claude plugin install misticos@misticos --scope user
+claude plugin install misticos --marketplace IvMisticos/misticos.Claude --scope user
 ```
 
 ## for llms

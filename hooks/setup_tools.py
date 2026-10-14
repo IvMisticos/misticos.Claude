@@ -17,7 +17,9 @@ HOOKS_DIR = Path(__file__).resolve().parent
 HOME = Path.home()
 CLAUDE_SETTINGS = HOME / ".claude" / "settings.json"
 INSTALLED_PLUGINS = HOME / ".claude" / "plugins" / "installed_plugins.json"
-WEB_GUIDANCE_PLUGIN = "modern-web-guidance@googlechrome"
+WEB_GUIDANCE_NAME = "modern-web-guidance"
+WEB_GUIDANCE_PLUGIN = f"{WEB_GUIDANCE_NAME}@googlechrome"
+WEB_GUIDANCE_MARKETPLACE = "GoogleChrome/modern-web-guidance"
 CLOUD_SESSION_MARK = "CCR_AGENT_PROXY_ENABLED"
 
 TOOLCHAIN_BIN_DIRS = (
@@ -66,8 +68,16 @@ def web_guidance_plugin_wanted() -> bool:
 
 
 def install_web_guidance_plugin() -> None:
-    run("claude", "plugin", "marketplace", "add", "GoogleChrome/modern-web-guidance")
-    run("claude", "plugin", "install", WEB_GUIDANCE_PLUGIN, "--scope", "user")
+    run(
+        "claude",
+        "plugin",
+        "install",
+        WEB_GUIDANCE_NAME,
+        "--marketplace",
+        WEB_GUIDANCE_MARKETPLACE,
+        "--scope",
+        "user",
+    )
 
 
 def enable_web_guidance_plugin() -> None:
