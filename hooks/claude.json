@@ -60,8 +60,8 @@
           },
           {
             "type": "command",
-            "command": "claude plugin marketplace update misticos >&2 && claude plugin update misticos@misticos >&2",
-            "async": true
+            "command": "claude plugin marketplace update misticos >&2 && claude plugin update misticos@misticos >&2; printf '%s\\n' '{\"hookSpecificOutput\":{\"hookEventName\":\"SessionStart\",\"reloadSkills\":true}}'",
+            "timeout": 30
           }
         ]
       }
