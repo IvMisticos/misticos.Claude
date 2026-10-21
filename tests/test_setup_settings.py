@@ -124,6 +124,8 @@ def test_settings_hook_runs_every_session() -> None:
         {"permissions": {"deny": "Bash"}},
         {"skillOverrides": "x"},
         {"enabledPlugins": 1},
+        {"extraKnownMarketplaces": []},
+        {"extraKnownMarketplaces": {"misticos": "x"}},
         {"env": ["A=1"]},
     ],
 )
@@ -146,6 +148,7 @@ def test_malformed_claude_settings_stay_untouched(
         {"permissions": {"deny": None}},
         {"skillOverrides": None},
         {"enabledPlugins": None},
+        {"extraKnownMarketplaces": None},
         {"env": None},
     ],
 )
@@ -158,3 +161,39 @@ def test_null_claude_settings_count_as_empty(
     setup_settings.configure_claude_settings()
     written = json.loads(settings_path.read_text())
     assert written["permissions"]["deny"] == list(setup_settings.DENIED_TOOLS)
+
+
+@pytest.mark.parametrize(
+    ("settings", "expected"),
+    [
+        ({}, {"source": setup_settings.OWN_MARKETPLACE_SOURCE, "autoUpdate": True}),
+        (
+            {"misticos": {"source": {"source": "directory", "path": "/src"}}},
+            {"source": {"source": "directory", "path": "/src"}, "autoUpdate": True},
+        ),
+        (
+            {
+                "misticos": {
+                    "source": setup_settings.OWN_MARKETPLACE_SOURCE,
+                    "autoUpdate": False,
+                }
+            },
+            {"source": setup_settings.OWN_MARKETPLACE_SOURCE, "autoUpdate": False},
+        ),
+    ],
+)
+def test_own_marketplace_auto_updates_unless_turned_off(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    settings: JsonObject,
+    expected: JsonObject,
+) -> None:
+    monkeypatch.setattr(setup_settings, "CLAUDE_DIR", tmp_path)
+    other = {"source": {"source": "github", "repo": "GoogleChrome/modern-web-guidance"}}
+    settings_path = tmp_path / "settings.json"
+    settings_path.write_text(
+        json.dumps({"extraKnownMarketplaces": {**settings, "googlechrome": other}})
+    )
+    setup_settings.configure_claude_settings()
+    marketplaces = json.loads(settings_path.read_text())["extraKnownMarketplaces"]
+    assert marketplaces == {"misticos": expected, "googlechrome": other}

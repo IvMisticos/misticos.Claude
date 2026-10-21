@@ -40,6 +40,11 @@ REMOTE_SESSION_TOOLS = (
     "watch_url",
 )
 DISABLED_PLUGINS = ("cowork-plugin-management@synced",)
+OWN_MARKETPLACE = "misticos"
+OWN_MARKETPLACE_SOURCE: JsonObject = {
+    "source": "github",
+    "repo": "IvMisticos/misticos.Claude",
+}
 USER_INVOCABLE_ONLY = "user-invocable-only"
 USER_INVOCABLE_ONLY_SKILLS = (
     "anthropic-skills:chrome-browser",
@@ -158,6 +163,16 @@ def configure_claude_settings() -> None:
     wanted["enabledPlugins"] = {
         **dict.fromkeys(DISABLED_PLUGINS, False),
         **object_setting(settings, "enabledPlugins"),
+    }
+    marketplaces = object_setting(settings, "extraKnownMarketplaces")
+    own_marketplace: JsonObject = {
+        "source": OWN_MARKETPLACE_SOURCE,
+        "autoUpdate": True,
+        **object_setting(marketplaces, OWN_MARKETPLACE),
+    }
+    wanted["extraKnownMarketplaces"] = {
+        **marketplaces,
+        OWN_MARKETPLACE: own_marketplace,
     }
     wanted["env"] = {
         **object_setting(settings, "env"),
