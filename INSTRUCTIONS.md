@@ -146,9 +146,9 @@ Don't restate the code. Write no PR body if the diff leaves no important questio
 
 # Reviews
 
-Skip for a PR that is tiny or changes nothing functional or public, such as a typo, a formatting pass, or a version bump. Merge it once local checks pass.
+Skip for a PR that is tiny or changes nothing functional or public, such as a typo, a formatting pass, or a version bump. Once local checks pass, merge such a PR.
 
-Drive this loop to green unprompted, then merge your own PR; for merges this overrides the rule to confirm first. Until the project is in production, merge without asking. In production, ask before the first merge; that approval covers later PRs in the same subproject or milestone. Recommendations that need my review block the merge. Come back only when the PR is merged and CI on the target branch is green, or when it needs my decision.
+Drive this loop to green unprompted. Until the project is in production, merge without asking. Stop when anything needs my decision. Otherwise come back only when the PR is ready to merge, or merged with CI on the target branch green.
 
 1. Never review unfinished work. Rebase onto the latest target branch, run every check, including each check step of the CI workflow, and fix failures before you push.
 2. Push the relevant changes and subscribe to the PR. No polling, no scheduled check-ins.
