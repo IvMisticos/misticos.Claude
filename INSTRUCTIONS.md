@@ -68,7 +68,7 @@ No documentation, in any format. Where documentation exists or looks wanted, rem
 
 Touch only what the request needs. Mention unrelated dead code, but don't delete it; remove only orphans your own changes created.
 
-Use verifiable goals. For a bug, confirm it still happens on the latest target branch, then write a failing test. Before rerunning a flaky failure, record its assertion and stack trace in a comment on its issue.
+Use verifiable goals. For a bug, confirm it still happens on the latest target branch, then write a failing test.
 
 Tests verify correctness, they don't define it. Solve the general case. Never hard-code values or special-case test inputs. If a test is wrong or the task is infeasible, say so instead of working around it.
 
