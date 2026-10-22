@@ -149,7 +149,15 @@ def run_tool(executable: str, arguments: Sequence[str]) -> int:
     return run_build([executable, *arguments])
 
 
-def run_benchmark(command: Sequence[str], cores: int, alone: bool) -> int:
+def run_repeatedly(command: Sequence[str], runs: int) -> int:
+    for _ in range(runs):
+        status = run_held(command)
+        if status != 0:
+            return status
+    return 0
+
+
+def run_benchmark(command: Sequence[str], cores: int, alone: bool, runs: int) -> int:
     with contextlib.ExitStack() as held:
         held.enter_context(
             locked(BENCHMARK_LOCK, fcntl.LOCK_EX, "waiting for the running benchmark")
@@ -166,7 +174,7 @@ def run_benchmark(command: Sequence[str], cores: int, alone: bool) -> int:
             )
         if plan:
             held.enter_context(pinned(plan, PINNING_STATE))
-        return run_held(command)
+        return run_repeatedly(command, runs)
 
 
 def positive_count(text: str) -> int:
@@ -181,6 +189,7 @@ def parse_bench_arguments() -> argparse.Namespace:
     modes = parser.add_subparsers(dest="mode", required=True)
     bench = modes.add_parser("bench")
     bench.add_argument("--cores", type=positive_count, default=1)
+    bench.add_argument("--runs", type=positive_count, default=1)
     bench.add_argument("--alone", action="store_true")
     bench.add_argument("command", nargs=argparse.REMAINDER)
     arguments = parser.parse_args()
@@ -201,7 +210,9 @@ def main() -> int:
     if sys.argv[1:2] == ["tool"]:
         return run_tool(sys.argv[2], sys.argv[3:])
     arguments = parse_bench_arguments()
-    return run_benchmark(arguments.command, arguments.cores, arguments.alone)
+    return run_benchmark(
+        arguments.command, arguments.cores, arguments.alone, arguments.runs
+    )
 
 
 if __name__ == "__main__":
