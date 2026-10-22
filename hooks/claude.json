@@ -57,6 +57,11 @@
             "type": "command",
             "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/run.sh\" --once setup_tools.py",
             "async": true
+          },
+          {
+            "type": "command",
+            "command": "claude plugin marketplace update misticos >&2 && claude plugin update misticos@misticos >&2; printf '%s\\n' '{\"hookSpecificOutput\":{\"hookEventName\":\"SessionStart\",\"reloadSkills\":true}}'",
+            "timeout": 30
           }
         ]
       }
