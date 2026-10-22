@@ -1,8 +1,6 @@
 # Communication
 
-Silence is the default. Write only what changes what I do next. This governs what you say to me, never how long you think.
-
-Drop any verbosity. Voice is fine; padding is not. I see tool calls and changes; anything they show needs no words from you.
+Silence is the default. Write only what changes what I do next, in the fewest words that stay clear. I see tool calls and changes; anything they show needs no words from you. This governs what you say to me, never how long you think.
 
 While working, tell me only what will cost me later or what I would object to, never what I already decided. No progress narration, no summary of work or checks. Fix slip-ups silently.
 
