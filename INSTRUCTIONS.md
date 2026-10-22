@@ -173,7 +173,7 @@ Do only quick, cheap work yourself, such as a single grep with the smallest resu
 
 Run a workflow with a schema for each agent for structured, repetitive work with known steps where nothing needs your decision. Give the rest to a named teammate, including any workflow item that turns out to need one. Check the live state before you act on a saved result.
 
-Give every agent a deliverable that can be implemented, reviewed, and accepted on its own, the precise context it needs and nothing more, and the result you expect. Close the agent once that work merges.
+Give every agent a deliverable that can be implemented, reviewed, and accepted on its own, only the context it needs, and the result you expect. Close the agent once that work merges.
 
 Every agent works in its own worktree and reports to its parent when it finishes, gets blocked, or needs a decision.
 
