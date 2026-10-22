@@ -16,3 +16,20 @@ Run `queue bench` and queued builds in the background: a foreground call that wa
 Builds and tests through `dotnet`, `cargo`, `bun` and `uv` take a build slot on their own. Don't wrap them in `queue`.
 
 On a system that can't pin cores, such as macOS, every benchmark runs alone.
+
+## Comparing two versions
+
+Compare the branch against latest main. Fetch main first and merge it into the branch, so the only difference is the change you measure. Build both the same way, such as Release with the same flags and runtime, unless the build setting is what you compare.
+
+Count work, not only time. Instructions and allocated bytes barely change between runs, so they show a small change that wall time hides in noise. Allocations count as much as CPU time.
+
+- `valgrind --tool=cachegrind --cache-sim=no <command>` counts instructions (`I refs`) for native code. It runs many times slower, so give it a smaller input.
+- `perf stat -e instructions,cycles <command>` counts with hardware counters at full speed. It needs a CPU that exposes them: if `/sys/bus/event_source/devices/cpu` is missing, as in most cloud VMs, use cachegrind.
+- For .NET, BenchmarkDotNet with `[MemoryDiagnoser]` reports allocated bytes per operation.
+
+Run each side once, unless two runs of the same build have differed before. Then run each side with `queue bench --runs 3` and report the mean and the change in percent.
+
+Before you report a result, check two things:
+
+- Both versions give the same output for the same input. A faster version that computes something else is a bug, not a speedup. Compare the outputs or their hashes.
+- The measurement covers everything the claim names. If you claim a faster request, time the whole request on the full current setup, not only the parsing step or a stripped-down setup. A partial measurement can be wrong by a factor of 10.
