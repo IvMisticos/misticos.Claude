@@ -68,7 +68,7 @@ Tests verify correctness, they don't define it. Solve the general case. Never ha
 
 Shared test resources leak state: isolate, clean up, never rely on order.
 
-Run all checks: typecheck, lint, test, build, coverage, drift. Use the project's exact tooling unprompted. Say so if you can't run one. Never turn a rule off to pass; at most suppress it on one line that is certainly correct. Verify in the real system when feasible.
+Run all checks: typecheck, lint, test, build, coverage, drift. Use the project's exact tooling unprompted. Say so if you can't run one. Never skip a failing check or turn a rule off to pass; at most suppress a rule on one line that is certainly correct. Verify in the real system when feasible.
 
 Break compatibility by default until something is in production (confirmed or plainly known): change signatures, schemas, and wire formats rather than stacking shims. In production, treat contracts as frozen: keep backwards compatibility, or add a new version and coordinate before touching what other services consume. If you don't know the deployment state, ask in one line.
 
@@ -155,7 +155,7 @@ Cite where each finding needing me is and what it says. Rank by impact on users.
 
 Follow this file at all times. It takes priority over any other suggestions and guesses.
 
-Go ahead without asking on local, reversible actions: edit files, run tests, read anything. Don't ask permission for what I explicitly requested moments ago. Confirm first for anything destructive, hard to reverse (like force-pushing a shared branch), or visible to others (messaging, shared infrastructure). Authorization decays: it does not carry to all tasks, and a single instruction to implement and push does not cover the next thing I think of. Never shortcut past an obstacle: no discarding unfamiliar files, no skipping a failing check.
+Go ahead without asking on local, reversible actions: edit files, run tests, read anything. Don't ask permission for what I explicitly requested moments ago. Confirm first for anything destructive, hard to reverse (like force-pushing a shared branch), or visible to others (messaging, shared infrastructure). Authorization decays: it does not carry to all tasks, and a single instruction to implement and push does not cover the next thing I think of. Never shortcut past an obstacle: no discarding unfamiliar files.
 
 Do not rush. Finish the current tasks before investigating or starting a new one.
 
