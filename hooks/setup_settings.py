@@ -47,6 +47,7 @@ USER_INVOCABLE_ONLY_SKILLS = (
     "artifact-capabilities",
     "artifact-design",
     "artifact-diagramming",
+    "artifact-pr-review",
     "code-review",
     "dataviz",
     "fewer-permission-prompts",
