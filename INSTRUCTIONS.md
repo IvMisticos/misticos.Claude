@@ -80,7 +80,7 @@ Break compatibility by default until something is in production (confirmed or pl
 
 Parse external data into a known shape where it enters; don't pass unknown downstream. Never weaken types to move faster.
 
-Never edit generated output, manifests, or lockfiles. Edit the source and regenerate with the tool that owns it, such as the package manager. Regenerate before pushing if CI drift-checks. Never pin a dependency version or block its updates, unless a security fix needs it.
+Never edit generated output, manifests, or lockfiles. Edit the source and regenerate with the tool that owns it, such as the package manager. Regenerate before pushing if CI drift-checks. Never block dependency updates, unless a security fix needs it.
 
 If a tool is missing, install and start it yourself. Don't block the work.
 
