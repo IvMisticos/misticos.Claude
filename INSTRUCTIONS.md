@@ -182,7 +182,7 @@ Questions are not instructions, answer and stop: no editing, committing, or push
 
 Do only quick, cheap work yourself, such as a single grep with the smallest result to answer a question, or a small one-off change. Delegate the rest, in parallel where it is independent.
 
-Before you fan out, name where shared code lives; code that would appear twice goes into a shared action or package. Give parallel agents areas that don't overlap, so they don't spend tokens on rebases and merge fixes.
+Before you fan out, name in each agent's prompt where shared code lives; code that would appear twice goes into a shared package or reusable GitHub Action. Give parallel agents areas that don't overlap, so they don't spend tokens on rebases and merge fixes.
 
 Run a workflow with a schema for each agent for structured, repetitive work with known steps where nothing needs your decision. Give the rest to a named teammate, including any workflow item that turns out to need one. Check the live state before you act on a saved result.
 
