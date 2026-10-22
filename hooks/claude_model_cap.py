@@ -139,7 +139,7 @@ def definition_model_decision(
     return with_model(tool_input, claude_alias(capped_model))
 
 
-def agent_decision(
+def agent_model_decision(
     tool_input: JsonObject, cwd: str, caller: JsonValue
 ) -> PreToolUseDecision | None:
     force_flag = os.environ.get("CLAUDE_CODE_SUBAGENT_MODEL_FORCE", "")
@@ -149,6 +149,20 @@ def agent_decision(
     if tool_input.get("model") and claude_alias(definition) is None:
         return requested_model_decision(tool_input, caller)
     return definition_model_decision(tool_input, definition, caller)
+
+
+def without_effort(tool_input: JsonObject) -> JsonObject:
+    return {key: value for key, value in tool_input.items() if key != "effort"}
+
+
+def agent_decision(
+    tool_input: JsonObject, cwd: str, caller: JsonValue
+) -> PreToolUseDecision | None:
+    agent_input = without_effort(tool_input)
+    decision = agent_model_decision(agent_input, cwd, caller)
+    if decision is None and agent_input != tool_input:
+        return {"updatedInput": agent_input}
+    return decision
 
 
 def session_decision(

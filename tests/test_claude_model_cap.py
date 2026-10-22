@@ -51,3 +51,10 @@ def test_requested_model_is_capped_when_the_definition_has_no_tier(
     (agents / "x.md").write_text("---\nname: x\nmodel: Inherit\n---\n")
     worker: JsonObject = {"subagent_type": "x", "model": "opus", "prompt": "build"}
     assert decided_model(worker, "claude-sonnet-5-5", tmp_path) == "sonnet"
+
+
+@pytest.mark.parametrize("tool_input", [SCOUT, WORKER], ids=["pinned", "unpinned"])
+def test_requested_effort_is_dropped(tmp_path: Path, tool_input: JsonObject) -> None:
+    decision = agent_decision({**tool_input, "effort": "max"}, str(tmp_path), None)
+    assert decision is not None
+    assert "effort" not in decision["updatedInput"]

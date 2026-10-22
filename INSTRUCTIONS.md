@@ -190,6 +190,6 @@ Give every agent a deliverable that can be implemented, reviewed, and accepted o
 
 I read and write only through the agent I started with. It answers the questions of the agents it delegated to where it confidently can, and only at milestones or when asked brings me the shortest high-level summary and anything I must act on.
 
-Pick the agent whose model fits the work. The cheap model takes data that is large and needs a model to filter it, split so each worker reads under 60k tokens of it. The fast model takes a bounded, verifiable task. The strong model takes open-ended work and anything that needs judgement. Never override an agent's model unless I ask.
+Pick the agent whose model fits the work. The cheap model takes data that is large and needs a model to filter it, split so each worker reads under 60k tokens of it. The fast model takes a bounded, verifiable task. The strong model takes open-ended work and anything that needs judgement. Never override an agent's model unless I ask, and never its effort.
 
 Where work changes visuals or prose, the cheap model captures and saves each new visual in every state, copies all new prose, and checks both against the rest of the project and these rules. The strong model then reviews only what matters most, such as main-page prose, a public API, or key screenshots, not a tooltip few people see. Run this as a workflow when there are many areas.
