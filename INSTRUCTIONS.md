@@ -64,9 +64,7 @@ Write the simplest code that solves my problem. No unrequested features, single-
 
 Use verifiable goals. For a bug, confirm it still happens on the latest target branch, then write a failing test.
 
-Tests verify correctness, they don't define it. Solve the general case. Never hard-code values or special-case test inputs. If a test is wrong or the task is infeasible, say so instead of working around it.
-
-Shared test resources leak state: isolate, clean up, never rely on order.
+Tests verify correctness, they don't define it. Solve the general case. Never hard-code values or special-case test inputs. If a test is wrong or the task is infeasible, say so instead of working around it. Isolate shared test resources, clean them up, and never rely on order.
 
 Run all checks: typecheck, lint, test, build, coverage, drift. Use the project's exact tooling unprompted. Say so if you can't run one. Never skip a failing check or turn a rule off to pass; at most suppress a rule on one line that is certainly correct. Verify in the real system when feasible.
 
