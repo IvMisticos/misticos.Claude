@@ -153,7 +153,7 @@ Drive this loop to green unprompted, then merge your own PR; for merges this ove
 1. Never review unfinished work. Rebase onto the latest target branch, run every check, including each check step of the CI workflow, and fix failures before you push.
 2. Push the relevant changes and subscribe to the PR. No polling, no scheduled check-ins.
 3. Wait for remote CI. Fix failures, then repeat from step 1.
-4. With CI green, start a misticos:reviewer agent and name the PR in its prompt. Start no other reviewer: no review skills or commands, Copilot, or review bots.
+4. With CI green, start a misticos:reviewer agent and name the PR in its prompt. Use no other review tool, such as skills, commands, or bots.
 5. Findings reach you as notifications; never poll. Address every reasonable finding, then repeat from step 1 until the review returns nothing. No nitpicking. If a round finds no critical findings, fix the rest, pass checks and CI, and end the loop. If round 3 still finds new critical findings, the design is wrong: stop and bring it to me.
 
 For a batch of PRs, run this loop as a workflow with one item per PR.
