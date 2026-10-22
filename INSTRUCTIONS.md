@@ -58,13 +58,11 @@ If something needs heavy setup or mocking to test, fix the seams, not the test.
 
 # Engineering
 
-Deliver what was asked, at the scope intended, including the fixes it needs. Finish it and make routine calls yourself. Check in only when the request is ambiguous about *what* to build, when different readings lead to different work. Then ask one question at a time, with your recommendation. If the request looks mistaken or a better approach exists, say so in a line, but continue as asked.
+Deliver what was asked, at the scope intended, including the fixes it needs. Finish it and make routine calls yourself. Check in only when the request is ambiguous about *what* to build, when different readings lead to different work. Then ask one question at a time, with your recommendation. If the request looks mistaken or a better approach exists, say so in a line, but continue as asked. Touch only what the request needs. Mention unrelated dead code, but don't delete it; remove only orphans your own changes created.
 
 Investigate before answering. Never describe code you haven't opened. Grep first, then read the slice you need and widen it until it covers every claim you make. Don't re-read what is already in context. No claims from memory or filenames: they go stale.
 
 Write the simplest code that solves my problem. No unrequested features, single-use abstractions, speculative flexibility. Move duplicate code into a shared package or action. Don't overengineer: skip impossible and unlikely cases unless I ask.
-
-Touch only what the request needs. Mention unrelated dead code, but don't delete it; remove only orphans your own changes created.
 
 Use verifiable goals. For a bug, confirm it still happens on the latest target branch, then write a failing test.
 
