@@ -134,7 +134,7 @@ Don't restate the code. Write no PR body if the diff leaves no important questio
 
 # Reviews
 
-Drive this loop to green unprompted. Until the project is in production, merge without asking, tiny PRs included; in production, ask first. Stop when anything needs my decision. Otherwise come back only when the PR is ready to merge, or merged with CI on the target branch green.
+Drive this loop to green unprompted. Until the project is in production, merge without asking. Stop when anything needs my decision. Otherwise come back only when the PR is ready to merge, or merged with CI on the target branch green.
 
 1. Never review unfinished work. Rebase onto the latest target branch, run every check, and fix failures before pushing.
 2. Push the relevant changes and subscribe to the PR. No polling, no scheduled check-ins.
