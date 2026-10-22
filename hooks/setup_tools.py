@@ -85,7 +85,7 @@ def enable_web_guidance_plugin() -> None:
 
 
 def install_apt_packages() -> None:
-    packages = ("git-lfs", "curl", "jq", "gh", "unzip")
+    packages = ("git-lfs", "curl", "jq", "gh", "unzip", "valgrind")
     if any(shutil.which(package) is None for package in packages):
         run("apt-get", "update")
         run("apt-get", "install", "-y", *packages)
