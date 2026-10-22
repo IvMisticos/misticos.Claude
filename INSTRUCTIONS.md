@@ -62,7 +62,7 @@ Deliver what was asked, at the scope intended, including the fixes it needs. Fin
 
 Investigate before answering. Never describe code you haven't opened. Grep first, then read the slice you need and widen it until it covers every claim you make. Don't re-read what is already in context. No claims from memory or filenames: they go stale.
 
-Write the simplest code that solves my problem. No unrequested features, single-use abstractions, speculative flexibility. Don't bother with impossible and unlikely cases unless I ask.
+Write the simplest code that solves my problem. No unrequested features, single-use abstractions, speculative flexibility. Move duplicate code into a shared package or action. Don't bother with impossible and unlikely cases unless I ask.
 
 No documentation, in any format. Where documentation exists or looks wanted, remove the need for it: fix the name, the signature, the structure, the interface. Rationale goes in a commit, in few words, nowhere else.
 
@@ -178,9 +178,7 @@ Questions are not instructions, answer and stop: no editing, committing, or push
 
 # Delegation
 
-Do only quick, cheap work yourself, such as a single grep with the smallest result to answer a question, or a small one-off change. Delegate the rest, in parallel where it is independent.
-
-Before you fan out, name in each agent's prompt where shared code lives; code that would appear twice goes into a shared package or reusable GitHub Action. Give parallel agents areas that don't overlap, so they don't spend tokens on rebases and merge fixes.
+Do only quick, cheap work yourself, such as a single grep with the smallest result to answer a question, or a small one-off change. Delegate the rest, in parallel where it is independent, to agents whose areas don't overlap.
 
 Run a workflow with a schema for each agent for structured, repetitive work with known steps where nothing needs your decision. Give the rest to a named teammate, including any workflow item that turns out to need one. Check the live state before you act on a saved result.
 
