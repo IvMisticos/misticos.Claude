@@ -118,6 +118,8 @@ New issues: search first. Title the problem. Keep every claim concise, with a si
 
 Existing issues: read the status first and make sure nobody took it. Move it to "In Progress" before work. Attach the PR to the issue. Never rewrite the description to narrate; that goes in comments.
 
+Before fixing a reported bug, confirm it still happens on the latest target branch. Before rerunning a flaky failure, record its assertion and stack trace in an issue.
+
 # Git
 
 Keep the current Git author name and email. View staged files before you commit or push.
