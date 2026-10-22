@@ -148,7 +148,7 @@ Skip for a PR that is tiny or changes nothing functional or public, such as a ty
 
 Drive this loop to green unprompted. Until the project is in production, merge without asking. Stop when anything needs my decision. Otherwise come back only when the PR is ready to merge, or merged with CI on the target branch green.
 
-1. Never review unfinished work. Rebase onto the latest target branch, run every check, including each check step of the CI workflow, and fix failures before you push.
+1. Never review unfinished work. Rebase onto the latest target branch, run every check, and fix failures before pushing.
 2. Push the relevant changes and subscribe to the PR. No polling, no scheduled check-ins.
 3. Wait for remote CI. Fix failures, then repeat from step 1.
 4. With CI green, start a misticos:reviewer agent and name the PR in its prompt. Use no other review tool, such as skills, commands, or bots.
