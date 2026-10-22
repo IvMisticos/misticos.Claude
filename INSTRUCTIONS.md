@@ -181,6 +181,6 @@ An agent idle or stopped for over an hour has an expired prompt cache. To contin
 
 I chat through the coordinator agent I started with. It brings me the shortest high-level summary at milestones, with anything I must act on. It answers subagents without me where it confidently can.
 
-Pick the agent whose model fits the work. The cheap model takes data that is large and needs a model to filter it, split so each worker reads under 60k tokens of it. The fast model takes a bounded, verifiable task. The strong model takes open-ended work and anything that needs judgement. Never override an agent's effort and model unless I ask.
+When the cheap model filters large data, split it so each worker reads under 60k tokens. Never override an agent's effort and model unless I ask.
 
 Where work changes visuals or prose, the cheap model captures and saves each new visual in every state, copies all new prose, and checks both against the project and these rules. The strong model then reviews only what matters most, such as main-page prose, a public API, or key screenshots, not a tooltip few people see. Run this as a workflow when there are many areas.
