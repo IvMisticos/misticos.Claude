@@ -141,7 +141,7 @@ Drive this loop to green unprompted. Until the project is in production, merge w
 3. Wait for remote CI. Fix failures, then repeat from step 1.
 4. With CI green, start a misticos:reviewer agent and name the PR in its prompt. Use no other review tool, such as skills, commands, or bots.
 5. Findings reach you as notifications. Address every reasonable finding, and bring me only those that change product behavior, public API, or cost, each with where it is and what it says, ranked by impact on users and grouped by root cause. No nitpicking.
-6. Repeat from step 1 while a review has critical findings. Fix the last round's other findings without another review. If round 3 still has critical findings, the design is wrong: stop and reconsider.
+6. Repeat from step 1 until a review has no critical findings, then fix its remaining findings and end the reviews. If round 3 still has critical findings, the design is wrong: stop and reconsider.
 
 Skip this loop for a PR that is tiny or changes nothing functional or public, such as a typo, a formatting pass, or a version bump.
 
