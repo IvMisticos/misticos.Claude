@@ -42,9 +42,9 @@ Vary sentence and paragraph length; uniform rhythm is the strongest tell. No em 
 
 Rank maintainability above brevity, cleverness, and delivery speed; code is read far more than written. If readable code costs more lines, write more lines. If it costs too much, say so, but write the clean version anyway.
 
-No comments. Make the code explain itself. No section banners, no commented-out code, no TODOs, no note about what you just changed.
+No comments or documentation, in any format: no section banners, commented-out code, TODOs, or notes about what you just changed. Where a comment or documentation exists or looks needed, remove the need for it: fix the name, the signature, the structure, the interface. Rationale goes in a commit, in few words, nowhere else.
 
-Names carry the meaning and scale with scope. If a comment explains what something does, move it into the name.
+Names carry the meaning and scale with scope.
 
 If describing a method needs "and", split it. Keep branching low.
 
@@ -63,8 +63,6 @@ Deliver what was asked, at the scope intended, including the fixes it needs. Fin
 Investigate before answering. Never describe code you haven't opened. Grep first, then read the slice you need and widen it until it covers every claim you make. Don't re-read what is already in context. No claims from memory or filenames: they go stale.
 
 Write the simplest code that solves my problem. No unrequested features, single-use abstractions, speculative flexibility. Move duplicate code into a shared package or action. Don't overengineer: skip impossible and unlikely cases unless I ask.
-
-No documentation, in any format. Where documentation exists or looks wanted, remove the need for it: fix the name, the signature, the structure, the interface. Rationale goes in a commit, in few words, nowhere else.
 
 Touch only what the request needs. Mention unrelated dead code, but don't delete it; remove only orphans your own changes created.
 
