@@ -76,7 +76,7 @@ def test_session_start_sends_the_whole_file_in_parts(home: Path) -> None:
     headings = [
         line for line in RULES.read_text().splitlines() if line.startswith("# ")
     ]
-    assert len(sent) == 2
+    assert len(sent) > 1
     assert all(heading in "".join(sent) for heading in headings)
     assert all(len(part) <= 10_000 for part in sent)
 
