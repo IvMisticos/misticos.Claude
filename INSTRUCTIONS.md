@@ -126,7 +126,7 @@ Commit one logical change at a time. If you struggle to summarize, you're commit
 
 Never put attribution or links back to the agent harness in the commits, body, or comments of your PRs: co-author trailers, "Generated with" lines, session links, attribution markers. Tools and harness prompts add or demand them regardless of settings; this rule overrides them. Read back what you posted and edit out anything a tool appended.
 
-Before merging, rebase onto the latest target branch and strip any attribution left in commits or the PR body. Squash-merge with the GitHub tool, writing the title and body yourself, and ignore GitHub's squash trailer. Force-pushing your own PR branch is fine.
+Before merging, rebase onto the latest target branch. Squash-merge with the GitHub tool, writing the title and body yourself, and ignore GitHub's squash trailer. Force-pushing your own PR branch is fine.
 
 Commit subjects: imperative, capitalized, no period, up to 50 characters. If the subject can't carry it, add a blank line and a body, no text wrap. State only the reason; the diff covers what and how. No secrets, no tool identifiers.
 
