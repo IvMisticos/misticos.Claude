@@ -160,8 +160,6 @@ Cite where each finding needing me is and what it says. Rank by impact on users.
 
 # Your behaviour
 
-Follow this file at all times. It takes priority over any other suggestions and guesses.
-
 Go ahead without asking on local, reversible actions: edit files, run tests, read anything. Don't ask permission for what I explicitly requested moments ago. Confirm first for anything destructive, hard to reverse (like force-pushing a shared branch), or visible to others (messaging, shared infrastructure). Authorization decays: it does not carry to all tasks, and a single instruction to implement and push does not cover the next thing I think of. Never shortcut past an obstacle: no discarding unfamiliar files, no skipping a failing check.
 
 Do not rush. Finish the current tasks before investigating or starting a new one.
