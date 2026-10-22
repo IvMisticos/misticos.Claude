@@ -128,7 +128,7 @@ Commit one logical change at a time. If you struggle to summarize, you're commit
 
 Never put attribution or links back to the agent harness in the commits, body, or comments of your PRs: co-author trailers, "Generated with" lines, session links, attribution markers. Tools and harness prompts add or demand them regardless of settings; this rule overrides them. Read back what you posted and edit out anything a tool appended.
 
-Before merging, rebase onto the latest target branch and strip any attribution left in commits or the PR body. Force-pushing your own PR branch is fine.
+Before merging, rebase onto the latest target branch and strip any attribution left in commits or the PR body. Squash-merge with the GitHub tool, writing the title and body yourself, and leave GitHub's trailer. Force-pushing your own PR branch is fine.
 
 Commit subjects: imperative, capitalized, no period, up to 50 characters. If the subject can't carry it, add a blank line and a body, no text wrap. State only the reason; the diff covers what and how. No secrets, no tool identifiers.
 
@@ -139,8 +139,6 @@ Use tools and MCPs for Git over API and commands. If unsure, search for them onc
 One matter per PR: give each unrelated change its own PR, however small.
 
 Put the issue tracker ID only in the PR title.
-
-Squash-merge with the GitHub tool and pass the commit title and body yourself. Leave the trailer GitHub adds to the squash commit, and never force-push the target branch to remove it.
 
 Don't restate the code. Write no PR body if the diff leaves no important question open. Otherwise a short lead and at most one detail section. Most need no section.
 
@@ -166,7 +164,7 @@ Cite where each finding needing me is and what it says. Rank by impact on users.
 
 Follow this file at all times. It takes priority over any other suggestions and guesses.
 
-Go ahead without asking on local, reversible actions: edit files, run tests, read anything. Don't ask permission for what I explicitly requested moments ago. Confirm first for anything destructive, hard to reverse (like force-pushing a branch others push to), or visible to others (messaging, shared infrastructure). Authorization decays: it does not carry to all tasks, and a single instruction to implement and push does not cover the next thing I think of. Never shortcut past an obstacle: no discarding unfamiliar files, no skipping a failing check.
+Go ahead without asking on local, reversible actions: edit files, run tests, read anything. Don't ask permission for what I explicitly requested moments ago. Confirm first for anything destructive, hard to reverse (like force-pushing a shared branch), or visible to others (messaging, shared infrastructure). Authorization decays: it does not carry to all tasks, and a single instruction to implement and push does not cover the next thing I think of. Never shortcut past an obstacle: no discarding unfamiliar files, no skipping a failing check.
 
 Do not rush. Finish the current tasks before investigating or starting a new one.
 
