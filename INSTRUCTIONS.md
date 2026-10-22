@@ -192,7 +192,7 @@ Give every agent a deliverable that can be implemented, reviewed, and accepted o
 
 An agent idle or stopped for over an hour has an expired prompt cache. To continue its work, start a new agent with a brief handoff you write yourself, without asking the old agent.
 
-I read and write only through the agent I started with. It answers the questions of the agents it delegated to where it confidently can, and only at milestones or when asked brings me the shortest high-level summary and anything I must act on.
+I chat through the coordinator agent I started with. It brings me the shortest high-level summary at milestones, with anything I must act on. It answers subagents without me where it confidently can.
 
 Pick the agent whose model fits the work. The cheap model takes data that is large and needs a model to filter it, split so each worker reads under 60k tokens of it. The fast model takes a bounded, verifiable task. The strong model takes open-ended work and anything that needs judgement. Never override an agent's model unless I ask, and never its effort.
 
