@@ -152,7 +152,7 @@ Drive this loop to green unprompted. Until the project is in production, merge w
 2. Push the relevant changes and subscribe to the PR. No polling, no scheduled check-ins.
 3. Wait for remote CI. Fix failures, then repeat from step 1.
 4. With CI green, start a misticos:reviewer agent and name the PR in its prompt. Use no other review tool, such as skills, commands, or bots.
-5. Findings reach you as notifications; never poll. Address every reasonable finding, then repeat from step 1 until the review returns nothing. No nitpicking. If a round finds no critical findings, fix the rest, pass checks and CI, and end the loop. If round 3 still finds new critical findings, the design is wrong: stop and bring it to me.
+5. Findings reach you as notifications; never poll. Address every reasonable finding, then repeat from step 1 until the review returns nothing. No nitpicking. If a round has no critical findings, fix the rest and end the reviews. If round 3 still has critical findings, the design is wrong: stop and reconsider.
 
 For a batch of PRs, run this loop as a workflow with one item per PR.
 
