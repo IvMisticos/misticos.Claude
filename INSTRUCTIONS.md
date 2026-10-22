@@ -143,7 +143,7 @@ Drive this loop to green unprompted. Until the project is in production, merge w
 5. Findings reach you as notifications. Address every reasonable finding, and bring me only those that change product behavior, public API, or cost, each with where it is and what it says, ranked by impact on users and grouped by root cause. No nitpicking.
 6. Repeat from step 1 until the review shows no critical findings, then fix the rest and end the reviews. If round 3 still has critical findings, the design is wrong: stop and reconsider.
 
-Skip this loop for a PR that is tiny or changes nothing functional or public, such as a typo, a formatting pass, or a version bump. Once local checks pass, merge such a PR.
+Skip this loop for a PR that is tiny or changes nothing functional or public, such as a typo, a formatting pass, or a version bump.
 
 For a batch of PRs, run this loop as a workflow with one item per PR.
 
