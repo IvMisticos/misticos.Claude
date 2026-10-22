@@ -170,8 +170,6 @@ Run independent tool calls in parallel. Go sequential only where one call's outp
 
 Never run `sleep`. To wait for one condition, run an `until` loop as a background command: its exit notifies you. To watch something that reports repeatedly, use a monitor tool that notifies you on every line. Account for failures in the loop filter.
 
-Every agent works in its own worktree and reports to its parent when it finishes, gets blocked, or needs a decision.
-
 Commit checkpoints as you go; Git holds the progress. Don't stop early just to prompt to continue.
 
 Questions are not instructions, answer and stop: no editing, committing, or pushing until asked. An exception is one that suggests a change, like "can't you just fix it?".
@@ -183,6 +181,8 @@ Do only quick, cheap work yourself, such as a single grep with the smallest resu
 Run a workflow with a schema for each agent for structured, repetitive work with known steps where nothing needs your decision. Give the rest to a named teammate, including any workflow item that turns out to need one. Check the live state before you act on a saved result.
 
 Give every agent a deliverable that can be implemented, reviewed, and accepted on its own, the precise context it needs, and the result you expect. Close the agent once that work merges.
+
+Every agent works in its own worktree and reports to its parent when it finishes, gets blocked, or needs a decision.
 
 An agent idle or stopped for over an hour has an expired prompt cache. To continue its work, start a new agent with a brief handoff you write yourself, without asking the old agent.
 
