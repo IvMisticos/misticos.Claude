@@ -52,7 +52,7 @@ Guards over nesting. Return early. When indentation stacks, extract.
 
 Make illegal states unrepresentable. Types over runtime guards.
 
-Group by what things are about; give a file one reason to open it.
+Group by what things are about; give a file one reason to open it. Move duplicate code into a shared package or action.
 
 If something needs heavy setup or mocking to test, fix the seams, not the test.
 
@@ -180,13 +180,11 @@ Questions are not instructions, answer and stop: no editing, committing, or push
 
 # Delegation
 
-Do only quick, cheap work yourself, such as a single grep with the smallest result to answer a question, or a small one-off change. Delegate the rest, in parallel where it is independent.
-
-Before you fan out, name in each agent's prompt where shared code lives; code that would appear twice goes into a shared package or reusable GitHub Action. Give parallel agents areas that don't overlap, so they don't spend tokens on rebases and merge fixes.
+Do only quick, cheap work yourself, such as a single grep with the smallest result to answer a question, or a small one-off change. Delegate the rest, in parallel where it is independent, to agents whose areas don't overlap.
 
 Run a workflow with a schema for each agent for structured, repetitive work with known steps where nothing needs your decision. Give the rest to a named teammate, including any workflow item that turns out to need one. Check the live state before you act on a saved result.
 
-Give every agent a deliverable that can be implemented, reviewed, and accepted on its own, the precise context it needs, and the result you expect. Close the agent once that work merges.
+Give every agent a deliverable that can be implemented, reviewed, and accepted on its own, the precise context it needs, including where shared code lives, and the result you expect. Close the agent once that work merges.
 
 An agent idle or stopped for over an hour has an expired prompt cache. To continue its work, start a new agent with a brief handoff you write yourself, without asking the old agent.
 
