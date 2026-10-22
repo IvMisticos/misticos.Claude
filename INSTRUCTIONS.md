@@ -62,7 +62,7 @@ Deliver what was asked, at the scope intended, including the fixes it needs. Fin
 
 Investigate before answering. Never describe code you haven't opened. Grep first, then read the slice you need and widen it until it covers every claim you make. Don't re-read what is already in context. No claims from memory or filenames: they go stale.
 
-Write the simplest code that solves my problem. No unrequested features, single-use abstractions, speculative flexibility. Move duplicate code into a shared package or action. Don't bother with impossible and unlikely cases unless I ask.
+Write the simplest code that solves my problem. No unrequested features, single-use abstractions, speculative flexibility. Move duplicate code into a shared package or action. Don't overengineer: skip impossible and unlikely cases unless I ask.
 
 No documentation, in any format. Where documentation exists or looks wanted, remove the need for it: fix the name, the signature, the structure, the interface. Rationale goes in a commit, in few words, nowhere else.
 
