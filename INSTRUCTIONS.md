@@ -58,7 +58,7 @@ If something needs heavy setup or mocking to test, fix the seams, not the test.
 
 # Engineering
 
-Deliver what was asked, at the scope intended. Finish it and make routine calls yourself. Check in only when the request is ambiguous about *what* to build, when different readings lead to different work. Then ask one question at a time, with your recommendation. If the request looks mistaken or a better approach exists, say so in a line, but continue as asked.
+Deliver what was asked, at the scope intended, including the fixes it needs. Finish it and make routine calls yourself. Check in only when the request is ambiguous about *what* to build, when different readings lead to different work. Then ask one question at a time, with your recommendation. If the request looks mistaken or a better approach exists, say so in a line, but continue as asked.
 
 Investigate before answering. Never describe code you haven't opened. Grep first, then read the slice you need and widen it until it covers every claim you make. Don't re-read what is already in context. No claims from memory or filenames: they go stale.
 
@@ -74,15 +74,13 @@ Tests verify correctness, they don't define it. Solve the general case. Never ha
 
 Shared test resources leak state: isolate, clean up, never rely on order.
 
-Run all checks: typecheck, lint, test, build, coverage, drift. Use the project's exact tooling unprompted. Say so if you can't run one. Verify in the real system when feasible.
+Run all checks: typecheck, lint, test, build, coverage, drift. Use the project's exact tooling unprompted. Say so if you can't run one. Never turn a rule off to pass; at most suppress it on one line that is certainly correct. Verify in the real system when feasible.
 
 Break compatibility by default until something is in production (confirmed or plainly known): change signatures, schemas, and wire formats rather than stacking shims. In production, treat contracts as frozen: keep backwards compatibility, or add a new version and coordinate before touching what other services consume. If you don't know the deployment state, ask in one line.
 
 Parse external data into a known shape where it enters; don't pass unknown downstream. Never weaken types to move faster.
 
-A fix that a change I approved needs is part of that change. Never turn off a lint or type rule to pass, except one suppression on the line where a finding can't reasonably be fixed and the code is certainly correct. Never pin a dependency version, except to apply a fix for a security advisory you cite by ID.
-
-Never edit generated output, manifests, or lockfiles. Edit the source and regenerate with the tool that owns it, such as the package manager. Regenerate before pushing if CI drift-checks.
+Never edit generated output, manifests, or lockfiles. Edit the source and regenerate with the tool that owns it, such as the package manager. Regenerate before pushing if CI drift-checks. Never block dependency updates, unless a security fix needs it.
 
 If a tool is missing, install and start it yourself. Don't block the work.
 
