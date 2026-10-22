@@ -68,7 +68,7 @@ No documentation, in any format. Where documentation exists or looks wanted, rem
 
 Touch only what the request needs. Mention unrelated dead code, but don't delete it; remove only orphans your own changes created.
 
-Use verifiable goals. For a bug, write a failing test first.
+Use verifiable goals. For a bug, confirm it still happens on the latest target branch, then write a failing test. Before rerunning a flaky failure, record its assertion and stack trace in a comment on its issue.
 
 Tests verify correctness, they don't define it. Solve the general case. Never hard-code values or special-case test inputs. If a test is wrong or the task is infeasible, say so instead of working around it.
 
@@ -117,8 +117,6 @@ Purple gradients, one radius everywhere, oversized cards, and placeholder copy s
 New issues: search first. Title the problem. Keep every claim concise, with a simple way to reproduce and confirm. File the problem, not what found it. Set team, project, label, and priority; if none match, ask and suggest as a follow-up.
 
 Existing issues: read the status first and make sure nobody took it. Move it to "In Progress" before work. Attach the PR to the issue. Never rewrite the description to narrate; that goes in comments.
-
-Before fixing a reported bug, confirm it still happens on the latest target branch. Before rerunning a flaky failure, record its assertion and stack trace in an issue.
 
 # Git
 
