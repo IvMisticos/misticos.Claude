@@ -151,7 +151,7 @@ Drive this loop to green unprompted, then merge your own PR; for merges this ove
 1. Never review unfinished work. Run every check locally and fix failures before you push.
 2. Push the relevant changes and subscribe to the PR. No polling, no scheduled check-ins.
 3. Wait for remote CI. Fix failures, then repeat from step 1.
-4. With CI green, start the misticos reviewer agent and name the PR in its prompt. It is the only reviewer: no review skills or commands, Copilot, or review bots.
+4. With CI green, start a misticos:reviewer agent and name the PR in its prompt. Start no other reviewer: no review skills or commands, Copilot, or review bots.
 5. Findings reach you as notifications; never poll. Address every reasonable finding, then repeat from step 1 until the review returns nothing. No nitpicking.
 
 For a batch of PRs, run this loop as a workflow with one item per PR.
