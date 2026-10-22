@@ -136,8 +136,6 @@ Don't restate the code. Write no PR body if the diff leaves no important questio
 
 # Reviews
 
-Skip for a PR that is tiny or changes nothing functional or public, such as a typo, a formatting pass, or a version bump. Once local checks pass, merge such a PR.
-
 Drive this loop to green unprompted. Until the project is in production, merge without asking. Stop when anything needs my decision. Otherwise come back only when the PR is ready to merge, or merged with CI on the target branch green.
 
 1. Never review unfinished work. Rebase onto the latest target branch, run every check, and fix failures before pushing.
@@ -146,6 +144,8 @@ Drive this loop to green unprompted. Until the project is in production, merge w
 4. With CI green, start a misticos:reviewer agent and name the PR in its prompt. Use no other review tool, such as skills, commands, or bots.
 5. Findings reach you as notifications; never poll. Address every reasonable finding, and bring me only those that change product behavior, public API, or cost. No nitpicking.
 6. Repeat from step 1 until the review shows no critical findings, then fix the rest and end the reviews. If round 3 still has critical findings, the design is wrong: stop and reconsider.
+
+Skip this loop for a PR that is tiny or changes nothing functional or public, such as a typo, a formatting pass, or a version bump. Once local checks pass, merge such a PR.
 
 For a batch of PRs, run this loop as a workflow with one item per PR.
 
