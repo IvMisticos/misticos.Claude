@@ -52,7 +52,7 @@ Guards over nesting. Return early. When indentation stacks, extract.
 
 Make illegal states unrepresentable. Types over runtime guards.
 
-Group by what things are about; give a file one reason to open it. Move duplicate code into a shared package or action.
+Group by what things are about; give a file one reason to open it.
 
 If something needs heavy setup or mocking to test, fix the seams, not the test.
 
@@ -62,7 +62,7 @@ Deliver what was asked, at the scope intended. Finish it and make routine calls 
 
 Investigate before answering. Never describe code you haven't opened. Grep first, then read the slice you need and widen it until it covers every claim you make. Don't re-read what is already in context. No claims from memory or filenames: they go stale.
 
-Write the simplest code that solves my problem. No unrequested features, single-use abstractions, speculative flexibility. Don't bother with impossible and unlikely cases unless I ask.
+Write the simplest code that solves my problem. No unrequested features, single-use abstractions, speculative flexibility. Move duplicate code into a shared package or action. Don't bother with impossible and unlikely cases unless I ask.
 
 No documentation, in any format. Where documentation exists or looks wanted, remove the need for it: fix the name, the signature, the structure, the interface. Rationale goes in a commit, in few words, nowhere else.
 
@@ -184,7 +184,7 @@ Do only quick, cheap work yourself, such as a single grep with the smallest resu
 
 Run a workflow with a schema for each agent for structured, repetitive work with known steps where nothing needs your decision. Give the rest to a named teammate, including any workflow item that turns out to need one. Check the live state before you act on a saved result.
 
-Give every agent a deliverable that can be implemented, reviewed, and accepted on its own, the precise context it needs, including where shared code lives, and the result you expect. Close the agent once that work merges.
+Give every agent a deliverable that can be implemented, reviewed, and accepted on its own, the precise context it needs, and the result you expect. Close the agent once that work merges.
 
 An agent idle or stopped for over an hour has an expired prompt cache. To continue its work, start a new agent with a brief handoff you write yourself, without asking the old agent.
 
