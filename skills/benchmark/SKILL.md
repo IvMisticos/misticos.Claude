@@ -7,6 +7,7 @@ description: Where the `queue` command exists, run every benchmark, profiler run
 
 - `--cores N` gives the benchmark N cores. Use 1 for native code. Use 2 for .NET, the JVM, Bun and Node, because their JIT compiler and garbage collector run threads beside the measured code. Use more for load tests and parallel benchmarks.
 - `--alone` also waits for running builds to finish and holds new builds until the benchmark ends. Builds on other cores still share the CPU cache and memory bandwidth, so use `--alone` when you compare wall-clock times and expect small differences.
+- `--runs N` runs the command N times in one hold, so no other benchmark runs between them.
 
 Wrap a compound command in a shell: `queue bench -- bash -c 'cd perf && bun run compare.ts'`.
 
