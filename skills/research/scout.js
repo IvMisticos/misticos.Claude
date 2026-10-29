@@ -81,13 +81,14 @@ function briefFor(angle, research) {
     `Sources to avoid: ${research.avoid.join('; ') || 'none named'}.`,
     `Already found, so search past these: ${angle.known?.join('; ') || 'nothing yet'}.`,
     'Search in any language the scope allows. Write the findings in English, and keep quotes in their original language.',
-    'If you reach the web search limit, stop searching, set reachedSearchLimit, and return what you have.',
+    'If a search fails because of the web search limit, even your first one, stop searching, set reachedSearchLimit, and return what you have.',
   ].join('\n\n')
 }
 
 const research = parseResearch(args)
 const findingsByAngle = {}
-const unfinishedAngles = new Set()
+const limitedAngles = new Set()
+const failedAngles = new Set()
 let searchLimitReached = false
 let nextAngleIndex = 0
 
@@ -109,27 +110,33 @@ async function scoutNextAngles() {
   while (nextAngleIndex < research.angles.length) {
     const angle = research.angles[nextAngleIndex++]
     if (searchLimitReached) {
-      unfinishedAngles.add(angle)
+      limitedAngles.add(angle)
       continue
     }
     const findings = await scout(angle)
     if (!findings) {
-      unfinishedAngles.add(angle)
+      failedAngles.add(angle)
       continue
     }
     findingsByAngle[angle.name] = findings
     if (findings.reachedSearchLimit) {
       searchLimitReached = true
-      unfinishedAngles.add(angle)
+      limitedAngles.add(angle)
     }
   }
 }
 
 await parallel(Array.from({ length: SCOUTS_AT_ONCE }, () => scoutNextAngles))
 
-const unfinishedInOrder = research.angles.filter(angle => unfinishedAngles.has(angle))
-if (unfinishedInOrder.length) {
-  log(`${unfinishedInOrder.length} angles are unfinished. Run them again in a later turn.`)
+function inAngleOrder(angles) {
+  return research.angles.filter(angle => angles.has(angle))
 }
 
-return { findingsByAngle, unfinishedAngles: unfinishedInOrder }
+if (limitedAngles.size) {
+  log(`${limitedAngles.size} angles reached the search limit. Run them again in a later turn.`)
+}
+if (failedAngles.size) {
+  log(`${failedAngles.size} angles failed.`)
+}
+
+return { findingsByAngle, limitedAngles: inAngleOrder(limitedAngles), failedAngles: inAngleOrder(failedAngles) }
