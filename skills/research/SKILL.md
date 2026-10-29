@@ -31,16 +31,17 @@ Run `scout.js` from this skill's folder with the Workflow tool, through `scriptP
 
 - `goal`: what the user wants to learn, and what they will do with it,
 - `scope`: what is in and out of scope,
+- `trust`: a list of sources to prefer,
 - `avoid`: a list of sources to avoid,
 - `angles`: a list of `{ name, question }`.
 
-All agents in a turn share one limit on web searches. The script stops starting scouts after the first one reaches it, and returns `findingsByAngle` and `unfinishedAngles`. Run the unfinished angles in a later Workflow. Never write a note without findings.
+All agents in a turn share one limit on web searches. The script stops starting scouts after the first one reaches it, and returns `findingsByAngle` and `unfinishedAngles`. An angle that reached the limit is in both, with the findings it got before it stopped. The limit resets each turn, so tell the user which angles are unfinished, and run them in your next turn. Add their new findings to the notes you saved. Never write a note without findings.
 
-Save the findings of each scout in `<folder>/<topic>/notes/<angle>.md`. The folder is the project's shared folder if it has one, and the working directory if not. Keep every number, quote, and URL, and remove repeats.
+Save the findings of each scout in `<folder>/<topic>/notes/<angle>.md`. The folder is one the user names, or the working directory. Keep every number, quote, and URL, and remove repeats.
 
 ## 4. Fill gaps
 
-Read the notes. List what is missing, what is weak, and where two notes disagree. Run new scouts for these gaps in the same way. Repeat until a round adds nothing that changes the report.
+Read the notes. List what is missing, what is weak, and where two notes disagree. Run new scouts for these gaps in the same way, in a new turn if the search limit stopped the last one. Repeat until a round adds nothing that changes the report.
 
 ## 5. Report
 
