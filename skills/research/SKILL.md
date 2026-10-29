@@ -33,15 +33,15 @@ Run `scout.js` from this skill's folder with the Workflow tool, through `scriptP
 - `scope`: what is in and out of scope,
 - `trust`: a list of sources to prefer,
 - `avoid`: a list of sources to avoid,
-- `angles`: a list of `{ name, question }`.
+- `angles`: a list of `{ name, question, known }`, where `known` lists the URLs an earlier run of the angle already found.
 
-All agents in a turn share one limit on web searches. The script stops starting scouts after the first one reaches it, and returns `findingsByAngle` and `unfinishedAngles`. An angle that reached the limit is in both, with the findings it got before it stopped. The limit resets each turn, so tell the user which angles are unfinished, and run them in your next turn. Add their new findings to the notes you saved. Never write a note without findings.
+All agents in a turn share one limit on web searches. The script stops starting scouts after the first one reaches it, and returns `findingsByAngle` and `unfinishedAngles`. An angle that reached the limit is in both, with the findings it got before it stopped. The limit resets each turn. If any angle is unfinished, save the notes, tell the user which angles are left, ask them to reply so you can continue, and end your turn. In the next turn, run the unfinished angles with the URLs from their notes as `known`, and add the new findings to those notes. Go on to step 4 only when no angle is unfinished. Never write a note without findings.
 
 Save the findings of each scout in `<folder>/<topic>/notes/<angle>.md`. The folder is one the user names, or the working directory. Keep every number, quote, and URL, and remove repeats.
 
 ## 4. Fill gaps
 
-Read the notes. List what is missing, what is weak, and where two notes disagree. Run new scouts for these gaps in the same way, in a new turn if the search limit stopped the last one. Repeat until a round adds nothing that changes the report.
+Read the notes. List what is missing, what is weak, and where two notes disagree. Run new scouts for these gaps in the same way. Repeat until a round adds nothing that changes the report.
 
 ## 5. Report
 

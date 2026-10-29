@@ -44,11 +44,24 @@ const FINDINGS_SCHEMA = {
   required: ['facts', 'numbers', 'quotes', 'notFound', 'reachedSearchLimit'],
 }
 
+function isAngle(angle) {
+  return typeof angle?.name === 'string'
+    && typeof angle.question === 'string'
+    && (angle.known === undefined || Array.isArray(angle.known))
+}
+
+function hasUniqueNames(angles) {
+  return new Set(angles.map(angle => angle.name)).size === angles.length
+}
+
 function parseResearch(input) {
   const trust = input?.trust ?? []
   const avoid = input?.avoid ?? []
-  if (typeof input?.goal !== 'string' || !Array.isArray(input.angles) || !Array.isArray(trust) || !Array.isArray(avoid)) {
-    throw new Error('args needs goal: string, angles: [{ name, question }], and optional trust and avoid lists')
+  if (typeof input?.goal !== 'string' || !Array.isArray(trust) || !Array.isArray(avoid)) {
+    throw new Error('args needs goal: string, and optional trust and avoid lists')
+  }
+  if (!Array.isArray(input.angles) || !input.angles.every(isAngle) || !hasUniqueNames(input.angles)) {
+    throw new Error('args needs angles: [{ name, question, known? }] with unique names')
   }
   return {
     goal: input.goal,
@@ -66,7 +79,8 @@ function briefFor(angle, research) {
     `Scope: ${research.scope}`,
     `Sources to prefer: ${research.trust.join('; ') || 'none named'}.`,
     `Sources to avoid: ${research.avoid.join('; ') || 'none named'}.`,
-    'Write the findings in English.',
+    `Already found, so search past these: ${angle.known?.join('; ') || 'nothing yet'}.`,
+    'Search in any language the scope allows. Write the findings in English, and keep quotes in their original language.',
     'If you reach the web search limit, stop searching, set reachedSearchLimit, and return what you have.',
   ].join('\n\n')
 }
