@@ -215,4 +215,4 @@ if [ -z "${ALLOW_GIT_IDENTITY_CHANGE-}" ]; then
   fi
 fi
 
-exec "$git" "$@"
+exec_real_tool git "$git" "$@"
