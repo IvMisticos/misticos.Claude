@@ -4,7 +4,7 @@ import sys
 from pathlib import Path
 
 import pytest
-from conftest import SHIMS, FakeBin, ShimRun, ShimRunner
+from conftest import SHIMS, FakeBin, ShimRun, ShimRunner, WrappedShimRunner
 
 PRINT_ENVIRONMENT = """#!/usr/bin/env bash
 echo "PATH=$PATH"
@@ -48,6 +48,13 @@ def test_tool_sees_the_callers_environment(run_cargo: ShimRun) -> None:
     seen = dict(line.split("=", 1) for line in result.stdout.splitlines())
     assert seen["PATH"].split(os.pathsep)[0] == str(SHIMS)
     assert seen["VIRTUAL_ENV"] == os.environ.get("VIRTUAL_ENV", "")
+
+
+def test_reaches_cargo_past_a_wrapper_that_runs_the_shim(
+    wrapped_shim_runner: WrappedShimRunner,
+) -> None:
+    run = wrapped_shim_runner("cargo", '#!/usr/bin/env bash\necho "ran $*"\n', "")
+    assert run("--version").stdout == "ran --version\n"
 
 
 @pytest.fixture

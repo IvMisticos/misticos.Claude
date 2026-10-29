@@ -20,6 +20,7 @@ real_tool() {
   handed_off=":$(directories_handed_off_by_this_process "$name"):"
   IFS=: read -ra dirs <<< "${REAL_TOOL_PATH:-$PATH}"
   for dir in "${dirs[@]}"; do
+    dir=${dir%/}
     [[ $handed_off == *":$dir:"* ]] && continue
     if [ -f "$dir/$name" ] && [ -x "$dir/$name" ] && ! is_shim_dir "$dir"; then
       printf '%s\n' "$dir/$name"
@@ -30,10 +31,15 @@ real_tool() {
   return 127
 }
 
-exec_real_tool() {
+record_handoff() {
   local name=$1 tool=$2 handoff
-  shift 2
   handoff=$(handoff_variable "$name")
   export "$handoff=$$:$(directories_handed_off_by_this_process "$name"):$(dirname "$tool")"
+}
+
+exec_real_tool() {
+  local name=$1 tool=$2
+  shift 2
+  record_handoff "$name" "$tool"
   exec "$tool" "$@"
 }

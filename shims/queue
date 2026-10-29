@@ -11,6 +11,7 @@ if [ "${1:-}" = tool ]; then
   if [ -n "${HARNESS_QUEUE_HELD:-}" ]; then
     exec_real_tool "$2" "$real" "${@:3}"
   fi
+  record_handoff "$2" "$real"
   set -- tool "$real" "${@:3}"
 fi
 

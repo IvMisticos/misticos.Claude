@@ -5,9 +5,9 @@ from pathlib import Path
 import pytest
 from conftest import (
     SHIMS,
-    FakeBin,
     ShimRun,
     ShimRunner,
+    WrappedShimRunner,
     without_session_variables,
 )
 
@@ -243,10 +243,6 @@ def test_runs_identity_changes_in_a_repository_named_by_git_dir(tmp_path: Path) 
     assert result.returncode == 0
 
 
-WRAPPER_GIT = f"""#!/usr/bin/env bash
-exec "{SHIMS / "git"}" "$@"
-"""
-
 NESTING_GIT = """#!/usr/bin/env bash
 if [ "$1" = outer ]; then
   git inner
@@ -256,40 +252,16 @@ fi
 """
 
 
-@pytest.fixture
-def run_git_behind_wrapper(tmp_path: Path, fake_bin: FakeBin) -> ShimRun:
-    wrapper = tmp_path / "wrapper"
-    wrapper.mkdir()
-    (wrapper / "git").write_text(WRAPPER_GIT)
-    (wrapper / "git").chmod(0o755)
-    real_bin = fake_bin("git", NESTING_GIT)
-    environment = without_session_variables(os.environ)
-    environment["PATH"] = os.pathsep.join(
-        [str(wrapper), str(real_bin), "/usr/bin", "/bin"]
-    )
-
-    def run(
-        *arguments: str, **extra_environment: str
-    ) -> subprocess.CompletedProcess[str]:
-        return subprocess.run(
-            [SHIMS / "git", *arguments],
-            env={**environment, **extra_environment},
-            capture_output=True,
-            text=True,
-            check=False,
-            timeout=10,
-        )
-
-    return run
-
-
+@pytest.mark.parametrize("wrapper_entry_end", ["", "/"])
 def test_reaches_git_past_a_wrapper_that_runs_the_shim(
-    run_git_behind_wrapper: ShimRun,
+    wrapped_shim_runner: WrappedShimRunner, wrapper_entry_end: str
 ) -> None:
-    assert run_git_behind_wrapper("status").stdout == "ran status\n"
+    run = wrapped_shim_runner("git", NESTING_GIT, wrapper_entry_end)
+    assert run("status").stdout == "ran status\n"
 
 
 def test_resolves_git_again_for_a_child_of_git(
-    run_git_behind_wrapper: ShimRun,
+    wrapped_shim_runner: WrappedShimRunner,
 ) -> None:
-    assert run_git_behind_wrapper("outer").stdout == "ran inner\n"
+    run = wrapped_shim_runner("git", NESTING_GIT, "")
+    assert run("outer").stdout == "ran inner\n"
