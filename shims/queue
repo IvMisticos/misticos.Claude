@@ -6,7 +6,6 @@ bin_dir=$(cd "$(dirname "$0")" && pwd -P)
 . "$bin_dir/lib/real_tool.sh"
 mise_shims="${MISE_DATA_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/mise}/shims"
 REAL_TOOL_PATH="$PATH:$HOME/.local/bin:$mise_shims"
-uv=$(real_tool uv)
 
 find_tool_command() {
   local name=$1 tool
@@ -19,6 +18,9 @@ find_tool_command() {
   fi
 }
 
+find_tool_command uv
+uv_command=("${tool_command[@]}")
+
 if [ "${1:-}" = tool ]; then
   find_tool_command "$2"
   if [ -n "${HARNESS_QUEUE_HELD:-}" ]; then
@@ -28,12 +30,16 @@ if [ "${1:-}" = tool ]; then
   set -- tool "${tool_command[@]}" "${@:3}"
 fi
 
+run_uv_outside_projects() {
+  (cd / && "${uv_command[@]}" "$@")
+}
+
 find_python() {
-  "$uv" python find --no-config --system '>=3.13'
+  run_uv_outside_projects python find --no-config --system '>=3.13'
 }
 
 if ! python=$(find_python 2>/dev/null); then
-  "$uv" --directory / python install --no-bin 3.13 >&2
+  run_uv_outside_projects python install --no-bin 3.13 >&2
   python=$(find_python)
 fi
 exec "$python" "$bin_dir/../hooks/work_queue.py" "$@"

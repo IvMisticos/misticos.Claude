@@ -23,10 +23,10 @@ UV_WITHOUT_PYTHON = f"""#!/usr/bin/env bash
 here=$(dirname "$0")
 case " $* " in
   *" python install "*)
-    echo "$*" > "$here/uv-install-arguments"
+    echo "$PWD" > "$here/uv-install-directory"
     ;;
   *" python find "*)
-    [ -e "$here/uv-install-arguments" ] || exit 2
+    [ -e "$here/uv-install-directory" ] || exit 2
     echo {sys.executable}
     ;;
 esac
@@ -84,8 +84,7 @@ def test_missing_python_installs_outside_the_project(
     result = run_cargo("--version")
 
     assert result.returncode == 0, result.stderr
-    install_arguments = (bin_dir / "uv-install-arguments").read_text().split()
-    assert install_arguments[:2] == ["--directory", "/"]
+    assert (bin_dir / "uv-install-directory").read_text() == "/\n"
 
 
 @pytest.fixture
@@ -132,6 +131,28 @@ def test_runs_a_missing_tool_through_mise(
 
     assert result.returncode == 0, result.stderr
     assert result.stdout == "mise --quiet x bun -- bun --version\n"
+
+
+MISE_WITH_UV_AND_PYTHON = f"""#!/usr/bin/env bash
+case " $* " in
+  *" python find "*) echo {sys.executable} ;;
+  *) echo "mise $*" ;;
+esac
+"""
+
+
+def test_runs_uv_through_mise_when_uv_is_missing(home: Path, fake_bin: FakeBin) -> None:
+    mise_dir = fake_bin("mise", MISE_WITH_UV_AND_PYTHON)
+    environment = without_session_variables(os.environ)
+    environment.update(
+        HOME=str(home),
+        PATH=os.pathsep.join([str(SHIMS), str(mise_dir), "/usr/bin", "/bin"]),
+    )
+
+    result = run_shim("uv", environment, "--version")
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == "mise --quiet x uv -- uv --version\n"
 
 
 def test_reports_a_tool_that_mise_cannot_run_either(
