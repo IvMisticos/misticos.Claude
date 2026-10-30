@@ -49,7 +49,22 @@ echo "$(basename "$0") $*" >> "$HOME/calls"
 FAKE_MISE = """#!/usr/bin/env bash
 echo "mise $* in $(basename "$PWD")" >> "$HOME/calls"
 [ "$1 $(basename "$PWD")" != "${MISE_FAILS_AT-}" ] || exit 1
+if [ "$1 $2" = "config get" ]; then
+  grep -qx "$4" "$HOME/global-mise-tools" 2>/dev/null
+fi
 """
+REGISTER_PLUGIN_TOOLS = [
+    f"mise config set --global tools.{name} {version} in home"
+    for name, version in (
+        ("uv", "latest"),
+        ("gh", "latest"),
+        ("jq", "latest"),
+        ("git-lfs", "latest"),
+        ("bun", "latest"),
+        ("dotnet", "lts"),
+    )
+]
+INSTALL_UP_FRONT = "mise install uv gh jq git-lfs in home"
 
 
 class SetUpTools(Protocol):
@@ -94,6 +109,14 @@ def set_up_tools(home: Path, fake_bin: FakeBin, hooks: Path) -> SetUpTools:
     return set_up
 
 
+def mise_calls_in_projects(calls: list[str]) -> list[str]:
+    return [
+        call
+        for call in calls
+        if call.startswith("mise ") and not call.endswith(" in home")
+    ]
+
+
 def write_json(path: Path, value: JsonValue) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(value))
@@ -125,7 +148,7 @@ def test_cloud_tools_install_after_a_plugin_failure(set_up_tools: SetUpTools) ->
     status, calls = set_up_tools(CLAUDE_FAILS_AT="install", CCR_AGENT_PROXY_ENABLED="1")
     assert status != 0
     assert calls[:2] == [INSTALL, REAPPLY_SETTINGS]
-    assert any(call.startswith("curl ") for call in calls[2:])
+    assert INSTALL_UP_FRONT in calls[2:]
 
 
 def test_installed_plugin_is_left_alone(set_up_tools: SetUpTools, home: Path) -> None:
@@ -155,7 +178,7 @@ def test_cloud_session_installs_mise_tools_of_each_repo(
     _, calls = set_up_tools(
         CCR_AGENT_PROXY_ENABLED="1", CLAUDE_PROJECT_DIR=str(projects)
     )
-    assert [call for call in calls if call.startswith("mise ")] == [
+    assert mise_calls_in_projects(calls) == [
         "mise trust --all --quiet in with-mise",
         "mise install in with-mise",
         "mise trust --all --quiet in with-tool-versions",
@@ -176,7 +199,7 @@ def test_failed_mise_install_is_retried_once(
         MISE_FAILS_AT="install repo",
     )
     assert status != 0
-    assert [call for call in calls if call.startswith("mise ")] == [
+    assert mise_calls_in_projects(calls) == [
         "mise trust --all --quiet in repo",
         "mise install in repo",
         "mise install in repo",
@@ -197,8 +220,43 @@ def test_failed_repo_does_not_stop_the_next_one(
         MISE_FAILS_AT="trust broken",
     )
     assert status != 0
-    assert [call for call in calls if call.startswith("mise ")] == [
+    assert mise_calls_in_projects(calls) == [
         "mise trust --all --quiet in broken",
         "mise trust --all --quiet in working",
         "mise install in working",
     ]
+
+
+@pytest.mark.skipif(os.geteuid() != 0, reason="cloud tools install only as root")
+def test_cloud_session_adds_plugin_tools_to_the_global_mise_config(
+    set_up_tools: SetUpTools, home: Path
+) -> None:
+    _, calls = set_up_tools(CCR_AGENT_PROXY_ENABLED="1")
+    registered = [call for call in calls if call.startswith("mise config set ")]
+    assert registered == REGISTER_PLUGIN_TOOLS
+    assert INSTALL_UP_FRONT in calls
+    assert (home / ".config" / "mise" / "config.toml").is_file()
+
+
+@pytest.mark.skipif(os.geteuid() != 0, reason="cloud tools install only as root")
+def test_cloud_session_keeps_global_mise_tools_the_user_chose(
+    set_up_tools: SetUpTools, home: Path
+) -> None:
+    (home / "global-mise-tools").write_text("tools.dotnet\ntools.uv\n")
+    _, calls = set_up_tools(CCR_AGENT_PROXY_ENABLED="1")
+    registered = [call for call in calls if call.startswith("mise config set ")]
+    assert registered == [
+        call
+        for call in REGISTER_PLUGIN_TOOLS
+        if " tools.dotnet " not in call and " tools.uv " not in call
+    ]
+
+
+@pytest.mark.skipif(os.geteuid() != 0, reason="cloud tools install only as root")
+def test_cloud_session_links_dotnet_from_mise(
+    set_up_tools: SetUpTools, home: Path, tmp_path: Path
+) -> None:
+    mise_data = tmp_path / "mise-data"
+    set_up_tools(CCR_AGENT_PROXY_ENABLED="1", MISE_DATA_DIR=str(mise_data))
+    dotnet_link = home / ".local" / "bin" / "dotnet"
+    assert dotnet_link.readlink() == mise_data / "dotnet-root" / "dotnet"

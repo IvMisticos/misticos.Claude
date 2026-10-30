@@ -21,7 +21,15 @@ WEB_GUIDANCE_NAME = "modern-web-guidance"
 WEB_GUIDANCE_PLUGIN = f"{WEB_GUIDANCE_NAME}@googlechrome"
 WEB_GUIDANCE_MARKETPLACE = "GoogleChrome/modern-web-guidance"
 CLOUD_SESSION_MARK = "CCR_AGENT_PROXY_ENABLED"
-MISE = HOME / ".local" / "bin" / "mise"
+LOCAL_BIN = HOME / ".local" / "bin"
+MISE = LOCAL_BIN / "mise"
+MISE_TOOLS_INSTALLED_UP_FRONT = {
+    "uv": "latest",
+    "gh": "latest",
+    "jq": "latest",
+    "git-lfs": "latest",
+}
+MISE_TOOLS_INSTALLED_ON_FIRST_USE = {"bun": "latest", "dotnet": "lts"}
 MISE_CONFIG_PATTERNS = (
     "mise.toml",
     "mise.*.toml",
@@ -38,8 +46,25 @@ MISE_CONFIG_PATTERNS = (
     ".tool-versions",
 )
 
+
+def mise_data_dir() -> Path:
+    if data_dir := os.environ.get("MISE_DATA_DIR"):
+        return Path(data_dir)
+    return Path(os.environ.get("XDG_DATA_HOME") or HOME / ".local" / "share") / "mise"
+
+
+def mise_global_config() -> Path:
+    if config_file := os.environ.get("MISE_GLOBAL_CONFIG_FILE"):
+        return Path(config_file)
+    config_home = Path(os.environ.get("XDG_CONFIG_HOME") or HOME / ".config")
+    config_dir = os.environ.get("MISE_CONFIG_DIR") or config_home / "mise"
+    return Path(config_dir) / "config.toml"
+
+
+DOTNET_ROOT = mise_data_dir() / "dotnet-root"
+MISE_GLOBAL_CONFIG = mise_global_config()
 TOOLCHAIN_BIN_DIRS = (
-    HOME / ".local" / "bin",
+    LOCAL_BIN,
     HOME / ".bun" / "bin",
     HOME / ".dotnet" / "tools",
 )
@@ -50,7 +75,7 @@ TOOLCHAIN_PATH = os.pathsep.join(
 
 def run(*command: str, cwd: Path | None = None) -> None:
     environment = {
-        "DOTNET_ROOT": str(HOME / ".dotnet"),
+        "DOTNET_ROOT": str(DOTNET_ROOT),
         "MISE_YES": "1",
         **os.environ,
         "PATH": TOOLCHAIN_PATH,
@@ -102,20 +127,47 @@ def enable_web_guidance_plugin() -> None:
 
 
 def install_apt_packages() -> None:
-    packages = ("git-lfs", "curl", "jq", "gh", "unzip", "valgrind")
+    packages = ("curl", "unzip", "valgrind")
     if any(shutil.which(package) is None for package in packages):
         run("apt-get", "update")
         run("apt-get", "install", "-y", *packages)
 
 
-def install_bun() -> None:
-    if shutil.which("bun") is None and not (HOME / ".bun" / "bin" / "bun").exists():
-        run_pipeline("curl -fsSL https://bun.sh/install | bash -s canary")
-
-
 def install_mise() -> None:
     if shutil.which("mise") is None and not MISE.exists():
         run_pipeline("curl -fsSL https://mise.run | sh")
+
+
+def mise() -> str:
+    return shutil.which("mise", path=TOOLCHAIN_PATH) or str(MISE)
+
+
+def has_global_mise_tool(name: str) -> bool:
+    lookup = subprocess.run(
+        (mise(), "config", "get", "--global", f"tools.{name}"),
+        capture_output=True,
+        check=False,
+        cwd=HOME,
+    )
+    return lookup.returncode == 0
+
+
+def register_global_mise_tool(name: str, version: str) -> None:
+    if not has_global_mise_tool(name):
+        run(mise(), "config", "set", "--global", f"tools.{name}", version, cwd=HOME)
+
+
+def create_global_mise_config() -> None:
+    MISE_GLOBAL_CONFIG.parent.mkdir(parents=True, exist_ok=True)
+    MISE_GLOBAL_CONFIG.touch()
+
+
+def install_global_mise_tools() -> None:
+    plugin_tools = MISE_TOOLS_INSTALLED_UP_FRONT | MISE_TOOLS_INSTALLED_ON_FIRST_USE
+    create_global_mise_config()
+    for name, version in plugin_tools.items():
+        register_global_mise_tool(name, version)
+    run(mise(), "install", *MISE_TOOLS_INSTALLED_UP_FRONT, cwd=HOME)
 
 
 def project_dir() -> Path:
@@ -136,12 +188,11 @@ def directories_with_mise_config() -> list[Path]:
 
 
 def install_mise_tools(directory: Path) -> None:
-    mise = shutil.which("mise", path=TOOLCHAIN_PATH) or str(MISE)
-    run(mise, "trust", "--all", "--quiet", cwd=directory)
+    run(mise(), "trust", "--all", "--quiet", cwd=directory)
     try:
-        run(mise, "install", cwd=directory)
+        run(mise(), "install", cwd=directory)
     except subprocess.CalledProcessError:
-        run(mise, "install", cwd=directory)
+        run(mise(), "install", cwd=directory)
 
 
 def install_mise_tools_of_projects() -> None:
@@ -155,26 +206,20 @@ def install_mise_tools_of_projects() -> None:
         sys.exit(f"mise install failed in {', '.join(failed)}")
 
 
-def install_dotnet() -> None:
-    dotnet = HOME / ".dotnet" / "dotnet"
-    if not dotnet.exists():
-        run_pipeline(
-            "curl -fsSL https://dot.net/v1/dotnet-install.sh | bash -s -- --channel LTS"
-        )
-    local_bin = HOME / ".local" / "bin"
-    local_bin.mkdir(parents=True, exist_ok=True)
-    dotnet_link = local_bin / "dotnet"
+def link_dotnet() -> None:
+    LOCAL_BIN.mkdir(parents=True, exist_ok=True)
+    dotnet_link = LOCAL_BIN / "dotnet"
     dotnet_link.unlink(missing_ok=True)
-    dotnet_link.symlink_to(dotnet)
+    dotnet_link.symlink_to(DOTNET_ROOT / "dotnet")
 
 
 def install_cloud_tools() -> None:
     if CLOUD_SESSION_MARK not in os.environ or os.geteuid() != 0:
         return
     install_apt_packages()
-    install_bun()
     install_mise()
-    install_dotnet()
+    install_global_mise_tools()
+    link_dotnet()
     install_mise_tools_of_projects()
 
 
