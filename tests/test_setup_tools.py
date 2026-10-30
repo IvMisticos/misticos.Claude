@@ -47,7 +47,8 @@ FAKE_DOWNLOAD = """#!/usr/bin/env bash
 echo "$(basename "$0") $*" >> "$HOME/calls"
 """
 FAKE_MISE = """#!/usr/bin/env bash
-echo "mise $* in $(basename "$PWD")${MISE_GLOBAL_CONFIG_FILE:+ alone}" >> "$HOME/calls"
+echo "mise $* in $(basename "$PWD")${MISE_IGNORED_CONFIG_PATHS:+ alone}" >> "$HOME/calls"
+[ -z "${MISE_IGNORED_CONFIG_PATHS-}" ] || echo "$MISE_IGNORED_CONFIG_PATHS" > "$HOME/ignored"
 [ "$1 $(basename "$PWD")" != "${MISE_FAILS_AT-}" ] || exit 1
 installs="$HOME/mise-installs"
 case "$1 ${2-}" in
@@ -353,3 +354,15 @@ def test_cloud_session_takes_over_a_garbled_install_lock(
     _, calls = set_up_tools(CCR_AGENT_PROXY_ENABLED="1")
     assert INSTALL_UP_FRONT in calls
     assert not lock.exists()
+
+
+@pytest.mark.skipif(os.geteuid() != 0, reason="cloud tools install only as root")
+def test_repo_installs_ignore_the_global_mise_config(
+    set_up_tools: SetUpTools, home: Path, tmp_path: Path
+) -> None:
+    repo = tmp_path / "projects" / "repo"
+    repo.mkdir(parents=True)
+    (repo / "mise.toml").write_text("[tools]\n")
+    set_up_tools(CCR_AGENT_PROXY_ENABLED="1", CLAUDE_PROJECT_DIR=str(repo.parent))
+    global_config = home / ".config" / "mise" / "config.toml"
+    assert (home / "ignored").read_text() == f"{global_config}\n"

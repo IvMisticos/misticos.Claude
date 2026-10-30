@@ -9,7 +9,6 @@ import os
 import shutil
 import subprocess
 import sys
-import tempfile
 from collections.abc import Mapping
 from pathlib import Path
 from typing import NamedTuple
@@ -259,12 +258,13 @@ def directories_with_mise_config() -> list[Path]:
     ]
 
 
+def ignoring_global_mise_config() -> dict[str, str]:
+    ignored = [os.environ.get("MISE_IGNORED_CONFIG_PATHS"), str(MISE_GLOBAL_CONFIG)]
+    return {"MISE_IGNORED_CONFIG_PATHS": os.pathsep.join(filter(None, ignored))}
+
+
 def install_own_mise_tools(directory: Path) -> None:
-    with tempfile.TemporaryDirectory() as empty:
-        without_global_config = {
-            "MISE_GLOBAL_CONFIG_FILE": str(Path(empty) / "config.toml")
-        }
-        run(mise(), "install", cwd=directory, overrides=without_global_config)
+    run(mise(), "install", cwd=directory, overrides=ignoring_global_mise_config())
 
 
 def install_mise_tools(directory: Path) -> None:
