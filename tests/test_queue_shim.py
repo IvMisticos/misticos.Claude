@@ -121,6 +121,43 @@ def test_runs_uv_when_it_is_only_in_the_local_bin(
     assert result.stdout.startswith("uv ")
 
 
+def test_runs_a_missing_tool_through_mise(
+    environment_with_only_local_uv: dict[str, str], fake_bin: FakeBin
+) -> None:
+    mise_dir = fake_bin("mise", '#!/usr/bin/env bash\necho "mise $*"\n')
+    environment = environment_with_only_local_uv
+    environment["PATH"] += os.pathsep + str(mise_dir)
+
+    result = run_shim("bun", environment, "--version")
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == "mise --quiet x bun -- bun --version\n"
+
+
+def test_reports_a_tool_that_mise_cannot_run_either(
+    environment_with_only_local_uv: dict[str, str],
+) -> None:
+    result = run_shim("bun", environment_with_only_local_uv, "--version")
+
+    assert result.returncode == 127
+    assert result.stderr == "queue: bun is not installed\n"
+
+
+def test_runs_a_tool_from_the_mise_shims(
+    environment_with_only_local_uv: dict[str, str], home: Path
+) -> None:
+    mise_shims = home / ".local" / "share" / "mise" / "shims"
+    mise_shims.mkdir(parents=True)
+    bun = mise_shims / "bun"
+    bun.write_text('#!/usr/bin/env bash\necho "bun $*"\n')
+    bun.chmod(0o755)
+
+    result = run_shim("bun", environment_with_only_local_uv, "--version")
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == "bun --version\n"
+
+
 FAIL_ON_SECOND_RUN = 'echo run >> "$0"; [ "$(wc -l < "$0")" -lt 2 ]'
 
 
