@@ -206,8 +206,23 @@ def plugin_tools_wanted_now() -> list[str]:
     ]
 
 
-def install_plugin_tools() -> None:
-    run(mise(), "install", *plugin_tools_wanted_now(), cwd=HOME)
+def run_with_one_retry(
+    *command: str, cwd: Path, overrides: Mapping[str, str] | None = None
+) -> None:
+    try:
+        run(*command, cwd=cwd, overrides=overrides)
+    except subprocess.CalledProcessError:
+        run(*command, cwd=cwd, overrides=overrides)
+
+
+def install_plugin_tools() -> list[str]:
+    failed = []
+    for name in plugin_tools_wanted_now():
+        try:
+            run_with_one_retry(mise(), "install", name, cwd=HOME)
+        except subprocess.CalledProcessError:
+            failed.append(f"mise install {name}")
+    return failed
 
 
 def installed_mise_binary(name: str) -> Path | None:
@@ -233,8 +248,12 @@ def link_installed_plugin_binaries() -> None:
                 link_into_local_bin(name, binary)
 
 
-def set_up_git_lfs() -> None:
-    run("git", "lfs", "install", "--skip-repo", cwd=HOME)
+def set_up_git_lfs() -> list[str]:
+    try:
+        run("git", "lfs", "install", "--skip-repo", cwd=HOME)
+    except subprocess.CalledProcessError:
+        return ["git lfs install"]
+    return []
 
 
 def project_dir() -> Path:
@@ -263,27 +282,21 @@ def ignoring_global_mise_config() -> dict[str, str]:
     return {"MISE_IGNORED_CONFIG_PATHS": os.pathsep.join(filter(None, ignored))}
 
 
-def install_own_mise_tools(directory: Path) -> None:
-    run(mise(), "install", cwd=directory, overrides=ignoring_global_mise_config())
-
-
 def install_mise_tools(directory: Path) -> None:
     run(mise(), "trust", "--all", "--quiet", cwd=directory)
-    try:
-        install_own_mise_tools(directory)
-    except subprocess.CalledProcessError:
-        install_own_mise_tools(directory)
+    run_with_one_retry(
+        mise(), "install", cwd=directory, overrides=ignoring_global_mise_config()
+    )
 
 
-def install_mise_tools_of_projects() -> None:
+def install_mise_tools_of_projects() -> list[str]:
     failed = []
     for directory in directories_with_mise_config():
         try:
             install_mise_tools(directory)
         except subprocess.CalledProcessError:
-            failed.append(str(directory))
-    if failed:
-        sys.exit(f"mise install failed in {', '.join(failed)}")
+            failed.append(f"mise install in {directory}")
+    return failed
 
 
 def install_cloud_tools() -> None:
@@ -293,10 +306,12 @@ def install_cloud_tools() -> None:
     with install_lock():
         install_mise()
         register_plugin_tools()
-        install_plugin_tools()
+        failed = install_plugin_tools()
         link_installed_plugin_binaries()
-    set_up_git_lfs()
-    install_mise_tools_of_projects()
+    failed += set_up_git_lfs()
+    failed += install_mise_tools_of_projects()
+    if failed:
+        sys.exit(f"tool setup failed: {', '.join(failed)}")
 
 
 def reapply_settings() -> None:

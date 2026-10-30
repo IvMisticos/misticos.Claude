@@ -48,8 +48,9 @@ echo "$(basename "$0") $*" >> "$HOME/calls"
 """
 FAKE_MISE = """#!/usr/bin/env bash
 echo "mise $* in $(basename "$PWD")${MISE_IGNORED_CONFIG_PATHS:+ alone}" >> "$HOME/calls"
-[ -z "${MISE_IGNORED_CONFIG_PATHS-}" ] || echo "$MISE_IGNORED_CONFIG_PATHS" > "$HOME/ignored"
 [ "$1 $(basename "$PWD")" != "${MISE_FAILS_AT-}" ] || exit 1
+[ -z "${MISE_TOOL_FAILS-}" ] || [ "$1 ${2-}" != "install $MISE_TOOL_FAILS" ] || exit 1
+[ -z "${MISE_IGNORED_CONFIG_PATHS-}" ] || echo "$MISE_IGNORED_CONFIG_PATHS" > "$HOME/ignored"
 installs="$HOME/mise-installs"
 case "$1 ${2-}" in
   "config get") grep -qx "$4" "$HOME/global-mise-tools" 2>/dev/null ;;
@@ -71,7 +72,9 @@ REGISTER_PLUGIN_TOOLS = [
         ("dotnet", "lts"),
     )
 ]
-INSTALL_UP_FRONT = "mise install uv gh jq git-lfs in home"
+INSTALL_UP_FRONT = [
+    f"mise install {name} in home" for name in ("uv", "gh", "jq", "git-lfs")
+]
 
 
 class SetUpTools(Protocol):
@@ -157,7 +160,7 @@ def test_cloud_tools_install_after_a_plugin_failure(set_up_tools: SetUpTools) ->
     status, calls = set_up_tools(CLAUDE_FAILS_AT="install", CCR_AGENT_PROXY_ENABLED="1")
     assert status != 0
     assert calls[:2] == [INSTALL, REAPPLY_SETTINGS]
-    assert INSTALL_UP_FRONT in calls[2:]
+    assert set(INSTALL_UP_FRONT) <= set(calls[2:])
 
 
 def test_installed_plugin_is_left_alone(set_up_tools: SetUpTools, home: Path) -> None:
@@ -243,7 +246,7 @@ def test_cloud_session_adds_plugin_tools_to_the_global_mise_config(
     _, calls = set_up_tools(CCR_AGENT_PROXY_ENABLED="1")
     registered = [call for call in calls if call.startswith("mise config set ")]
     assert registered == REGISTER_PLUGIN_TOOLS
-    assert INSTALL_UP_FRONT in calls
+    assert set(INSTALL_UP_FRONT) <= set(calls)
     assert (home / ".config" / "mise" / "config.toml").is_file()
 
 
@@ -275,7 +278,7 @@ def test_cloud_session_installs_tools_a_project_uses(
     _, calls = set_up_tools(
         CCR_AGENT_PROXY_ENABLED="1", CLAUDE_PROJECT_DIR=str(repo.parent)
     )
-    assert f"mise install uv gh jq git-lfs {tool} in home" in calls
+    assert f"mise install {tool} in home" in calls
 
 
 @pytest.mark.skipif(os.geteuid() != 0, reason="cloud tools install only as root")
@@ -337,7 +340,7 @@ def test_cloud_session_waits_for_another_tool_install(
     lock.parent.mkdir(parents=True)
     lock.write_text(f"{holder}\n")
     _, calls = set_up_tools(CCR_AGENT_PROXY_ENABLED="1")
-    assert INSTALL_UP_FRONT in calls
+    assert set(INSTALL_UP_FRONT) <= set(calls)
     with pytest.raises(ProcessLookupError):
         os.kill(int(holder), 0)
     assert not lock.exists()
@@ -352,8 +355,28 @@ def test_cloud_session_takes_over_a_garbled_install_lock(
     lock.parent.mkdir(parents=True)
     lock.write_text(content)
     _, calls = set_up_tools(CCR_AGENT_PROXY_ENABLED="1")
-    assert INSTALL_UP_FRONT in calls
+    assert set(INSTALL_UP_FRONT) <= set(calls)
     assert not lock.exists()
+
+
+@pytest.mark.skipif(os.geteuid() != 0, reason="cloud tools install only as root")
+def test_cloud_session_keeps_going_after_a_plugin_tool_fails(
+    set_up_tools: SetUpTools, home: Path, tmp_path: Path
+) -> None:
+    repo = tmp_path / "projects" / "repo"
+    repo.mkdir(parents=True)
+    (repo / "mise.toml").write_text("[tools]\n")
+    status, calls = set_up_tools(
+        CCR_AGENT_PROXY_ENABLED="1",
+        CLAUDE_PROJECT_DIR=str(repo.parent),
+        MISE_TOOL_FAILS="gh",
+    )
+    assert status != 0
+    assert calls.count("mise install gh in home") == 2
+    assert "mise install jq in home" in calls
+    assert "git lfs install --skip-repo" in calls
+    assert "mise install in repo alone" in calls
+    assert (home / ".local" / "bin" / "jq").is_symlink()
 
 
 @pytest.mark.skipif(os.geteuid() != 0, reason="cloud tools install only as root")
