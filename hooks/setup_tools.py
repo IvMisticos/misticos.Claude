@@ -21,6 +21,18 @@ WEB_GUIDANCE_NAME = "modern-web-guidance"
 WEB_GUIDANCE_PLUGIN = f"{WEB_GUIDANCE_NAME}@googlechrome"
 WEB_GUIDANCE_MARKETPLACE = "GoogleChrome/modern-web-guidance"
 CLOUD_SESSION_MARK = "CCR_AGENT_PROXY_ENABLED"
+MISE = HOME / ".local" / "bin" / "mise"
+MISE_CONFIG_PATTERNS = (
+    "mise.toml",
+    "mise.*.toml",
+    ".mise.toml",
+    ".mise.*.toml",
+    "mise/config.toml",
+    ".mise/config.toml",
+    ".config/mise.toml",
+    ".config/mise/config.toml",
+    ".tool-versions",
+)
 
 TOOLCHAIN_BIN_DIRS = (
     HOME / ".local" / "bin",
@@ -32,13 +44,14 @@ TOOLCHAIN_PATH = os.pathsep.join(
 )
 
 
-def run(*command: str) -> None:
+def run(*command: str, cwd: Path | None = None) -> None:
     environment = {
         "DOTNET_ROOT": str(HOME / ".dotnet"),
+        "MISE_YES": "1",
         **os.environ,
         "PATH": TOOLCHAIN_PATH,
     }
-    subprocess.run(command, check=True, stdout=sys.stderr, env=environment)
+    subprocess.run(command, check=True, stdout=sys.stderr, env=environment, cwd=cwd)
 
 
 def run_pipeline(script: str) -> None:
@@ -97,8 +110,34 @@ def install_bun() -> None:
 
 
 def install_mise() -> None:
-    if shutil.which("mise") is None and not (HOME / ".local" / "bin" / "mise").exists():
+    if shutil.which("mise") is None and not MISE.exists():
         run_pipeline("curl -fsSL https://mise.run | sh")
+
+
+def project_dir() -> Path:
+    return Path(os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd())
+
+
+def has_mise_config(directory: Path) -> bool:
+    return any(
+        next(directory.glob(pattern), None) is not None
+        for pattern in MISE_CONFIG_PATTERNS
+    )
+
+
+def directories_with_mise_config() -> list[Path]:
+    root = project_dir()
+    candidates = [root, *sorted(child for child in root.iterdir() if child.is_dir())]
+    return [directory for directory in candidates if has_mise_config(directory)]
+
+
+def install_mise_tools(directory: Path) -> None:
+    mise = shutil.which("mise", path=TOOLCHAIN_PATH) or str(MISE)
+    run(mise, "trust", "--all", "--quiet", cwd=directory)
+    try:
+        run(mise, "install", cwd=directory)
+    except subprocess.CalledProcessError:
+        run(mise, "install", cwd=directory)
 
 
 def install_dotnet() -> None:
@@ -121,6 +160,8 @@ def install_cloud_tools() -> None:
     install_bun()
     install_mise()
     install_dotnet()
+    for directory in directories_with_mise_config():
+        install_mise_tools(directory)
 
 
 def reapply_settings() -> None:
