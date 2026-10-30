@@ -47,7 +47,7 @@ FAKE_DOWNLOAD = """#!/usr/bin/env bash
 echo "$(basename "$0") $*" >> "$HOME/calls"
 """
 FAKE_MISE = """#!/usr/bin/env bash
-echo "mise $* in $(basename "$PWD")" >> "$HOME/calls"
+echo "mise $* in $(basename "$PWD")${MISE_GLOBAL_CONFIG_FILE:+ alone}" >> "$HOME/calls"
 [ "$1 $(basename "$PWD")" != "${MISE_FAILS_AT-}" ] || exit 1
 case "$1 $2" in
   "config get") grep -qx "$4" "$HOME/global-mise-tools" 2>/dev/null ;;
@@ -182,9 +182,9 @@ def test_cloud_session_installs_mise_tools_of_each_repo(
     )
     assert mise_calls_in_projects(calls) == [
         "mise trust --all --quiet in with-mise",
-        "mise install in with-mise",
+        "mise install in with-mise alone",
         "mise trust --all --quiet in with-tool-versions",
-        "mise install in with-tool-versions",
+        "mise install in with-tool-versions alone",
     ]
 
 
@@ -203,8 +203,8 @@ def test_failed_mise_install_is_retried_once(
     assert status != 0
     assert mise_calls_in_projects(calls) == [
         "mise trust --all --quiet in repo",
-        "mise install in repo",
-        "mise install in repo",
+        "mise install in repo alone",
+        "mise install in repo alone",
     ]
 
 
@@ -225,7 +225,7 @@ def test_failed_repo_does_not_stop_the_next_one(
     assert mise_calls_in_projects(calls) == [
         "mise trust --all --quiet in broken",
         "mise trust --all --quiet in working",
-        "mise install in working",
+        "mise install in working alone",
     ]
 
 

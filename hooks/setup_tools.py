@@ -9,6 +9,8 @@ import os
 import shutil
 import subprocess
 import sys
+import tempfile
+from collections.abc import Mapping
 from pathlib import Path
 
 from install_lock import install_lock
@@ -75,12 +77,15 @@ TOOLCHAIN_PATH = os.pathsep.join(
 )
 
 
-def run(*command: str, cwd: Path | None = None) -> None:
+def run(
+    *command: str, cwd: Path | None = None, overrides: Mapping[str, str] | None = None
+) -> None:
     environment = {
         "DOTNET_ROOT": str(DOTNET_ROOT),
         "MISE_YES": "1",
         **os.environ,
         "PATH": TOOLCHAIN_PATH,
+        **(overrides or {}),
     }
     subprocess.run(command, check=True, stdout=sys.stderr, env=environment, cwd=cwd)
 
@@ -214,12 +219,20 @@ def directories_with_mise_config() -> list[Path]:
     return [directory for directory in candidates if has_mise_config(directory)]
 
 
+def install_own_mise_tools(directory: Path) -> None:
+    with tempfile.TemporaryDirectory() as empty:
+        without_global_config = {
+            "MISE_GLOBAL_CONFIG_FILE": str(Path(empty) / "config.toml")
+        }
+        run(mise(), "install", cwd=directory, overrides=without_global_config)
+
+
 def install_mise_tools(directory: Path) -> None:
     run(mise(), "trust", "--all", "--quiet", cwd=directory)
     try:
-        run(mise(), "install", cwd=directory)
+        install_own_mise_tools(directory)
     except subprocess.CalledProcessError:
-        run(mise(), "install", cwd=directory)
+        install_own_mise_tools(directory)
 
 
 def install_mise_tools_of_projects() -> None:
