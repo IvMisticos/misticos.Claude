@@ -11,6 +11,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+from install_lock import install_lock
 from json_values import JsonObject, JsonValue, dict_or_empty, json_object
 
 HOOKS_DIR = Path(__file__).resolve().parent
@@ -217,9 +218,10 @@ def install_cloud_tools() -> None:
     if CLOUD_SESSION_MARK not in os.environ or os.geteuid() != 0:
         return
     install_apt_packages()
-    install_mise()
-    install_global_mise_tools()
-    link_dotnet()
+    with install_lock():
+        install_mise()
+        install_global_mise_tools()
+        link_dotnet()
     install_mise_tools_of_projects()
 
 

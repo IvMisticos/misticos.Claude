@@ -49,9 +49,9 @@ echo "$(basename "$0") $*" >> "$HOME/calls"
 FAKE_MISE = """#!/usr/bin/env bash
 echo "mise $* in $(basename "$PWD")" >> "$HOME/calls"
 [ "$1 $(basename "$PWD")" != "${MISE_FAILS_AT-}" ] || exit 1
-if [ "$1 $2" = "config get" ]; then
-  grep -qx "$4" "$HOME/global-mise-tools" 2>/dev/null
-fi
+case "$1 $2" in
+  "config get") grep -qx "$4" "$HOME/global-mise-tools" 2>/dev/null ;;
+esac
 """
 REGISTER_PLUGIN_TOOLS = [
     f"mise config set --global tools.{name} {version} in home"
@@ -75,7 +75,7 @@ class SetUpTools(Protocol):
 def hooks(tmp_path: Path) -> Path:
     hooks = tmp_path / "hooks"
     hooks.mkdir()
-    for name in ("setup_tools.py", "json_values.py"):
+    for name in ("setup_tools.py", "json_values.py", "install_lock.py"):
         shutil.copy(ROOT / "hooks" / name, hooks / name)
     run_sh = hooks / "run.sh"
     run_sh.write_text(FAKE_RUN)
@@ -260,3 +260,23 @@ def test_cloud_session_links_dotnet_from_mise(
     set_up_tools(CCR_AGENT_PROXY_ENABLED="1", MISE_DATA_DIR=str(mise_data))
     dotnet_link = home / ".local" / "bin" / "dotnet"
     assert dotnet_link.readlink() == mise_data / "dotnet-root" / "dotnet"
+
+
+@pytest.mark.skipif(os.geteuid() != 0, reason="cloud tools install only as root")
+def test_cloud_session_waits_for_another_tool_install(
+    set_up_tools: SetUpTools, home: Path
+) -> None:
+    holder = subprocess.run(
+        ["bash", "-c", "sleep 1 >/dev/null & echo $!"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+    lock = home / ".local" / "tool-install.pid"
+    lock.parent.mkdir(parents=True)
+    lock.write_text(f"{holder}\n")
+    _, calls = set_up_tools(CCR_AGENT_PROXY_ENABLED="1")
+    assert INSTALL_UP_FRONT in calls
+    with pytest.raises(ProcessLookupError):
+        os.kill(int(holder), 0)
+    assert not lock.exists()
