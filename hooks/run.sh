@@ -2,7 +2,8 @@
 
 set -euo pipefail
 
-export PATH="$HOME/.local/bin:$PATH"
+mise_shims="${MISE_DATA_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/mise}/shims"
+export PATH="$HOME/.local/bin:$PATH:$mise_shims"
 
 install_lock="$HOME/.local/uv-install.pid"
 
@@ -21,6 +22,15 @@ install_lock_holder_is_gone() {
   ! kill -0 "$holder" 2>/dev/null
 }
 
+install_uv_with_mise() {
+  command -v mise >/dev/null || curl -fsSL https://mise.run | sh
+  if mise config get --global tools.uv >/dev/null 2>&1; then
+    mise install uv
+  else
+    mise use --global uv@latest
+  fi
+}
+
 install_uv_once() {
   mkdir -p "$HOME/.local"
   until take_install_lock; do
@@ -28,7 +38,9 @@ install_uv_once() {
     sleep 0.2
   done
   trap release_install_lock EXIT
-  command -v uv >/dev/null || curl -LsSf https://astral.sh/uv/install.sh | INSTALLER_NO_MODIFY_PATH=1 sh >&2
+  if ! command -v uv >/dev/null; then
+    install_uv_with_mise >&2
+  fi
   release_install_lock
 }
 

@@ -22,15 +22,28 @@ TOOLS = [
     "tail",
     "touch",
 ]
-FAKE_CURL = """#!/usr/bin/env bash
-if [ -n "${HOLD_INSTALL-}" ]; then
+FAKE_MISE = """#!/usr/bin/env bash
+echo "mise $*" >> "$HOME/mise-calls"
+case "$1" in
+  config) [ -e "$HOME/mise-config" ] ;;
+  install | use)
+    shims="$HOME/.local/share/mise/shims"
+    mkdir -p "$shims"
+    printf '#!/bin/sh\\necho "uv $*"\\n' > "$shims/uv"
+    chmod +x "$shims/uv"
+    ;;
+esac
+"""
+FAKE_CURL = f"""#!/usr/bin/env bash
+if [ -n "${{HOLD_INSTALL-}}" ]; then
   touch "$HOME/install-started"
   exec tail -f /dev/null
 fi
 cat <<'SCRIPT'
 mkdir -p "$HOME/.local/bin"
-printf '#!/bin/sh\\necho "uv $*"\\n' > "$HOME/.local/bin/uv"
-chmod +x "$HOME/.local/bin/uv"
+cat > "$HOME/.local/bin/mise" <<'MISE'
+{FAKE_MISE}MISE
+chmod +x "$HOME/.local/bin/mise"
 SCRIPT
 """
 
@@ -97,8 +110,30 @@ def test_installs_uv_again_after_a_finished_install(
     environment: dict[str, str], home: Path
 ) -> None:
     run_hook(environment)
-    (home / ".local" / "bin" / "uv").unlink()
+    (home / ".local" / "share" / "mise" / "shims" / "uv").unlink()
     assert run_hook(environment).stdout == "uv run hook.py\n"
+
+
+def mise_calls(home: Path) -> list[str]:
+    return (home / "mise-calls").read_text().splitlines()
+
+
+def test_installs_uv_through_the_global_mise_config(
+    environment: dict[str, str], home: Path
+) -> None:
+    run_hook(environment)
+    assert mise_calls(home) == [
+        "mise config get --global tools.uv",
+        "mise use --global uv@latest",
+    ]
+
+
+def test_keeps_the_uv_version_the_user_chose(
+    environment: dict[str, str], home: Path
+) -> None:
+    (home / "mise-config").touch()
+    run_hook(environment)
+    assert mise_calls(home) == ["mise config get --global tools.uv", "mise install uv"]
 
 
 def test_waits_while_another_hook_installs_uv(
