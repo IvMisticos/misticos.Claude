@@ -10,7 +10,7 @@ from conftest import (
     ShimRun,
     ShimRunner,
     WrappedShimRunner,
-    installed,
+    real_uv_directories,
     without_session_variables,
 )
 
@@ -91,7 +91,7 @@ def test_missing_python_installs_outside_the_project(
 def environment_with_only_local_uv(home: Path) -> dict[str, str]:
     local_bin = home / ".local" / "bin"
     local_bin.mkdir(parents=True)
-    (local_bin / "uv").symlink_to(installed("uv"))
+    (local_bin / "uv").symlink_to(Path(real_uv_directories()[0]) / "uv")
     environment = without_session_variables(os.environ)
     environment.update(
         HOME=str(home), PATH=os.pathsep.join([str(SHIMS), "/usr/bin", "/bin"])
@@ -153,6 +153,21 @@ def test_runs_uv_through_mise_when_uv_is_missing(home: Path, fake_bin: FakeBin) 
 
     assert result.returncode == 0, result.stderr
     assert result.stdout == "mise --quiet x uv -- uv --version\n"
+
+
+def test_queues_a_build_that_mise_runs(
+    environment_with_only_local_uv: dict[str, str], fake_bin: FakeBin
+) -> None:
+    mise_dir = fake_bin(
+        "mise", '#!/usr/bin/env bash\necho "held=${HARNESS_QUEUE_HELD-} $*"\n'
+    )
+    environment = environment_with_only_local_uv
+    environment["PATH"] += os.pathsep + str(mise_dir)
+
+    result = run_shim("dotnet", environment, "build")
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == "held=1 --quiet x dotnet -- dotnet build\n"
 
 
 def test_reports_a_tool_that_mise_cannot_run_either(

@@ -17,7 +17,7 @@ from collections.abc import Generator, Sequence
 from io import TextIOWrapper
 from pathlib import Path
 from types import FrameType
-from typing import NoReturn
+from typing import NamedTuple, NoReturn
 
 from core_pinning import CAN_PIN_CORES, pinned, plan_cores, restore_abandoned_pinning
 from queued_commands import queues
@@ -137,16 +137,29 @@ def run_build(command: Sequence[str]) -> int:
         return run_held(command)
 
 
-def exec_unqueued(executable: str, arguments: Sequence[str]) -> NoReturn:
+class ToolRun(NamedTuple):
+    name: str
+    command: list[str]
+    arguments: list[str]
+
+
+def parse_tool_run(words: Sequence[str]) -> ToolRun:
+    name, command_length, *rest = words
+    length = int(command_length)
+    return ToolRun(name, rest[:length], rest[length:])
+
+
+def exec_unqueued(command: list[str]) -> NoReturn:
     for ignored_signal in SIGNALS_PYTHON_IGNORES:
         signal.signal(ignored_signal, signal.SIG_DFL)
-    os.execv(executable, [executable, *arguments])
+    os.execv(command[0], command)
 
 
-def run_tool(executable: str, arguments: Sequence[str]) -> int:
-    if not queues(Path(executable).name, arguments):
-        exec_unqueued(executable, arguments)
-    return run_build([executable, *arguments])
+def run_tool(tool: ToolRun) -> int:
+    command = [*tool.command, *tool.arguments]
+    if not queues(tool.name, tool.arguments):
+        exec_unqueued(command)
+    return run_build(command)
 
 
 def run_repeatedly(command: Sequence[str], runs: int) -> int:
@@ -208,7 +221,7 @@ def main() -> int:
     for stop_signal in STOP_SIGNALS:
         signal.signal(stop_signal, exit_on_signal)
     if sys.argv[1:2] == ["tool"]:
-        return run_tool(sys.argv[2], sys.argv[3:])
+        return run_tool(parse_tool_run(sys.argv[2:]))
     arguments = parse_bench_arguments()
     return run_benchmark(
         arguments.command, arguments.cores, arguments.alone, arguments.runs

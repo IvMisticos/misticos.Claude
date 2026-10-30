@@ -8,11 +8,11 @@ mise_shims="${MISE_DATA_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/mise}/shims"
 REAL_TOOL_PATH="$PATH:$HOME/.local/bin:$mise_shims"
 
 find_tool_command() {
-  local name=$1 tool
+  local name=$1 tool mise
   if tool=$(real_tool "$name" 2>/dev/null); then
     tool_command=("$tool")
-  elif tool=$(real_tool mise 2>/dev/null); then
-    tool_command=("$tool" --quiet x "$name" -- "$name")
+  elif mise=$(real_tool mise 2>/dev/null); then
+    tool_command=("$mise" --quiet x "$name" -- "$name")
   else
     real_tool "$name"
   fi
@@ -27,7 +27,7 @@ if [ "${1:-}" = tool ]; then
     exec_real_tool "$2" "${tool_command[@]}" "${@:3}"
   fi
   record_handoff "$2" "${tool_command[0]}"
-  set -- tool "${tool_command[@]}" "${@:3}"
+  set -- tool "$2" "${#tool_command[@]}" "${tool_command[@]}" "${@:3}"
 fi
 
 run_uv_outside_projects() {
