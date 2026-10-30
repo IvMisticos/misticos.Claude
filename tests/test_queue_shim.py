@@ -155,6 +155,32 @@ def test_runs_uv_through_mise_when_uv_is_missing(home: Path, fake_bin: FakeBin) 
     assert result.stdout == "mise --quiet x uv -- uv --version\n"
 
 
+MISE_RUNNING_FROM_PATH = """#!/usr/bin/env bash
+[ "$1 $2" = "--quiet x" ] || exit 2
+shift 4
+exec "$@"
+"""
+
+
+def test_mise_does_not_reenter_the_shim_for_a_tool_it_lacks(
+    environment_with_only_local_uv: dict[str, str], fake_bin: FakeBin
+) -> None:
+    mise_dir = fake_bin("mise", MISE_RUNNING_FROM_PATH)
+    environment = environment_with_only_local_uv
+    environment["PATH"] += os.pathsep + str(mise_dir)
+
+    result = subprocess.run(
+        [SHIMS / "cargo", "build"],
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=10,
+    )
+
+    assert result.returncode == 127
+
+
 def test_queues_a_build_that_mise_runs(
     environment_with_only_local_uv: dict[str, str], fake_bin: FakeBin
 ) -> None:
