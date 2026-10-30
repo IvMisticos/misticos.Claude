@@ -59,18 +59,19 @@ case "$1 ${2-}" in
     mkdir -p "$installs"
     for tool in "${@:2}"; do touch "$installs/$tool"; done
     ;;
+  "use "*)
+    mkdir -p "$installs"
+    touch "$installs/${3%@*}"
+    ;;
 esac
 """
 REGISTER_PLUGIN_TOOLS = [
-    f"mise config set --global tools.{name} {version} in home"
-    for name, version in (
-        ("uv", "latest"),
-        ("gh", "latest"),
-        ("jq", "latest"),
-        ("git-lfs", "latest"),
-        ("bun", "latest"),
-        ("dotnet", "lts"),
-    )
+    *(
+        f"mise use --global {name}@latest in home"
+        for name in ("uv", "gh", "jq", "git-lfs")
+    ),
+    "mise config set --global tools.bun latest in home",
+    "mise config set --global tools.dotnet lts in home",
 ]
 INSTALL_UP_FRONT = [
     f"mise install {name} in home" for name in ("uv", "gh", "jq", "git-lfs")
@@ -241,13 +242,12 @@ def test_failed_repo_does_not_stop_the_next_one(
 
 @pytest.mark.skipif(os.geteuid() != 0, reason="cloud tools install only as root")
 def test_cloud_session_adds_plugin_tools_to_the_global_mise_config(
-    set_up_tools: SetUpTools, home: Path
+    set_up_tools: SetUpTools,
 ) -> None:
     _, calls = set_up_tools(CCR_AGENT_PROXY_ENABLED="1")
-    registered = [call for call in calls if call.startswith("mise config set ")]
+    registered = [call for call in calls if call in REGISTER_PLUGIN_TOOLS]
     assert registered == REGISTER_PLUGIN_TOOLS
     assert set(INSTALL_UP_FRONT) <= set(calls)
-    assert (home / ".config" / "mise" / "config.toml").is_file()
 
 
 @pytest.mark.skipif(os.geteuid() != 0, reason="cloud tools install only as root")
@@ -256,11 +256,11 @@ def test_cloud_session_keeps_global_mise_tools_the_user_chose(
 ) -> None:
     (home / "global-mise-tools").write_text("tools.dotnet\ntools.uv\n")
     _, calls = set_up_tools(CCR_AGENT_PROXY_ENABLED="1")
-    registered = [call for call in calls if call.startswith("mise config set ")]
+    registered = [call for call in calls if call in REGISTER_PLUGIN_TOOLS]
     assert registered == [
         call
         for call in REGISTER_PLUGIN_TOOLS
-        if " tools.dotnet " not in call and " tools.uv " not in call
+        if "tools.dotnet " not in call and " uv@" not in call
     ]
 
 

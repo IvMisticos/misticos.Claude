@@ -175,20 +175,37 @@ def has_global_mise_tool(name: str) -> bool:
     return lookup.returncode == 0
 
 
-def register_global_mise_tool(name: str, version: str) -> None:
-    if not has_global_mise_tool(name):
-        run(mise(), "config", "set", "--global", f"tools.{name}", version, cwd=HOME)
+def use_global_mise_tool(name: str, tool: PluginTool) -> None:
+    run(mise(), "use", "--global", f"{name}@{tool.version}", cwd=HOME)
 
 
-def create_global_mise_config() -> None:
-    MISE_GLOBAL_CONFIG.parent.mkdir(parents=True, exist_ok=True)
-    MISE_GLOBAL_CONFIG.touch()
+def add_global_mise_tool(name: str, tool: PluginTool) -> None:
+    run(mise(), "config", "set", "--global", f"tools.{name}", tool.version, cwd=HOME)
 
 
-def register_plugin_tools() -> None:
-    create_global_mise_config()
-    for name, tool in PLUGIN_TOOLS.items():
-        register_global_mise_tool(name, tool.version)
+def register_global_mise_tool(name: str, tool: PluginTool) -> None:
+    if tool.lazy_unless_project_has:
+        add_global_mise_tool(name, tool)
+    else:
+        use_global_mise_tool(name, tool)
+
+
+def plugin_tools_up_front_first() -> list[tuple[str, PluginTool]]:
+    return sorted(
+        PLUGIN_TOOLS.items(), key=lambda entry: bool(entry[1].lazy_unless_project_has)
+    )
+
+
+def register_plugin_tools() -> list[str]:
+    failed = []
+    for name, tool in plugin_tools_up_front_first():
+        if has_global_mise_tool(name):
+            continue
+        try:
+            register_global_mise_tool(name, tool)
+        except subprocess.CalledProcessError:
+            failed.append(f"mise registration of {name}")
+    return failed
 
 
 def project_uses(tool: PluginTool) -> bool:
@@ -305,8 +322,8 @@ def install_cloud_tools() -> None:
     install_apt_packages()
     with install_lock():
         install_mise()
-        register_plugin_tools()
-        failed = install_plugin_tools()
+        failed = register_plugin_tools()
+        failed += install_plugin_tools()
         link_installed_plugin_binaries()
     failed += set_up_git_lfs()
     failed += install_mise_tools_of_projects()
