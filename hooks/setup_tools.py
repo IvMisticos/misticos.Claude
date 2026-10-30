@@ -31,6 +31,7 @@ MISE_TOOLS_INSTALLED_UP_FRONT = {
     "git-lfs": "latest",
 }
 MISE_TOOLS_INSTALLED_ON_FIRST_USE = {"bun": "latest", "dotnet": "lts"}
+LINKED_MISE_BINARIES = ("uv", "uvx", "gh", "jq", "git-lfs")
 MISE_CONFIG_PATTERNS = (
     "mise.toml",
     "mise.*.toml",
@@ -171,6 +172,27 @@ def install_global_mise_tools() -> None:
     run(mise(), "install", *MISE_TOOLS_INSTALLED_UP_FRONT, cwd=HOME)
 
 
+def mise_binary(name: str) -> Path:
+    found = subprocess.run(
+        (mise(), "which", name), capture_output=True, text=True, check=True, cwd=HOME
+    )
+    return Path(found.stdout.strip())
+
+
+def link_into_local_bin(name: str, binary: Path) -> None:
+    link = LOCAL_BIN / name
+    if link.exists() and not link.is_symlink():
+        return
+    link.unlink(missing_ok=True)
+    link.symlink_to(binary)
+
+
+def link_mise_binaries() -> None:
+    LOCAL_BIN.mkdir(parents=True, exist_ok=True)
+    for name in LINKED_MISE_BINARIES:
+        link_into_local_bin(name, mise_binary(name))
+
+
 def set_up_git_lfs() -> None:
     run("git", "lfs", "install", "--skip-repo", cwd=HOME)
 
@@ -225,6 +247,7 @@ def install_cloud_tools() -> None:
     with install_lock():
         install_mise()
         install_global_mise_tools()
+        link_mise_binaries()
         link_dotnet()
     set_up_git_lfs()
     install_mise_tools_of_projects()

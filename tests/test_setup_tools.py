@@ -51,6 +51,7 @@ echo "mise $* in $(basename "$PWD")" >> "$HOME/calls"
 [ "$1 $(basename "$PWD")" != "${MISE_FAILS_AT-}" ] || exit 1
 case "$1 $2" in
   "config get") grep -qx "$4" "$HOME/global-mise-tools" 2>/dev/null ;;
+  "which "*) echo "$HOME/mise-installs/$2" ;;
 esac
 """
 REGISTER_PLUGIN_TOOLS = [
@@ -261,6 +262,20 @@ def test_cloud_session_links_dotnet_from_mise(
     set_up_tools(CCR_AGENT_PROXY_ENABLED="1", MISE_DATA_DIR=str(mise_data))
     dotnet_link = home / ".local" / "bin" / "dotnet"
     assert dotnet_link.readlink() == mise_data / "dotnet-root" / "dotnet"
+
+
+@pytest.mark.skipif(os.geteuid() != 0, reason="cloud tools install only as root")
+def test_cloud_session_links_plugin_tools_into_the_local_bin(
+    set_up_tools: SetUpTools, home: Path
+) -> None:
+    local_bin = home / ".local" / "bin"
+    local_bin.mkdir(parents=True)
+    (local_bin / "uv").write_text("own uv")
+    (local_bin / "gh").symlink_to(home / "stale-gh")
+    set_up_tools(CCR_AGENT_PROXY_ENABLED="1")
+    assert (local_bin / "uv").read_text() == "own uv"
+    assert (local_bin / "gh").readlink() == home / "mise-installs" / "gh"
+    assert (local_bin / "git-lfs").readlink() == home / "mise-installs" / "git-lfs"
 
 
 @pytest.mark.skipif(os.geteuid() != 0, reason="cloud tools install only as root")
