@@ -58,12 +58,22 @@ EXTENSION_TO_SERVER = {
 TOOLCHAIN_BIN_DIRS = (".local/bin", ".bun/bin", ".dotnet/tools", ".dotnet")
 
 
+def dotnet_root(path: str) -> Path | None:
+    dotnet = shutil.which("dotnet", path=path)
+    if dotnet is None:
+        return None
+    resolved = Path(dotnet).resolve()
+    return resolved.parent if resolved.name == "dotnet" else None
+
+
 def toolchain_environment() -> dict[str, str]:
     home = Path.home()
     environment = dict(os.environ)
     bin_dirs = [str(home / directory) for directory in TOOLCHAIN_BIN_DIRS]
     environment["PATH"] = os.pathsep.join([*bin_dirs, environment.get("PATH", "")])
-    environment.setdefault("DOTNET_ROOT", str(home / ".dotnet"))
+    root = dotnet_root(environment["PATH"])
+    if root is not None:
+        environment.setdefault("DOTNET_ROOT", str(root))
     return environment
 
 
