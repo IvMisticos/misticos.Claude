@@ -171,6 +171,10 @@ def install_global_mise_tools() -> None:
     run(mise(), "install", *MISE_TOOLS_INSTALLED_UP_FRONT, cwd=HOME)
 
 
+def set_up_git_lfs() -> None:
+    run("git", "lfs", "install", "--skip-repo", cwd=HOME)
+
+
 def project_dir() -> Path:
     return Path(os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd())
 
@@ -222,6 +226,7 @@ def install_cloud_tools() -> None:
         install_mise()
         install_global_mise_tools()
         link_dotnet()
+    set_up_git_lfs()
     install_mise_tools_of_projects()
 
 

@@ -89,6 +89,7 @@ def set_up_tools(home: Path, fake_bin: FakeBin, hooks: Path) -> SetUpTools:
     fake_bin("curl", FAKE_DOWNLOAD)
     fake_bin("apt-get", FAKE_DOWNLOAD)
     fake_bin("mise", FAKE_MISE)
+    fake_bin("git", FAKE_DOWNLOAD)
 
     def set_up(**extra_environment: str) -> tuple[int, list[str]]:
         result = subprocess.run(
@@ -260,6 +261,12 @@ def test_cloud_session_links_dotnet_from_mise(
     set_up_tools(CCR_AGENT_PROXY_ENABLED="1", MISE_DATA_DIR=str(mise_data))
     dotnet_link = home / ".local" / "bin" / "dotnet"
     assert dotnet_link.readlink() == mise_data / "dotnet-root" / "dotnet"
+
+
+@pytest.mark.skipif(os.geteuid() != 0, reason="cloud tools install only as root")
+def test_cloud_session_sets_up_git_lfs(set_up_tools: SetUpTools) -> None:
+    _, calls = set_up_tools(CCR_AGENT_PROXY_ENABLED="1")
+    assert "git lfs install --skip-repo" in calls
 
 
 @pytest.mark.skipif(os.geteuid() != 0, reason="cloud tools install only as root")
