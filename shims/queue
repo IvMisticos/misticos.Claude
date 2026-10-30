@@ -7,29 +7,50 @@ bin_dir=$(cd "$(dirname "$0")" && pwd -P)
 mise_shims="${MISE_DATA_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/mise}/shims"
 REAL_TOOL_PATH="$PATH:$HOME/.local/bin:$mise_shims"
 
-path_without_shims() {
-  local dir
+is_mise_shim_dir() {
+  [ "${1%/}" = "$mise_shims" ]
+}
+
+path_without() {
+  local unwanted=$1 dir
   local -a dirs kept=()
-  IFS=: read -ra dirs <<< "$PATH"
+  IFS=: read -ra dirs <<< "$2"
   for dir in "${dirs[@]}"; do
-    is_shim_dir "$dir" || kept+=("$dir")
+    "$unwanted" "$dir" || kept+=("$dir")
   done
   local IFS=:
   printf '%s' "${kept[*]}"
 }
 
+plugin_free_path=$(path_without is_shim_dir "$PATH")
+uv_search_path=$(path_without is_mise_shim_dir "$REAL_TOOL_PATH")
+without_plugin_shims=("$(real_tool env)" "PATH=$plugin_free_path")
+
+run_through_mise() {
+  local name=$1 mise
+  mise=$(real_tool mise 2>/dev/null) || return 1
+  tool_command=("${without_plugin_shims[@]}" "$mise" --quiet x "$name" -- "$name")
+}
+
 find_tool_command() {
-  local name=$1 tool mise
+  local name=$1 tool
   if tool=$(real_tool "$name" 2>/dev/null); then
     tool_command=("$tool")
-  elif mise=$(real_tool mise 2>/dev/null); then
-    tool_command=("$(real_tool env)" "PATH=$(path_without_shims)" "$mise" --quiet x "$name" -- "$name")
-  else
+  elif ! run_through_mise "$name"; then
     real_tool "$name"
   fi
 }
 
-find_tool_command uv
+find_queue_uv() {
+  local uv
+  if uv=$(REAL_TOOL_PATH=$uv_search_path real_tool uv 2>/dev/null); then
+    tool_command=("${without_plugin_shims[@]}" "$uv")
+  elif ! run_through_mise uv; then
+    REAL_TOOL_PATH=$uv_search_path real_tool uv
+  fi
+}
+
+find_queue_uv
 uv_command=("${tool_command[@]}")
 
 if [ "${1:-}" = tool ]; then

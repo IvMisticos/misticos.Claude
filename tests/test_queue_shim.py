@@ -267,3 +267,76 @@ def test_bench_rejects_zero_runs() -> None:
 
     assert result.returncode == 2
     assert "needs at least 1" in result.stderr
+
+
+MISE_SHIM_FALLING_THROUGH = """#!/usr/bin/env bash
+calls="$HOME/mise-shim-calls"
+echo call >> "$calls"
+[ "$(wc -l < "$calls")" -le 20 ] || exit 99
+own_dir=$(cd "$(dirname "$0")" && pwd)
+IFS=: read -ra dirs <<< "$PATH"
+for dir in "${dirs[@]}"; do
+  [ "$dir" != "$own_dir" ] && [ -x "$dir/uv" ] && exec "$dir/uv" "$@"
+done
+exit 127
+"""
+
+
+@pytest.fixture
+def mise_uv_shim(home: Path) -> Path:
+    mise_shims = home / ".local" / "share" / "mise" / "shims"
+    mise_shims.mkdir(parents=True)
+    shim = mise_shims / "uv"
+    shim.write_text(MISE_SHIM_FALLING_THROUGH)
+    shim.chmod(0o755)
+    return mise_shims
+
+
+def mise_shim_calls(home: Path) -> int:
+    calls = home / "mise-shim-calls"
+    return len(calls.read_text().splitlines()) if calls.exists() else 0
+
+
+def test_queue_never_runs_its_uv_through_a_mise_shim(
+    home: Path, mise_uv_shim: Path
+) -> None:
+    environment = without_session_variables(os.environ)
+    environment.update(
+        HOME=str(home),
+        PATH=os.pathsep.join([str(SHIMS), str(mise_uv_shim), "/usr/bin", "/bin"]),
+    )
+
+    result = subprocess.run(
+        [SHIMS / "uv", "--version"],
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=20,
+    )
+
+    assert mise_shim_calls(home) == 0
+    assert result.returncode == 127
+    assert result.stderr == "queue: uv is not installed\n"
+
+
+def test_mise_shim_falling_through_to_the_plugin_shim_stops(
+    environment_with_only_local_uv: dict[str, str], home: Path, mise_uv_shim: Path
+) -> None:
+    environment = environment_with_only_local_uv
+    environment["PATH"] = os.pathsep.join(
+        [str(SHIMS), str(mise_uv_shim), "/usr/bin", "/bin"]
+    )
+
+    result = subprocess.run(
+        [SHIMS / "uv", "--version"],
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=20,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.startswith("uv ")
+    assert mise_shim_calls(home) == 1
