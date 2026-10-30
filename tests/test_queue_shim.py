@@ -4,7 +4,15 @@ import sys
 from pathlib import Path
 
 import pytest
-from conftest import SHIMS, FakeBin, ShimRun, ShimRunner, WrappedShimRunner
+from conftest import (
+    SHIMS,
+    FakeBin,
+    ShimRun,
+    ShimRunner,
+    WrappedShimRunner,
+    installed,
+    without_session_variables,
+)
 
 PRINT_ENVIRONMENT = """#!/usr/bin/env bash
 echo "PATH=$PATH"
@@ -78,6 +86,39 @@ def test_missing_python_installs_outside_the_project(
     assert result.returncode == 0, result.stderr
     install_arguments = (bin_dir / "uv-install-arguments").read_text().split()
     assert install_arguments[:2] == ["--directory", "/"]
+
+
+@pytest.fixture
+def environment_with_only_local_uv(home: Path) -> dict[str, str]:
+    local_bin = home / ".local" / "bin"
+    local_bin.mkdir(parents=True)
+    (local_bin / "uv").symlink_to(installed("uv"))
+    environment = without_session_variables(os.environ)
+    environment.update(
+        HOME=str(home), PATH=os.pathsep.join([str(SHIMS), "/usr/bin", "/bin"])
+    )
+    return environment
+
+
+def run_shim(
+    name: str, environment: dict[str, str], *arguments: str
+) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [SHIMS / name, *arguments],
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+
+def test_runs_uv_when_it_is_only_in_the_local_bin(
+    environment_with_only_local_uv: dict[str, str],
+) -> None:
+    result = run_shim("uv", environment_with_only_local_uv, "--version")
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.startswith("uv ")
 
 
 FAIL_ON_SECOND_RUN = 'echo run >> "$0"; [ "$(wc -l < "$0")" -lt 2 ]'
