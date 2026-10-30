@@ -70,13 +70,20 @@ def dotnet_root_from_mise(path: str) -> Path | None:
         check=False,
         cwd=Path.home(),
     )
-    return Path(found.stdout.strip()).resolve() if found.returncode == 0 else None
+    if found.returncode != 0:
+        return None
+    root = Path(found.stdout.strip()).resolve()
+    return root if is_dotnet_root(root) else None
+
+
+def is_dotnet_root(directory: Path) -> bool:
+    return (directory / "host" / "fxr").is_dir()
 
 
 def dotnet_root(path: str) -> Path | None:
     dotnet = shutil.which("dotnet", path=path)
     resolved = Path(dotnet).resolve() if dotnet else None
-    if resolved is not None and resolved.name == "dotnet":
+    if resolved is not None and is_dotnet_root(resolved.parent):
         return resolved.parent
     return dotnet_root_from_mise(path)
 

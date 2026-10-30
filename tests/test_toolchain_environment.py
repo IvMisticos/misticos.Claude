@@ -16,8 +16,12 @@ def isolated_home(home: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     return home
 
 
+def make_dotnet_root(root: Path) -> None:
+    (root / "host" / "fxr").mkdir(parents=True)
+
+
 def link_dotnet_into_local_bin(home: Path, root: Path) -> None:
-    root.mkdir(parents=True)
+    root.mkdir(parents=True, exist_ok=True)
     dotnet = root / "dotnet"
     dotnet.write_text("#!/bin/sh\n")
     dotnet.chmod(0o755)
@@ -28,6 +32,7 @@ def link_dotnet_into_local_bin(home: Path, root: Path) -> None:
 
 def test_dotnet_root_follows_the_linked_dotnet(isolated_home: Path) -> None:
     root = isolated_home / ".local" / "share" / "mise" / "dotnet-root"
+    make_dotnet_root(root)
     link_dotnet_into_local_bin(isolated_home, root)
     assert toolchain_environment()["DOTNET_ROOT"] == str(root)
 
@@ -58,7 +63,7 @@ def test_dotnet_root_comes_from_mise_when_dotnet_is_not_linked(
     isolated_home: Path,
 ) -> None:
     root = isolated_home / "mise-dotnet"
-    root.mkdir()
+    make_dotnet_root(root)
     add_fake_mise(isolated_home, f'#!/bin/sh\n[ "$1" = where ] && echo "{root}"\n')
     assert toolchain_environment()["DOTNET_ROOT"] == str(root)
 
@@ -80,3 +85,10 @@ def test_missing_installer_runs_through_mise(isolated_home: Path) -> None:
 def test_missing_installer_without_mise_is_reported() -> None:
     with pytest.raises(RuntimeError, match="dotnet is not installed"):
         install_command(LANGUAGE_SERVERS["csharp"], toolchain_environment())
+
+
+def test_a_file_named_dotnet_outside_a_dotnet_root_is_ignored(
+    isolated_home: Path,
+) -> None:
+    link_dotnet_into_local_bin(isolated_home, isolated_home / "not-a-root")
+    assert "DOTNET_ROOT" not in toolchain_environment()
