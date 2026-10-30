@@ -5,7 +5,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "mcp"))
 
-from language_servers import toolchain_environment
+from language_servers import LANGUAGE_SERVERS, install_command, toolchain_environment
 
 
 @pytest.fixture
@@ -43,3 +43,40 @@ def test_dotnet_root_set_by_the_user_is_kept(
 @pytest.mark.usefixtures("isolated_home")
 def test_dotnet_root_stays_unset_without_dotnet() -> None:
     assert "DOTNET_ROOT" not in toolchain_environment()
+
+
+def add_fake_mise(home: Path, script: str) -> Path:
+    local_bin = home / ".local" / "bin"
+    local_bin.mkdir(parents=True, exist_ok=True)
+    mise = local_bin / "mise"
+    mise.write_text(script)
+    mise.chmod(0o755)
+    return mise
+
+
+def test_dotnet_root_comes_from_mise_when_dotnet_is_not_linked(
+    isolated_home: Path,
+) -> None:
+    root = isolated_home / "mise-dotnet"
+    root.mkdir()
+    add_fake_mise(isolated_home, f'#!/bin/sh\n[ "$1" = where ] && echo "{root}"\n')
+    assert toolchain_environment()["DOTNET_ROOT"] == str(root)
+
+
+def test_missing_installer_runs_through_mise(isolated_home: Path) -> None:
+    mise = add_fake_mise(isolated_home, "#!/bin/sh\nexit 1\n")
+    spec = LANGUAGE_SERVERS["csharp"]
+    assert install_command(spec, toolchain_environment()) == [
+        str(mise),
+        "--quiet",
+        "x",
+        "dotnet",
+        "--",
+        *spec["install"],
+    ]
+
+
+@pytest.mark.usefixtures("isolated_home")
+def test_missing_installer_without_mise_is_reported() -> None:
+    with pytest.raises(RuntimeError, match="dotnet is not installed"):
+        install_command(LANGUAGE_SERVERS["csharp"], toolchain_environment())
