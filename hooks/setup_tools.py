@@ -28,9 +28,13 @@ MISE_CONFIG_PATTERNS = (
     ".mise.toml",
     ".mise.*.toml",
     "mise/config.toml",
+    "mise/config.*.toml",
     ".mise/config.toml",
+    ".mise/config.*.toml",
     ".config/mise.toml",
     ".config/mise/config.toml",
+    ".config/mise/config.*.toml",
+    ".config/mise/conf.d/*.toml",
     ".tool-versions",
 )
 
@@ -140,6 +144,17 @@ def install_mise_tools(directory: Path) -> None:
         run(mise, "install", cwd=directory)
 
 
+def install_mise_tools_of_projects() -> None:
+    failed = []
+    for directory in directories_with_mise_config():
+        try:
+            install_mise_tools(directory)
+        except subprocess.CalledProcessError:
+            failed.append(str(directory))
+    if failed:
+        sys.exit(f"mise install failed in {', '.join(failed)}")
+
+
 def install_dotnet() -> None:
     dotnet = HOME / ".dotnet" / "dotnet"
     if not dotnet.exists():
@@ -160,8 +175,7 @@ def install_cloud_tools() -> None:
     install_bun()
     install_mise()
     install_dotnet()
-    for directory in directories_with_mise_config():
-        install_mise_tools(directory)
+    install_mise_tools_of_projects()
 
 
 def reapply_settings() -> None:

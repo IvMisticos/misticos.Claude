@@ -48,7 +48,7 @@ echo "$(basename "$0") $*" >> "$HOME/calls"
 """
 FAKE_MISE = """#!/usr/bin/env bash
 echo "mise $* in $(basename "$PWD")" >> "$HOME/calls"
-[ "$1" != "${MISE_FAILS_AT-}" ] || exit 1
+[ "$1 $(basename "$PWD")" != "${MISE_FAILS_AT-}" ] || exit 1
 """
 
 
@@ -173,11 +173,32 @@ def test_failed_mise_install_is_retried_once(
     status, calls = set_up_tools(
         CCR_AGENT_PROXY_ENABLED="1",
         CLAUDE_PROJECT_DIR=str(repo.parent),
-        MISE_FAILS_AT="install",
+        MISE_FAILS_AT="install repo",
     )
     assert status != 0
     assert [call for call in calls if call.startswith("mise ")] == [
         "mise trust --all --quiet in repo",
         "mise install in repo",
         "mise install in repo",
+    ]
+
+
+@pytest.mark.skipif(os.geteuid() != 0, reason="cloud tools install only as root")
+def test_failed_repo_does_not_stop_the_next_one(
+    set_up_tools: SetUpTools, tmp_path: Path
+) -> None:
+    projects = tmp_path / "projects"
+    for name in ("broken", "working"):
+        (projects / name).mkdir(parents=True)
+        (projects / name / "mise.toml").write_text("[tools]\n")
+    status, calls = set_up_tools(
+        CCR_AGENT_PROXY_ENABLED="1",
+        CLAUDE_PROJECT_DIR=str(projects),
+        MISE_FAILS_AT="trust broken",
+    )
+    assert status != 0
+    assert [call for call in calls if call.startswith("mise ")] == [
+        "mise trust --all --quiet in broken",
+        "mise trust --all --quiet in working",
+        "mise install in working",
     ]
