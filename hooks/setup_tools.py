@@ -12,6 +12,7 @@ import sys
 import tempfile
 from collections.abc import Mapping
 from pathlib import Path
+from typing import NamedTuple
 
 from install_lock import install_lock
 from json_values import JsonObject, JsonValue, dict_or_empty, json_object
@@ -26,14 +27,38 @@ WEB_GUIDANCE_MARKETPLACE = "GoogleChrome/modern-web-guidance"
 CLOUD_SESSION_MARK = "CCR_AGENT_PROXY_ENABLED"
 LOCAL_BIN = HOME / ".local" / "bin"
 MISE = LOCAL_BIN / "mise"
-MISE_TOOLS_INSTALLED_UP_FRONT = {
-    "uv": "latest",
-    "gh": "latest",
-    "jq": "latest",
-    "git-lfs": "latest",
+
+
+class PluginTool(NamedTuple):
+    version: str
+    binaries: tuple[str, ...]
+    lazy_unless_project_has: tuple[str, ...] = ()
+
+
+PLUGIN_TOOLS = {
+    "uv": PluginTool("latest", ("uv", "uvx")),
+    "gh": PluginTool("latest", ("gh",)),
+    "jq": PluginTool("latest", ("jq",)),
+    "git-lfs": PluginTool("latest", ("git-lfs",)),
+    "bun": PluginTool(
+        "latest",
+        ("bun", "bunx"),
+        ("bun.lock", "bun.lockb", "bunfig.toml", "package.json"),
+    ),
+    "dotnet": PluginTool(
+        "lts",
+        ("dotnet",),
+        (
+            "*.sln",
+            "*.slnx",
+            "*.slnf",
+            "*.csproj",
+            "*.fsproj",
+            "*.vbproj",
+            "global.json",
+        ),
+    ),
 }
-MISE_TOOLS_INSTALLED_ON_FIRST_USE = {"bun": "latest", "dotnet": "lts"}
-LINKED_MISE_BINARIES = ("uv", "uvx", "gh", "jq", "git-lfs")
 MISE_CONFIG_PATTERNS = (
     "mise.toml",
     "mise.*.toml",
@@ -51,12 +76,6 @@ MISE_CONFIG_PATTERNS = (
 )
 
 
-def mise_data_dir() -> Path:
-    if data_dir := os.environ.get("MISE_DATA_DIR"):
-        return Path(data_dir)
-    return Path(os.environ.get("XDG_DATA_HOME") or HOME / ".local" / "share") / "mise"
-
-
 def mise_global_config() -> Path:
     if config_file := os.environ.get("MISE_GLOBAL_CONFIG_FILE"):
         return Path(config_file)
@@ -65,7 +84,6 @@ def mise_global_config() -> Path:
     return Path(config_dir) / "config.toml"
 
 
-DOTNET_ROOT = mise_data_dir() / "dotnet-root"
 MISE_GLOBAL_CONFIG = mise_global_config()
 TOOLCHAIN_BIN_DIRS = (
     LOCAL_BIN,
@@ -81,7 +99,6 @@ def run(
     *command: str, cwd: Path | None = None, overrides: Mapping[str, str] | None = None
 ) -> None:
     environment = {
-        "DOTNET_ROOT": str(DOTNET_ROOT),
         "MISE_YES": "1",
         **os.environ,
         "PATH": TOOLCHAIN_PATH,
@@ -169,19 +186,36 @@ def create_global_mise_config() -> None:
     MISE_GLOBAL_CONFIG.touch()
 
 
-def install_global_mise_tools() -> None:
-    plugin_tools = MISE_TOOLS_INSTALLED_UP_FRONT | MISE_TOOLS_INSTALLED_ON_FIRST_USE
+def register_plugin_tools() -> None:
     create_global_mise_config()
-    for name, version in plugin_tools.items():
-        register_global_mise_tool(name, version)
-    run(mise(), "install", *MISE_TOOLS_INSTALLED_UP_FRONT, cwd=HOME)
+    for name, tool in PLUGIN_TOOLS.items():
+        register_global_mise_tool(name, tool.version)
 
 
-def mise_binary(name: str) -> Path:
-    found = subprocess.run(
-        (mise(), "which", name), capture_output=True, text=True, check=True, cwd=HOME
+def project_uses(tool: PluginTool) -> bool:
+    return any(
+        has_any_file(directory, tool.lazy_unless_project_has)
+        for directory in project_directories()
     )
-    return Path(found.stdout.strip())
+
+
+def plugin_tools_wanted_now() -> list[str]:
+    return [
+        name
+        for name, tool in PLUGIN_TOOLS.items()
+        if not tool.lazy_unless_project_has or project_uses(tool)
+    ]
+
+
+def install_plugin_tools() -> None:
+    run(mise(), "install", *plugin_tools_wanted_now(), cwd=HOME)
+
+
+def installed_mise_binary(name: str) -> Path | None:
+    found = subprocess.run(
+        (mise(), "which", name), capture_output=True, text=True, check=False, cwd=HOME
+    )
+    return Path(found.stdout.strip()) if found.returncode == 0 else None
 
 
 def link_into_local_bin(name: str, binary: Path) -> None:
@@ -192,10 +226,12 @@ def link_into_local_bin(name: str, binary: Path) -> None:
     link.symlink_to(binary)
 
 
-def link_mise_binaries() -> None:
+def link_installed_plugin_binaries() -> None:
     LOCAL_BIN.mkdir(parents=True, exist_ok=True)
-    for name in LINKED_MISE_BINARIES:
-        link_into_local_bin(name, mise_binary(name))
+    for tool in PLUGIN_TOOLS.values():
+        for name in tool.binaries:
+            if binary := installed_mise_binary(name):
+                link_into_local_bin(name, binary)
 
 
 def set_up_git_lfs() -> None:
@@ -206,17 +242,21 @@ def project_dir() -> Path:
     return Path(os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd())
 
 
-def has_mise_config(directory: Path) -> bool:
-    return any(
-        next(directory.glob(pattern), None) is not None
-        for pattern in MISE_CONFIG_PATTERNS
-    )
+def has_any_file(directory: Path, patterns: tuple[str, ...]) -> bool:
+    return any(next(directory.glob(pattern), None) is not None for pattern in patterns)
+
+
+def project_directories() -> list[Path]:
+    root = project_dir()
+    return [root, *sorted(child for child in root.iterdir() if child.is_dir())]
 
 
 def directories_with_mise_config() -> list[Path]:
-    root = project_dir()
-    candidates = [root, *sorted(child for child in root.iterdir() if child.is_dir())]
-    return [directory for directory in candidates if has_mise_config(directory)]
+    return [
+        directory
+        for directory in project_directories()
+        if has_any_file(directory, MISE_CONFIG_PATTERNS)
+    ]
 
 
 def install_own_mise_tools(directory: Path) -> None:
@@ -246,22 +286,15 @@ def install_mise_tools_of_projects() -> None:
         sys.exit(f"mise install failed in {', '.join(failed)}")
 
 
-def link_dotnet() -> None:
-    LOCAL_BIN.mkdir(parents=True, exist_ok=True)
-    dotnet_link = LOCAL_BIN / "dotnet"
-    dotnet_link.unlink(missing_ok=True)
-    dotnet_link.symlink_to(DOTNET_ROOT / "dotnet")
-
-
 def install_cloud_tools() -> None:
     if CLOUD_SESSION_MARK not in os.environ or os.geteuid() != 0:
         return
     install_apt_packages()
     with install_lock():
         install_mise()
-        install_global_mise_tools()
-        link_mise_binaries()
-        link_dotnet()
+        register_plugin_tools()
+        install_plugin_tools()
+        link_installed_plugin_binaries()
     set_up_git_lfs()
     install_mise_tools_of_projects()
 

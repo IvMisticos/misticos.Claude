@@ -49,9 +49,14 @@ echo "$(basename "$0") $*" >> "$HOME/calls"
 FAKE_MISE = """#!/usr/bin/env bash
 echo "mise $* in $(basename "$PWD")${MISE_GLOBAL_CONFIG_FILE:+ alone}" >> "$HOME/calls"
 [ "$1 $(basename "$PWD")" != "${MISE_FAILS_AT-}" ] || exit 1
-case "$1 $2" in
+installs="$HOME/mise-installs"
+case "$1 ${2-}" in
   "config get") grep -qx "$4" "$HOME/global-mise-tools" 2>/dev/null ;;
-  "which "*) echo "$HOME/mise-installs/$2" ;;
+  "which "*) [ -e "$installs/$2" ] && echo "$installs/$2" ;;
+  "install "*)
+    mkdir -p "$installs"
+    for tool in "${@:2}"; do touch "$installs/$tool"; done
+    ;;
 esac
 """
 REGISTER_PLUGIN_TOOLS = [
@@ -103,6 +108,7 @@ def set_up_tools(home: Path, fake_bin: FakeBin, hooks: Path) -> SetUpTools:
             capture_output=True,
             check=False,
             timeout=30,
+            cwd=home,
         )
         calls = home / "calls"
         logged = calls.read_text().splitlines() if calls.exists() else []
@@ -255,13 +261,45 @@ def test_cloud_session_keeps_global_mise_tools_the_user_chose(
 
 
 @pytest.mark.skipif(os.geteuid() != 0, reason="cloud tools install only as root")
-def test_cloud_session_links_dotnet_from_mise(
-    set_up_tools: SetUpTools, home: Path, tmp_path: Path
+@pytest.mark.parametrize(
+    ("project_file", "tool"),
+    [("App.csproj", "dotnet"), ("global.json", "dotnet"), ("package.json", "bun")],
+)
+def test_cloud_session_installs_tools_a_project_uses(
+    set_up_tools: SetUpTools, tmp_path: Path, project_file: str, tool: str
 ) -> None:
-    mise_data = tmp_path / "mise-data"
-    set_up_tools(CCR_AGENT_PROXY_ENABLED="1", MISE_DATA_DIR=str(mise_data))
+    repo = tmp_path / "projects" / "repo"
+    repo.mkdir(parents=True)
+    (repo / project_file).write_text("")
+    _, calls = set_up_tools(
+        CCR_AGENT_PROXY_ENABLED="1", CLAUDE_PROJECT_DIR=str(repo.parent)
+    )
+    assert f"mise install uv gh jq git-lfs {tool} in home" in calls
+
+
+@pytest.mark.skipif(os.geteuid() != 0, reason="cloud tools install only as root")
+def test_cloud_session_keeps_a_working_dotnet_link_until_mise_has_dotnet(
+    set_up_tools: SetUpTools, home: Path
+) -> None:
+    own_dotnet = home / ".dotnet" / "dotnet"
+    own_dotnet.parent.mkdir()
+    own_dotnet.write_text("")
     dotnet_link = home / ".local" / "bin" / "dotnet"
-    assert dotnet_link.readlink() == mise_data / "dotnet-root" / "dotnet"
+    dotnet_link.parent.mkdir(parents=True)
+    dotnet_link.symlink_to(own_dotnet)
+    set_up_tools(CCR_AGENT_PROXY_ENABLED="1")
+    assert dotnet_link.readlink() == own_dotnet
+
+
+@pytest.mark.skipif(os.geteuid() != 0, reason="cloud tools install only as root")
+def test_cloud_session_links_dotnet_once_mise_has_it(
+    set_up_tools: SetUpTools, home: Path
+) -> None:
+    mise_dotnet = home / "mise-installs" / "dotnet"
+    mise_dotnet.parent.mkdir()
+    mise_dotnet.write_text("")
+    set_up_tools(CCR_AGENT_PROXY_ENABLED="1")
+    assert (home / ".local" / "bin" / "dotnet").readlink() == mise_dotnet
 
 
 @pytest.mark.skipif(os.geteuid() != 0, reason="cloud tools install only as root")
