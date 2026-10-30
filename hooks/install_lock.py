@@ -21,8 +21,10 @@ def take_install_lock() -> bool:
 def install_lock_holder_is_gone() -> bool:
     try:
         holder = int(INSTALL_LOCK.read_text())
-    except (OSError, ValueError):
+    except OSError:
         return False
+    except ValueError:
+        return True
     try:
         os.kill(holder, 0)
     except ProcessLookupError:

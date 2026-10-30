@@ -340,3 +340,16 @@ def test_cloud_session_waits_for_another_tool_install(
     with pytest.raises(ProcessLookupError):
         os.kill(int(holder), 0)
     assert not lock.exists()
+
+
+@pytest.mark.skipif(os.geteuid() != 0, reason="cloud tools install only as root")
+@pytest.mark.parametrize("content", ["", "not a pid\n"])
+def test_cloud_session_takes_over_a_garbled_install_lock(
+    set_up_tools: SetUpTools, home: Path, content: str
+) -> None:
+    lock = home / ".local" / "tool-install.pid"
+    lock.parent.mkdir(parents=True)
+    lock.write_text(content)
+    _, calls = set_up_tools(CCR_AGENT_PROXY_ENABLED="1")
+    assert INSTALL_UP_FRONT in calls
+    assert not lock.exists()
