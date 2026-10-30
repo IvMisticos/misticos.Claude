@@ -174,4 +174,4 @@ if [ -z "${ALLOW_GH_PULL_REQUEST_WRITE-}" ]; then
   api_writes_pull_requests "$@" && deny
 fi
 
-exec "$gh" "$@"
+exec_real_tool gh "$gh" "$@"

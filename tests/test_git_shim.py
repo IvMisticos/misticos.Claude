@@ -3,7 +3,13 @@ import subprocess
 from pathlib import Path
 
 import pytest
-from conftest import SHIMS, ShimRun, ShimRunner, without_session_variables
+from conftest import (
+    SHIMS,
+    ShimRun,
+    ShimRunner,
+    WrappedShimRunner,
+    without_session_variables,
+)
 
 FAKE_GIT = """#!/usr/bin/env bash
 if [ "$1 $2" = "-C $HARNESS_PROJECT_DIR" ] && [ "$3" = rev-parse ]; then
@@ -235,3 +241,27 @@ def test_runs_identity_changes_in_a_repository_named_by_git_dir(tmp_path: Path) 
         check=False,
     )
     assert result.returncode == 0
+
+
+NESTING_GIT = """#!/usr/bin/env bash
+if [ "$1" = outer ]; then
+  git inner
+else
+  echo "ran $*"
+fi
+"""
+
+
+@pytest.mark.parametrize("wrapper_entry_end", ["", "/"])
+def test_reaches_git_past_a_wrapper_that_runs_the_shim(
+    wrapped_shim_runner: WrappedShimRunner, wrapper_entry_end: str
+) -> None:
+    run = wrapped_shim_runner("git", NESTING_GIT, wrapper_entry_end)
+    assert run("status").stdout == "ran status\n"
+
+
+def test_resolves_git_again_for_a_child_of_git(
+    wrapped_shim_runner: WrappedShimRunner,
+) -> None:
+    run = wrapped_shim_runner("git", NESTING_GIT, "")
+    assert run("outer").stdout == "ran inner\n"

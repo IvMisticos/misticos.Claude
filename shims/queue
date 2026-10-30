@@ -9,8 +9,9 @@ REAL_TOOL_PATH="$PATH:$HOME/.local/bin"
 if [ "${1:-}" = tool ]; then
   real=$(real_tool "$2")
   if [ -n "${HARNESS_QUEUE_HELD:-}" ]; then
-    exec "$real" "${@:3}"
+    exec_real_tool "$2" "$real" "${@:3}"
   fi
+  record_handoff "$2" "$real"
   set -- tool "$real" "${@:3}"
 fi
 

@@ -35,6 +35,12 @@ class ShimRunner(Protocol):
     ) -> ShimRun: ...
 
 
+class WrappedShimRunner(Protocol):
+    def __call__(
+        self, name: str, fake_script: str, wrapper_entry_end: str
+    ) -> ShimRun: ...
+
+
 class ReviewThread:
     def __init__(
         self, thread_id: str, comment_ids: list[int], resolved: bool = False
@@ -181,6 +187,40 @@ def shim_runner(fake_bin: FakeBin) -> ShimRunner:
                 capture_output=True,
                 text=True,
                 check=False,
+            )
+
+        return run
+
+    return runner
+
+
+@pytest.fixture
+def wrapped_shim_runner(tmp_path: Path, fake_bin: FakeBin) -> WrappedShimRunner:
+    uv_directories = real_uv_directories()
+    wrapper = tmp_path / "wrapper"
+    wrapper.mkdir()
+
+    def runner(name: str, fake_script: str, wrapper_entry_end: str) -> ShimRun:
+        program = wrapper / name
+        program.write_text(f'#!/usr/bin/env bash\nexec "{SHIMS / name}" "$@"\n')
+        program.chmod(0o755)
+        environment = without_session_variables(os.environ)
+        environment["PATH"] = os.pathsep.join(
+            [str(wrapper) + wrapper_entry_end, str(fake_bin(name, fake_script))]
+            + ["/usr/bin", "/bin"]
+            + uv_directories
+        )
+
+        def run(
+            *arguments: str, **extra_environment: str
+        ) -> subprocess.CompletedProcess[str]:
+            return subprocess.run(
+                [SHIMS / name, *arguments],
+                env={**environment, **extra_environment},
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=10,
             )
 
         return run
