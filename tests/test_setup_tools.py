@@ -46,6 +46,10 @@ echo "run.sh $*" >> "$HOME/calls"
 FAKE_DOWNLOAD = """#!/usr/bin/env bash
 echo "$(basename "$0") $*" >> "$HOME/calls"
 """
+FAKE_MISE = """#!/usr/bin/env bash
+echo "mise $* in $(basename "$PWD")" >> "$HOME/calls"
+[ "$1 $(basename "$PWD")" != "${MISE_FAILS_AT-}" ] || exit 1
+"""
 
 
 class SetUpTools(Protocol):
@@ -69,6 +73,7 @@ def set_up_tools(home: Path, fake_bin: FakeBin, hooks: Path) -> SetUpTools:
     bin_dir = fake_bin("claude", FAKE_CLAUDE)
     fake_bin("curl", FAKE_DOWNLOAD)
     fake_bin("apt-get", FAKE_DOWNLOAD)
+    fake_bin("mise", FAKE_MISE)
 
     def set_up(**extra_environment: str) -> tuple[int, list[str]]:
         result = subprocess.run(
@@ -135,3 +140,65 @@ def test_plugin_the_user_disabled_is_not_installed(
     settings = home / ".claude" / "settings.json"
     write_json(settings, {"enabledPlugins": {WEB_GUIDANCE_PLUGIN: False}})
     assert set_up_tools() == (0, [])
+
+
+@pytest.mark.skipif(os.geteuid() != 0, reason="cloud tools install only as root")
+def test_cloud_session_installs_mise_tools_of_each_repo(
+    set_up_tools: SetUpTools, tmp_path: Path
+) -> None:
+    projects = tmp_path / "projects"
+    (projects / "with-mise").mkdir(parents=True)
+    (projects / "with-mise" / "mise.toml").write_text("[tools]\n")
+    (projects / "with-tool-versions").mkdir()
+    (projects / "with-tool-versions" / ".tool-versions").write_text("")
+    (projects / "without-mise").mkdir()
+    _, calls = set_up_tools(
+        CCR_AGENT_PROXY_ENABLED="1", CLAUDE_PROJECT_DIR=str(projects)
+    )
+    assert [call for call in calls if call.startswith("mise ")] == [
+        "mise trust --all --quiet in with-mise",
+        "mise install in with-mise",
+        "mise trust --all --quiet in with-tool-versions",
+        "mise install in with-tool-versions",
+    ]
+
+
+@pytest.mark.skipif(os.geteuid() != 0, reason="cloud tools install only as root")
+def test_failed_mise_install_is_retried_once(
+    set_up_tools: SetUpTools, tmp_path: Path
+) -> None:
+    repo = tmp_path / "projects" / "repo"
+    repo.mkdir(parents=True)
+    (repo / "mise.toml").write_text("[tools]\n")
+    status, calls = set_up_tools(
+        CCR_AGENT_PROXY_ENABLED="1",
+        CLAUDE_PROJECT_DIR=str(repo.parent),
+        MISE_FAILS_AT="install repo",
+    )
+    assert status != 0
+    assert [call for call in calls if call.startswith("mise ")] == [
+        "mise trust --all --quiet in repo",
+        "mise install in repo",
+        "mise install in repo",
+    ]
+
+
+@pytest.mark.skipif(os.geteuid() != 0, reason="cloud tools install only as root")
+def test_failed_repo_does_not_stop_the_next_one(
+    set_up_tools: SetUpTools, tmp_path: Path
+) -> None:
+    projects = tmp_path / "projects"
+    for name in ("broken", "working"):
+        (projects / name).mkdir(parents=True)
+        (projects / name / "mise.toml").write_text("[tools]\n")
+    status, calls = set_up_tools(
+        CCR_AGENT_PROXY_ENABLED="1",
+        CLAUDE_PROJECT_DIR=str(projects),
+        MISE_FAILS_AT="trust broken",
+    )
+    assert status != 0
+    assert [call for call in calls if call.startswith("mise ")] == [
+        "mise trust --all --quiet in broken",
+        "mise trust --all --quiet in working",
+        "mise install in working",
+    ]
