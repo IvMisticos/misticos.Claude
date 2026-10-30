@@ -340,3 +340,16 @@ def test_mise_shim_falling_through_to_the_plugin_shim_stops(
     assert result.returncode == 0, result.stderr
     assert result.stdout.startswith("uv ")
     assert mise_shim_calls(home) == 1
+
+
+def test_runs_bunx_through_mises_bun(
+    environment_with_only_local_uv: dict[str, str], fake_bin: FakeBin
+) -> None:
+    mise_dir = fake_bin("mise", '#!/usr/bin/env bash\necho "mise $*"\n')
+    environment = environment_with_only_local_uv
+    environment["PATH"] += os.pathsep + str(mise_dir)
+
+    result = run_shim("bunx", environment, "cowsay")
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == "mise --quiet x bun -- bunx cowsay\n"

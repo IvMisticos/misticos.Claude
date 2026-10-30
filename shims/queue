@@ -26,10 +26,18 @@ plugin_free_path=$(path_without is_shim_dir "$PATH")
 uv_search_path=$(path_without is_mise_shim_dir "$REAL_TOOL_PATH")
 without_plugin_shims=("$(real_tool env)" "PATH=$plugin_free_path")
 
+mise_tool_providing() {
+  case $1 in
+    bunx) echo bun ;;
+    uvx) echo uv ;;
+    *) echo "$1" ;;
+  esac
+}
+
 run_through_mise() {
   local name=$1 mise
   mise=$(real_tool mise 2>/dev/null) || return 1
-  tool_command=("${without_plugin_shims[@]}" "$mise" --quiet x "$name" -- "$name")
+  tool_command=("${without_plugin_shims[@]}" "$mise" --quiet x "$(mise_tool_providing "$name")" -- "$name")
 }
 
 find_tool_command() {
