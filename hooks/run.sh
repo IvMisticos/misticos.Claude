@@ -2,10 +2,9 @@
 
 set -euo pipefail
 
-mise_shims="${MISE_DATA_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/mise}/shims"
-export PATH="$HOME/.local/bin:$PATH:$mise_shims"
+export PATH="$HOME/.local/bin:$PATH"
 
-install_lock="$HOME/.local/uv-install.pid"
+install_lock="$HOME/.local/tool-install.pid"
 
 take_install_lock() {
   (set -C; echo $$ > "$install_lock") 2>/dev/null
@@ -29,6 +28,8 @@ install_uv_with_mise() {
   else
     mise use --global uv@latest
   fi
+  mkdir -p "$HOME/.local/bin"
+  ln -sf "$(mise which uv)" "$HOME/.local/bin/uv"
 }
 
 install_uv_once() {
@@ -39,7 +40,7 @@ install_uv_once() {
   done
   trap release_install_lock EXIT
   if ! command -v uv >/dev/null; then
-    install_uv_with_mise >&2
+    (cd "$HOME"; install_uv_with_mise) >&2
   fi
   release_install_lock
 }

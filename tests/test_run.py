@@ -15,6 +15,7 @@ TOOLS = [
     "cat",
     "chmod",
     "dirname",
+    "ln",
     "mkdir",
     "rm",
     "sh",
@@ -24,13 +25,15 @@ TOOLS = [
 ]
 FAKE_MISE = """#!/usr/bin/env bash
 echo "mise $*" >> "$HOME/mise-calls"
+[ "$PWD" = "$HOME" ] || exit 1
+installed_uv="$HOME/mise-installs/uv"
 case "$1" in
   config) [ -e "$HOME/mise-config" ] ;;
+  which) echo "$installed_uv" ;;
   install | use)
-    shims="$HOME/.local/share/mise/shims"
-    mkdir -p "$shims"
-    printf '#!/bin/sh\\necho "uv $*"\\n' > "$shims/uv"
-    chmod +x "$shims/uv"
+    mkdir -p "$(dirname "$installed_uv")"
+    printf '#!/bin/sh\\necho "uv $*"\\n' > "$installed_uv"
+    chmod +x "$installed_uv"
     ;;
 esac
 """
@@ -90,11 +93,15 @@ def wait_for(path: Path) -> None:
 
 
 def run_hook(
-    environment: dict[str, str], script: str = "hook.py", timeout: float = 10
+    environment: dict[str, str],
+    script: str = "hook.py",
+    timeout: float = 10,
+    cwd: Path | None = None,
 ) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [RUN, script],
         env=environment,
+        cwd=cwd,
         capture_output=True,
         text=True,
         timeout=timeout,
@@ -110,7 +117,7 @@ def test_installs_uv_again_after_a_finished_install(
     environment: dict[str, str], home: Path
 ) -> None:
     run_hook(environment)
-    (home / ".local" / "share" / "mise" / "shims" / "uv").unlink()
+    (home / "mise-installs" / "uv").unlink()
     assert run_hook(environment).stdout == "uv run hook.py\n"
 
 
@@ -125,6 +132,7 @@ def test_installs_uv_through_the_global_mise_config(
     assert mise_calls(home) == [
         "mise config get --global tools.uv",
         "mise use --global uv@latest",
+        "mise which uv",
     ]
 
 
@@ -133,7 +141,21 @@ def test_keeps_the_uv_version_the_user_chose(
 ) -> None:
     (home / "mise-config").touch()
     run_hook(environment)
-    assert mise_calls(home) == ["mise config get --global tools.uv", "mise install uv"]
+    assert mise_calls(home) == [
+        "mise config get --global tools.uv",
+        "mise install uv",
+        "mise which uv",
+    ]
+
+
+def test_installs_uv_from_home_inside_a_project(
+    environment: dict[str, str], tmp_path: Path
+) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "mise.toml").write_text('[env]\nUNTRUSTED = "1"\n')
+    result = run_hook(environment, cwd=project)
+    assert result.stdout == "uv run hook.py\n"
 
 
 def test_waits_while_another_hook_installs_uv(
