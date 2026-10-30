@@ -21,15 +21,28 @@ install_lock_holder_is_gone() {
   ! kill -0 "$holder" 2>/dev/null
 }
 
-install_uv_with_mise() {
-  command -v mise >/dev/null || curl -fsSL https://mise.run | sh
+register_uv_in_mise() {
   if mise config get --global tools.uv >/dev/null 2>&1; then
     mise install uv
   else
     mise use --global uv@latest
   fi
+}
+
+uv_from_mise_config() {
+  register_uv_in_mise >&2 && mise which uv
+}
+
+uv_without_mise_config() {
+  mise --quiet x uv@latest -- sh -c 'command -v uv'
+}
+
+install_uv_with_mise() {
+  local uv
+  command -v mise >/dev/null || curl -fsSL https://mise.run | sh
+  uv=$(uv_from_mise_config) || uv=$(uv_without_mise_config)
   mkdir -p "$HOME/.local/bin"
-  ln -sf "$(mise which uv)" "$HOME/.local/bin/uv"
+  ln -sf "$uv" "$HOME/.local/bin/uv"
 }
 
 install_uv_once() {

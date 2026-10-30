@@ -27,13 +27,20 @@ FAKE_MISE = """#!/usr/bin/env bash
 echo "mise $*" >> "$HOME/mise-calls"
 [ "$PWD" = "$HOME" ] || exit 1
 installed_uv="$HOME/mise-installs/uv"
+install_uv() {
+  mkdir -p "$(dirname "$1")"
+  printf '#!/bin/sh\\necho "uv $*"\\n' > "$1"
+  chmod +x "$1"
+}
 case "$1" in
   config) [ -e "$HOME/mise-config" ] ;;
   which) echo "$installed_uv" ;;
-  install | use)
-    mkdir -p "$(dirname "$installed_uv")"
-    printf '#!/bin/sh\\necho "uv $*"\\n' > "$installed_uv"
-    chmod +x "$installed_uv"
+  use) [ -z "${MISE_USE_FAILS-}" ] && install_uv "$installed_uv" ;;
+  install) install_uv "$installed_uv" ;;
+  --quiet)
+    shift 4
+    install_uv "$HOME/mise-x-installs/uv"
+    PATH="$HOME/mise-x-installs:$PATH" exec "$@"
     ;;
 esac
 """
@@ -156,6 +163,15 @@ def test_installs_uv_from_home_inside_a_project(
     (project / "mise.toml").write_text('[env]\nUNTRUSTED = "1"\n')
     result = run_hook(environment, cwd=project)
     assert result.stdout == "uv run hook.py\n"
+
+
+def test_runs_hooks_when_the_global_mise_config_cannot_change(
+    environment: dict[str, str], home: Path
+) -> None:
+    result = run_hook({**environment, "MISE_USE_FAILS": "1"})
+    assert result.stdout == "uv run hook.py\n"
+    linked_uv = (home / ".local" / "bin" / "uv").readlink()
+    assert linked_uv == home / "mise-x-installs" / "uv"
 
 
 def test_waits_while_another_hook_installs_uv(
