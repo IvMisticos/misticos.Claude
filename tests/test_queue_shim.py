@@ -156,14 +156,16 @@ def test_runs_uv_through_mise_when_uv_is_missing(home: Path, fake_bin: FakeBin) 
 
 
 MISE_RUNNING_FROM_PATH = """#!/usr/bin/env bash
+echo "mise $*" >> "$HOME/mise-calls"
 [ "$1 $2" = "--quiet x" ] || exit 2
 shift 4
+command -v "$1" >/dev/null || { echo "mise ERROR couldn't exec process" >&2; exit 1; }
 exec "$@"
 """
 
 
-def test_mise_does_not_reenter_the_shim_for_a_tool_it_lacks(
-    environment_with_only_local_uv: dict[str, str], fake_bin: FakeBin
+def test_mise_runs_cargo_from_rust_without_reentering_the_shim(
+    environment_with_only_local_uv: dict[str, str], fake_bin: FakeBin, home: Path
 ) -> None:
     mise_dir = fake_bin("mise", MISE_RUNNING_FROM_PATH)
     environment = environment_with_only_local_uv
@@ -178,7 +180,29 @@ def test_mise_does_not_reenter_the_shim_for_a_tool_it_lacks(
         timeout=10,
     )
 
+    assert result.returncode == 1
+    assert (home / "mise-calls").read_text() == "mise --quiet x rust -- cargo build\n"
+
+
+def test_reports_a_tool_mise_does_not_provide(
+    environment_with_only_local_uv: dict[str, str], fake_bin: FakeBin, home: Path
+) -> None:
+    mise_dir = fake_bin("mise", MISE_RUNNING_FROM_PATH)
+    environment = environment_with_only_local_uv
+    environment["PATH"] += os.pathsep + str(mise_dir)
+
+    result = subprocess.run(
+        [SHIMS / "queue", "tool", "unknown-tool"],
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=10,
+    )
+
     assert result.returncode == 127
+    assert result.stderr == "queue: unknown-tool is not installed\n"
+    assert not (home / "mise-calls").exists()
 
 
 def test_queues_a_build_that_mise_runs(
