@@ -205,6 +205,21 @@ def test_reports_a_tool_mise_does_not_provide(
     assert not (home / "mise-calls").exists()
 
 
+def test_held_tool_runs_without_uv(home: Path, fake_bin: FakeBin) -> None:
+    cargo_dir = fake_bin("cargo", '#!/usr/bin/env bash\necho "cargo $*"\n')
+    environment = without_session_variables(os.environ)
+    environment.update(
+        HOME=str(home),
+        HARNESS_QUEUE_HELD="1",
+        PATH=os.pathsep.join([str(SHIMS), str(cargo_dir), "/usr/bin", "/bin"]),
+    )
+
+    result = run_shim("cargo", environment, "build")
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == "cargo build\n"
+
+
 def test_queues_a_build_that_mise_runs(
     environment_with_only_local_uv: dict[str, str], fake_bin: FakeBin
 ) -> None:

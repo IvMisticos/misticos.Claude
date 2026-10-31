@@ -61,16 +61,20 @@ find_queue_uv() {
   fi
 }
 
-find_queue_uv
-uv_command=("${tool_command[@]}")
-
 if [ "${1:-}" = tool ]; then
   find_tool_command "$2"
   if [ -n "${HARNESS_QUEUE_HELD:-}" ]; then
     exec_real_tool "$2" "${tool_command[@]}" "${@:3}"
   fi
-  record_handoff "$2" "${tool_command[0]}"
-  set -- tool "$2" "${#tool_command[@]}" "${tool_command[@]}" "${@:3}"
+  queued_tool=("${tool_command[@]}")
+fi
+
+find_queue_uv
+uv_command=("${tool_command[@]}")
+
+if [ "${1:-}" = tool ]; then
+  record_handoff "$2" "${queued_tool[0]}"
+  set -- tool "$2" "${#queued_tool[@]}" "${queued_tool[@]}" "${@:3}"
 fi
 
 run_uv_outside_projects() {
