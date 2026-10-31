@@ -313,9 +313,17 @@ def test_cloud_session_links_plugin_tools_into_the_local_bin(
     local_bin = home / ".local" / "bin"
     local_bin.mkdir(parents=True)
     (local_bin / "uv").write_text("own uv")
-    (local_bin / "gh").symlink_to(home / "stale-gh")
+    own_jq = home / "own-jq"
+    own_jq.write_text("")
+    (local_bin / "jq").symlink_to(own_jq)
+    old_mise_gh = home / ".local" / "share" / "mise" / "installs" / "gh" / "gh"
+    old_mise_gh.parent.mkdir(parents=True)
+    old_mise_gh.write_text("")
+    (local_bin / "gh").symlink_to(old_mise_gh)
+    (local_bin / "git-lfs").symlink_to(home / "stale-git-lfs")
     set_up_tools(CCR_AGENT_PROXY_ENABLED="1")
     assert (local_bin / "uv").read_text() == "own uv"
+    assert (local_bin / "jq").readlink() == own_jq
     assert (local_bin / "gh").readlink() == home / "mise-installs" / "gh"
     assert (local_bin / "git-lfs").readlink() == home / "mise-installs" / "git-lfs"
 

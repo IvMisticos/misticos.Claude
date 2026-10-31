@@ -75,6 +75,12 @@ MISE_CONFIG_PATTERNS = (
 )
 
 
+def mise_data_dir() -> Path:
+    if data_dir := os.environ.get("MISE_DATA_DIR"):
+        return Path(data_dir)
+    return Path(os.environ.get("XDG_DATA_HOME") or HOME / ".local" / "share") / "mise"
+
+
 def mise_global_config() -> Path:
     if config_file := os.environ.get("MISE_GLOBAL_CONFIG_FILE"):
         return Path(config_file)
@@ -249,9 +255,17 @@ def installed_mise_binary(name: str) -> Path | None:
     return Path(found.stdout.strip()) if found.returncode == 0 else None
 
 
+def is_replaceable_link(link: Path) -> bool:
+    if not link.exists():
+        return True
+    return link.is_symlink() and link.resolve().is_relative_to(
+        mise_data_dir().resolve()
+    )
+
+
 def link_into_local_bin(name: str, binary: Path) -> None:
     link = LOCAL_BIN / name
-    if link.exists() and not link.is_symlink():
+    if not is_replaceable_link(link):
         return
     link.unlink(missing_ok=True)
     link.symlink_to(binary)
