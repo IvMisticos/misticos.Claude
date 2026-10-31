@@ -4,7 +4,8 @@ set -euo pipefail
 
 export PATH="$HOME/.local/bin:$PATH"
 
-install_lock="$HOME/.local/uv-install.pid"
+install_lock="$HOME/.local/tool-install.pid"
+abandoned_empty_lock_seconds=5
 
 take_install_lock() {
   (set -C; echo $$ > "$install_lock") 2>/dev/null
@@ -15,10 +16,41 @@ release_install_lock() {
   trap - EXIT
 }
 
+install_lock_is_old() {
+  local modified
+  modified=$(stat -c %Y "$install_lock" 2>/dev/null || stat -f %m "$install_lock" 2>/dev/null) || return 1
+  [ $(($(date +%s) - modified)) -ge "$abandoned_empty_lock_seconds" ]
+}
+
 install_lock_holder_is_gone() {
   local holder
   holder=$(cat "$install_lock" 2>/dev/null) || return 1
+  [ -n "$holder" ] || { install_lock_is_old; return; }
   ! kill -0 "$holder" 2>/dev/null
+}
+
+register_uv_in_mise() {
+  if mise config get --global tools.uv >/dev/null 2>&1; then
+    mise install uv
+  else
+    mise use --global uv@latest
+  fi
+}
+
+uv_from_mise_config() {
+  register_uv_in_mise >&2 && mise which uv
+}
+
+uv_without_mise_config() {
+  mise --quiet x uv@latest -- sh -c 'command -v uv'
+}
+
+install_uv_with_mise() {
+  local uv
+  command -v mise >/dev/null || curl -fsSL https://mise.run | sh
+  uv=$(uv_from_mise_config) || uv=$(uv_without_mise_config)
+  mkdir -p "$HOME/.local/bin"
+  ln -sf "$uv" "$HOME/.local/bin/uv"
 }
 
 install_uv_once() {
@@ -28,7 +60,9 @@ install_uv_once() {
     sleep 0.2
   done
   trap release_install_lock EXIT
-  command -v uv >/dev/null || curl -LsSf https://astral.sh/uv/install.sh | INSTALLER_NO_MODIFY_PATH=1 sh >&2
+  if ! command -v uv >/dev/null; then
+    (cd "$HOME"; install_uv_with_mise) >&2
+  fi
   release_install_lock
 }
 

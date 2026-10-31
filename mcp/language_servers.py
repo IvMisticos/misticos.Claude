@@ -1,6 +1,7 @@
 import asyncio
 import os
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 from typing import TypedDict
@@ -58,12 +59,43 @@ EXTENSION_TO_SERVER = {
 TOOLCHAIN_BIN_DIRS = (".local/bin", ".bun/bin", ".dotnet/tools", ".dotnet")
 
 
+def dotnet_root_from_mise(path: str) -> Path | None:
+    mise = shutil.which("mise", path=path)
+    if mise is None:
+        return None
+    found = subprocess.run(
+        [mise, "where", "dotnet"],
+        capture_output=True,
+        text=True,
+        check=False,
+        cwd=Path.home(),
+    )
+    if found.returncode != 0:
+        return None
+    root = Path(found.stdout.strip()).resolve()
+    return root if is_dotnet_root(root) else None
+
+
+def is_dotnet_root(directory: Path) -> bool:
+    return (directory / "host" / "fxr").is_dir()
+
+
+def dotnet_root(path: str) -> Path | None:
+    dotnet = shutil.which("dotnet", path=path)
+    resolved = Path(dotnet).resolve() if dotnet else None
+    if resolved is not None and is_dotnet_root(resolved.parent):
+        return resolved.parent
+    return dotnet_root_from_mise(path)
+
+
 def toolchain_environment() -> dict[str, str]:
     home = Path.home()
     environment = dict(os.environ)
     bin_dirs = [str(home / directory) for directory in TOOLCHAIN_BIN_DIRS]
     environment["PATH"] = os.pathsep.join([*bin_dirs, environment.get("PATH", "")])
-    environment.setdefault("DOTNET_ROOT", str(home / ".dotnet"))
+    root = dotnet_root(environment["PATH"])
+    if root is not None:
+        environment.setdefault("DOTNET_ROOT", str(root))
     return environment
 
 
@@ -90,16 +122,26 @@ async def ensure_installed(name: str) -> None:
     await asyncio.wait_for(asyncio.shield(install), INSTALL_TIMEOUT_SECONDS)
 
 
-async def install_server(spec: LanguageServerSpec, environment: dict[str, str]) -> None:
+def install_command(spec: LanguageServerSpec, environment: dict[str, str]) -> list[str]:
     binary, installer = spec["command"][0], spec["install"][0]
-    if not shutil.which(installer, path=environment["PATH"]):
+    if shutil.which(installer, path=environment["PATH"]):
+        return spec["install"]
+    mise = shutil.which("mise", path=environment["PATH"])
+    if mise is None:
         raise RuntimeError(
             f"{binary} is missing and {installer} is not installed to fetch it"
         )
+    return [mise, "--quiet", "x", installer, "--", *spec["install"]]
+
+
+async def install_server(spec: LanguageServerSpec, environment: dict[str, str]) -> None:
+    binary = spec["command"][0]
+    command = install_command(spec, environment)
     print(f"installing {binary} with {' '.join(spec['install'])}", file=sys.stderr)
     process = await asyncio.create_subprocess_exec(
-        *spec["install"],
+        *command,
         env=environment,
+        cwd=Path.home(),
         stdin=asyncio.subprocess.DEVNULL,
         stdout=sys.stderr,
         stderr=sys.stderr,

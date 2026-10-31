@@ -9,8 +9,11 @@ import os
 import shutil
 import subprocess
 import sys
+from collections.abc import Mapping
 from pathlib import Path
+from typing import NamedTuple
 
+from install_lock import install_lock
 from json_values import JsonObject, JsonValue, dict_or_empty, json_object
 
 HOOKS_DIR = Path(__file__).resolve().parent
@@ -21,7 +24,40 @@ WEB_GUIDANCE_NAME = "modern-web-guidance"
 WEB_GUIDANCE_PLUGIN = f"{WEB_GUIDANCE_NAME}@googlechrome"
 WEB_GUIDANCE_MARKETPLACE = "GoogleChrome/modern-web-guidance"
 CLOUD_SESSION_MARK = "CCR_AGENT_PROXY_ENABLED"
-MISE = HOME / ".local" / "bin" / "mise"
+LOCAL_BIN = HOME / ".local" / "bin"
+MISE = LOCAL_BIN / "mise"
+
+
+class PluginTool(NamedTuple):
+    version: str
+    binaries: tuple[str, ...]
+    lazy_unless_project_has: tuple[str, ...] = ()
+
+
+PLUGIN_TOOLS = {
+    "uv": PluginTool("latest", ("uv", "uvx")),
+    "gh": PluginTool("latest", ("gh",)),
+    "jq": PluginTool("latest", ("jq",)),
+    "git-lfs": PluginTool("latest", ("git-lfs",)),
+    "bun": PluginTool(
+        "latest",
+        ("bun", "bunx"),
+        ("bun.lock", "bun.lockb", "bunfig.toml", "package.json"),
+    ),
+    "dotnet": PluginTool(
+        "lts",
+        ("dotnet",),
+        (
+            "*.sln",
+            "*.slnx",
+            "*.slnf",
+            "*.csproj",
+            "*.fsproj",
+            "*.vbproj",
+            "global.json",
+        ),
+    ),
+}
 MISE_CONFIG_PATTERNS = (
     "mise.toml",
     "mise.*.toml",
@@ -38,8 +74,24 @@ MISE_CONFIG_PATTERNS = (
     ".tool-versions",
 )
 
+
+def mise_data_dir() -> Path:
+    if data_dir := os.environ.get("MISE_DATA_DIR"):
+        return Path(data_dir)
+    return Path(os.environ.get("XDG_DATA_HOME") or HOME / ".local" / "share") / "mise"
+
+
+def mise_global_config() -> Path:
+    if config_file := os.environ.get("MISE_GLOBAL_CONFIG_FILE"):
+        return Path(config_file)
+    config_home = Path(os.environ.get("XDG_CONFIG_HOME") or HOME / ".config")
+    config_dir = os.environ.get("MISE_CONFIG_DIR") or config_home / "mise"
+    return Path(config_dir) / "config.toml"
+
+
+MISE_GLOBAL_CONFIG = mise_global_config()
 TOOLCHAIN_BIN_DIRS = (
-    HOME / ".local" / "bin",
+    LOCAL_BIN,
     HOME / ".bun" / "bin",
     HOME / ".dotnet" / "tools",
 )
@@ -48,12 +100,14 @@ TOOLCHAIN_PATH = os.pathsep.join(
 )
 
 
-def run(*command: str, cwd: Path | None = None) -> None:
+def run(
+    *command: str, cwd: Path | None = None, overrides: Mapping[str, str] | None = None
+) -> None:
     environment = {
-        "DOTNET_ROOT": str(HOME / ".dotnet"),
         "MISE_YES": "1",
         **os.environ,
         "PATH": TOOLCHAIN_PATH,
+        **(overrides or {}),
     }
     subprocess.run(command, check=True, stdout=sys.stderr, env=environment, cwd=cwd)
 
@@ -102,15 +156,10 @@ def enable_web_guidance_plugin() -> None:
 
 
 def install_apt_packages() -> None:
-    packages = ("git-lfs", "curl", "jq", "gh", "unzip", "valgrind")
+    packages = ("curl", "unzip", "valgrind")
     if any(shutil.which(package) is None for package in packages):
         run("apt-get", "update")
         run("apt-get", "install", "-y", *packages)
-
-
-def install_bun() -> None:
-    if shutil.which("bun") is None and not (HOME / ".bun" / "bin" / "bun").exists():
-        run_pipeline("curl -fsSL https://bun.sh/install | bash -s canary")
 
 
 def install_mise() -> None:
@@ -118,64 +167,182 @@ def install_mise() -> None:
         run_pipeline("curl -fsSL https://mise.run | sh")
 
 
+def mise() -> str:
+    return shutil.which("mise", path=TOOLCHAIN_PATH) or str(MISE)
+
+
+def has_global_mise_tool(name: str) -> bool:
+    lookup = subprocess.run(
+        (mise(), "config", "get", "--global", f"tools.{name}"),
+        capture_output=True,
+        check=False,
+        cwd=HOME,
+    )
+    return lookup.returncode == 0
+
+
+def use_global_mise_tool(name: str, tool: PluginTool) -> None:
+    run(mise(), "use", "--global", f"{name}@{tool.version}", cwd=HOME)
+
+
+def add_global_mise_tool(name: str, tool: PluginTool) -> None:
+    run(mise(), "config", "set", "--global", f"tools.{name}", tool.version, cwd=HOME)
+
+
+def register_global_mise_tool(name: str, tool: PluginTool) -> None:
+    if tool.lazy_unless_project_has:
+        add_global_mise_tool(name, tool)
+    else:
+        use_global_mise_tool(name, tool)
+
+
+def plugin_tools_up_front_first() -> list[tuple[str, PluginTool]]:
+    return sorted(
+        PLUGIN_TOOLS.items(), key=lambda entry: bool(entry[1].lazy_unless_project_has)
+    )
+
+
+def register_plugin_tools() -> list[str]:
+    failed = []
+    for name, tool in plugin_tools_up_front_first():
+        if has_global_mise_tool(name):
+            continue
+        try:
+            register_global_mise_tool(name, tool)
+        except subprocess.CalledProcessError:
+            failed.append(f"mise registration of {name}")
+    return failed
+
+
+def project_uses(tool: PluginTool) -> bool:
+    return any(
+        has_any_file(directory, tool.lazy_unless_project_has)
+        for directory in project_directories()
+    )
+
+
+def plugin_tools_wanted_now() -> list[str]:
+    return [
+        name
+        for name, tool in PLUGIN_TOOLS.items()
+        if not tool.lazy_unless_project_has or project_uses(tool)
+    ]
+
+
+def run_with_one_retry(
+    *command: str, cwd: Path, overrides: Mapping[str, str] | None = None
+) -> None:
+    try:
+        run(*command, cwd=cwd, overrides=overrides)
+    except subprocess.CalledProcessError:
+        run(*command, cwd=cwd, overrides=overrides)
+
+
+def install_plugin_tools() -> list[str]:
+    failed = []
+    for name in plugin_tools_wanted_now():
+        try:
+            run_with_one_retry(mise(), "install", name, cwd=HOME)
+        except subprocess.CalledProcessError:
+            failed.append(f"mise install {name}")
+    return failed
+
+
+def installed_mise_binary(name: str) -> Path | None:
+    found = subprocess.run(
+        (mise(), "which", name), capture_output=True, text=True, check=False, cwd=HOME
+    )
+    return Path(found.stdout.strip()) if found.returncode == 0 else None
+
+
+def is_replaceable_link(link: Path) -> bool:
+    if not link.exists():
+        return True
+    return link.is_symlink() and link.resolve().is_relative_to(
+        mise_data_dir().resolve()
+    )
+
+
+def link_into_local_bin(name: str, binary: Path) -> None:
+    link = LOCAL_BIN / name
+    if not is_replaceable_link(link):
+        return
+    link.unlink(missing_ok=True)
+    link.symlink_to(binary)
+
+
+def link_installed_plugin_binaries() -> None:
+    LOCAL_BIN.mkdir(parents=True, exist_ok=True)
+    for tool in PLUGIN_TOOLS.values():
+        for name in tool.binaries:
+            if binary := installed_mise_binary(name):
+                link_into_local_bin(name, binary)
+
+
+def set_up_git_lfs() -> list[str]:
+    try:
+        run("git", "lfs", "install", "--skip-repo", cwd=HOME)
+    except subprocess.CalledProcessError:
+        return ["git lfs install"]
+    return []
+
+
 def project_dir() -> Path:
     return Path(os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd())
 
 
-def has_mise_config(directory: Path) -> bool:
-    return any(
-        next(directory.glob(pattern), None) is not None
-        for pattern in MISE_CONFIG_PATTERNS
-    )
+def has_any_file(directory: Path, patterns: tuple[str, ...]) -> bool:
+    return any(next(directory.glob(pattern), None) is not None for pattern in patterns)
+
+
+def project_directories() -> list[Path]:
+    root = project_dir()
+    return [root, *sorted(child for child in root.iterdir() if child.is_dir())]
 
 
 def directories_with_mise_config() -> list[Path]:
-    root = project_dir()
-    candidates = [root, *sorted(child for child in root.iterdir() if child.is_dir())]
-    return [directory for directory in candidates if has_mise_config(directory)]
+    return [
+        directory
+        for directory in project_directories()
+        if has_any_file(directory, MISE_CONFIG_PATTERNS)
+    ]
+
+
+def ignoring_global_mise_config() -> dict[str, str]:
+    ignored = [os.environ.get("MISE_IGNORED_CONFIG_PATHS"), str(MISE_GLOBAL_CONFIG)]
+    return {"MISE_IGNORED_CONFIG_PATHS": os.pathsep.join(filter(None, ignored))}
 
 
 def install_mise_tools(directory: Path) -> None:
-    mise = shutil.which("mise", path=TOOLCHAIN_PATH) or str(MISE)
-    run(mise, "trust", "--all", "--quiet", cwd=directory)
-    try:
-        run(mise, "install", cwd=directory)
-    except subprocess.CalledProcessError:
-        run(mise, "install", cwd=directory)
+    run(mise(), "trust", "--all", "--quiet", cwd=directory)
+    run_with_one_retry(
+        mise(), "install", cwd=directory, overrides=ignoring_global_mise_config()
+    )
 
 
-def install_mise_tools_of_projects() -> None:
+def install_mise_tools_of_projects() -> list[str]:
     failed = []
     for directory in directories_with_mise_config():
         try:
             install_mise_tools(directory)
         except subprocess.CalledProcessError:
-            failed.append(str(directory))
-    if failed:
-        sys.exit(f"mise install failed in {', '.join(failed)}")
-
-
-def install_dotnet() -> None:
-    dotnet = HOME / ".dotnet" / "dotnet"
-    if not dotnet.exists():
-        run_pipeline(
-            "curl -fsSL https://dot.net/v1/dotnet-install.sh | bash -s -- --channel LTS"
-        )
-    local_bin = HOME / ".local" / "bin"
-    local_bin.mkdir(parents=True, exist_ok=True)
-    dotnet_link = local_bin / "dotnet"
-    dotnet_link.unlink(missing_ok=True)
-    dotnet_link.symlink_to(dotnet)
+            failed.append(f"mise install in {directory}")
+    return failed
 
 
 def install_cloud_tools() -> None:
     if CLOUD_SESSION_MARK not in os.environ or os.geteuid() != 0:
         return
     install_apt_packages()
-    install_bun()
-    install_mise()
-    install_dotnet()
-    install_mise_tools_of_projects()
+    with install_lock():
+        install_mise()
+        failed = register_plugin_tools()
+        failed += install_plugin_tools()
+        link_installed_plugin_binaries()
+    failed += set_up_git_lfs()
+    failed += install_mise_tools_of_projects()
+    if failed:
+        sys.exit(f"tool setup failed: {', '.join(failed)}")
 
 
 def reapply_settings() -> None:

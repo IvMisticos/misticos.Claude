@@ -4,25 +4,89 @@ set -euo pipefail
 
 bin_dir=$(cd "$(dirname "$0")" && pwd -P)
 . "$bin_dir/lib/real_tool.sh"
-REAL_TOOL_PATH="$PATH:$HOME/.local/bin"
+mise_shims="${MISE_DATA_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/mise}/shims"
+REAL_TOOL_PATH="$PATH:$HOME/.local/bin:$mise_shims"
+
+is_mise_shim_dir() {
+  [ "${1%/}" = "$mise_shims" ]
+}
+
+path_without() {
+  local unwanted=$1 dir
+  local -a dirs kept=()
+  IFS=: read -ra dirs <<< "$2"
+  for dir in "${dirs[@]}"; do
+    "$unwanted" "$dir" || kept+=("$dir")
+  done
+  local IFS=:
+  printf '%s' "${kept[*]}"
+}
+
+plugin_free_path=$(path_without is_shim_dir "$PATH")
+uv_search_path=$(path_without is_mise_shim_dir "$REAL_TOOL_PATH")
+without_plugin_shims=("$(real_tool env)" "PATH=$plugin_free_path")
+
+mise_tool_providing() {
+  case $1 in
+    bun | bunx) echo bun ;;
+    cargo) echo rust ;;
+    dotnet) echo dotnet ;;
+    uv | uvx) echo uv ;;
+    *) return 1 ;;
+  esac
+}
+
+run_through_mise() {
+  local name=$1 provider mise
+  provider=$(mise_tool_providing "$name") || return 1
+  mise=$(real_tool mise 2>/dev/null) || return 1
+  tool_command=("${without_plugin_shims[@]}" "$mise" --quiet x "$provider" -- "$name")
+}
+
+find_tool_command() {
+  local name=$1 tool
+  if tool=$(real_tool "$name" 2>/dev/null); then
+    tool_command=("$tool")
+  elif ! run_through_mise "$name"; then
+    real_tool "$name"
+  fi
+}
+
+find_queue_uv() {
+  local uv
+  if uv=$(REAL_TOOL_PATH=$uv_search_path real_tool uv 2>/dev/null); then
+    tool_command=("${without_plugin_shims[@]}" "$uv")
+  elif ! run_through_mise uv; then
+    REAL_TOOL_PATH=$uv_search_path real_tool uv
+  fi
+}
 
 if [ "${1:-}" = tool ]; then
-  real=$(real_tool "$2")
+  find_tool_command "$2"
   if [ -n "${HARNESS_QUEUE_HELD:-}" ]; then
-    exec_real_tool "$2" "$real" "${@:3}"
+    exec_real_tool "$2" "${tool_command[@]}" "${@:3}"
   fi
-  record_handoff "$2" "$real"
-  set -- tool "$real" "${@:3}"
+  queued_tool=("${tool_command[@]}")
 fi
 
-uv=$(real_tool uv)
+find_queue_uv
+uv_command=("${tool_command[@]}")
+
+if [ "${1:-}" = tool ]; then
+  record_handoff "$2" "${queued_tool[0]}"
+  set -- tool "$2" "${#queued_tool[@]}" "${queued_tool[@]}" "${@:3}"
+fi
+
+run_uv_outside_projects() {
+  (cd / && "${uv_command[@]}" "$@")
+}
 
 find_python() {
-  "$uv" python find --no-config --system '>=3.13'
+  run_uv_outside_projects python find --no-config --system '>=3.13'
 }
 
 if ! python=$(find_python 2>/dev/null); then
-  "$uv" --directory / python install --no-bin 3.13 >&2
+  run_uv_outside_projects python install --no-bin 3.13 >&2
   python=$(find_python)
 fi
 exec "$python" "$bin_dir/../hooks/work_queue.py" "$@"

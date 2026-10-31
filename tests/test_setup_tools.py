@@ -3,6 +3,7 @@ import os
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 from typing import Protocol
 
@@ -47,9 +48,35 @@ FAKE_DOWNLOAD = """#!/usr/bin/env bash
 echo "$(basename "$0") $*" >> "$HOME/calls"
 """
 FAKE_MISE = """#!/usr/bin/env bash
-echo "mise $* in $(basename "$PWD")" >> "$HOME/calls"
+echo "mise $* in $(basename "$PWD")${MISE_IGNORED_CONFIG_PATHS:+ alone}" >> "$HOME/calls"
 [ "$1 $(basename "$PWD")" != "${MISE_FAILS_AT-}" ] || exit 1
+[ -z "${MISE_TOOL_FAILS-}" ] || [ "$1 ${2-}" != "install $MISE_TOOL_FAILS" ] || exit 1
+[ -z "${MISE_IGNORED_CONFIG_PATHS-}" ] || echo "$MISE_IGNORED_CONFIG_PATHS" > "$HOME/ignored"
+installs="$HOME/mise-installs"
+case "$1 ${2-}" in
+  "config get") grep -qx "$4" "$HOME/global-mise-tools" 2>/dev/null ;;
+  "which "*) [ -e "$installs/$2" ] && echo "$installs/$2" ;;
+  "install "*)
+    mkdir -p "$installs"
+    for tool in "${@:2}"; do touch "$installs/$tool"; done
+    ;;
+  "use "*)
+    mkdir -p "$installs"
+    touch "$installs/${3%@*}"
+    ;;
+esac
 """
+REGISTER_PLUGIN_TOOLS = [
+    *(
+        f"mise use --global {name}@latest in home"
+        for name in ("uv", "gh", "jq", "git-lfs")
+    ),
+    "mise config set --global tools.bun latest in home",
+    "mise config set --global tools.dotnet lts in home",
+]
+INSTALL_UP_FRONT = [
+    f"mise install {name} in home" for name in ("uv", "gh", "jq", "git-lfs")
+]
 
 
 class SetUpTools(Protocol):
@@ -60,7 +87,7 @@ class SetUpTools(Protocol):
 def hooks(tmp_path: Path) -> Path:
     hooks = tmp_path / "hooks"
     hooks.mkdir()
-    for name in ("setup_tools.py", "json_values.py"):
+    for name in ("setup_tools.py", "json_values.py", "install_lock.py"):
         shutil.copy(ROOT / "hooks" / name, hooks / name)
     run_sh = hooks / "run.sh"
     run_sh.write_text(FAKE_RUN)
@@ -74,6 +101,7 @@ def set_up_tools(home: Path, fake_bin: FakeBin, hooks: Path) -> SetUpTools:
     fake_bin("curl", FAKE_DOWNLOAD)
     fake_bin("apt-get", FAKE_DOWNLOAD)
     fake_bin("mise", FAKE_MISE)
+    fake_bin("git", FAKE_DOWNLOAD)
 
     def set_up(**extra_environment: str) -> tuple[int, list[str]]:
         result = subprocess.run(
@@ -86,12 +114,21 @@ def set_up_tools(home: Path, fake_bin: FakeBin, hooks: Path) -> SetUpTools:
             capture_output=True,
             check=False,
             timeout=30,
+            cwd=home,
         )
         calls = home / "calls"
         logged = calls.read_text().splitlines() if calls.exists() else []
         return result.returncode, logged
 
     return set_up
+
+
+def mise_calls_in_projects(calls: list[str]) -> list[str]:
+    return [
+        call
+        for call in calls
+        if call.startswith("mise ") and not call.endswith(" in home")
+    ]
 
 
 def write_json(path: Path, value: JsonValue) -> None:
@@ -125,7 +162,7 @@ def test_cloud_tools_install_after_a_plugin_failure(set_up_tools: SetUpTools) ->
     status, calls = set_up_tools(CLAUDE_FAILS_AT="install", CCR_AGENT_PROXY_ENABLED="1")
     assert status != 0
     assert calls[:2] == [INSTALL, REAPPLY_SETTINGS]
-    assert any(call.startswith("curl ") for call in calls[2:])
+    assert set(INSTALL_UP_FRONT) <= set(calls[2:])
 
 
 def test_installed_plugin_is_left_alone(set_up_tools: SetUpTools, home: Path) -> None:
@@ -155,11 +192,11 @@ def test_cloud_session_installs_mise_tools_of_each_repo(
     _, calls = set_up_tools(
         CCR_AGENT_PROXY_ENABLED="1", CLAUDE_PROJECT_DIR=str(projects)
     )
-    assert [call for call in calls if call.startswith("mise ")] == [
+    assert mise_calls_in_projects(calls) == [
         "mise trust --all --quiet in with-mise",
-        "mise install in with-mise",
+        "mise install in with-mise alone",
         "mise trust --all --quiet in with-tool-versions",
-        "mise install in with-tool-versions",
+        "mise install in with-tool-versions alone",
     ]
 
 
@@ -176,10 +213,10 @@ def test_failed_mise_install_is_retried_once(
         MISE_FAILS_AT="install repo",
     )
     assert status != 0
-    assert [call for call in calls if call.startswith("mise ")] == [
+    assert mise_calls_in_projects(calls) == [
         "mise trust --all --quiet in repo",
-        "mise install in repo",
-        "mise install in repo",
+        "mise install in repo alone",
+        "mise install in repo alone",
     ]
 
 
@@ -197,8 +234,169 @@ def test_failed_repo_does_not_stop_the_next_one(
         MISE_FAILS_AT="trust broken",
     )
     assert status != 0
-    assert [call for call in calls if call.startswith("mise ")] == [
+    assert mise_calls_in_projects(calls) == [
         "mise trust --all --quiet in broken",
         "mise trust --all --quiet in working",
-        "mise install in working",
+        "mise install in working alone",
     ]
+
+
+@pytest.mark.skipif(os.geteuid() != 0, reason="cloud tools install only as root")
+def test_cloud_session_adds_plugin_tools_to_the_global_mise_config(
+    set_up_tools: SetUpTools,
+) -> None:
+    _, calls = set_up_tools(CCR_AGENT_PROXY_ENABLED="1")
+    registered = [call for call in calls if call in REGISTER_PLUGIN_TOOLS]
+    assert registered == REGISTER_PLUGIN_TOOLS
+    assert set(INSTALL_UP_FRONT) <= set(calls)
+
+
+@pytest.mark.skipif(os.geteuid() != 0, reason="cloud tools install only as root")
+def test_cloud_session_keeps_global_mise_tools_the_user_chose(
+    set_up_tools: SetUpTools, home: Path
+) -> None:
+    (home / "global-mise-tools").write_text("tools.dotnet\ntools.uv\n")
+    _, calls = set_up_tools(CCR_AGENT_PROXY_ENABLED="1")
+    registered = [call for call in calls if call in REGISTER_PLUGIN_TOOLS]
+    assert registered == [
+        call
+        for call in REGISTER_PLUGIN_TOOLS
+        if "tools.dotnet " not in call and " uv@" not in call
+    ]
+
+
+@pytest.mark.skipif(os.geteuid() != 0, reason="cloud tools install only as root")
+@pytest.mark.parametrize(
+    ("project_file", "tool"),
+    [("App.csproj", "dotnet"), ("global.json", "dotnet"), ("package.json", "bun")],
+)
+def test_cloud_session_installs_tools_a_project_uses(
+    set_up_tools: SetUpTools, tmp_path: Path, project_file: str, tool: str
+) -> None:
+    repo = tmp_path / "projects" / "repo"
+    repo.mkdir(parents=True)
+    (repo / project_file).write_text("")
+    _, calls = set_up_tools(
+        CCR_AGENT_PROXY_ENABLED="1", CLAUDE_PROJECT_DIR=str(repo.parent)
+    )
+    assert f"mise install {tool} in home" in calls
+
+
+@pytest.mark.skipif(os.geteuid() != 0, reason="cloud tools install only as root")
+def test_cloud_session_keeps_a_working_dotnet_link_until_mise_has_dotnet(
+    set_up_tools: SetUpTools, home: Path
+) -> None:
+    own_dotnet = home / ".dotnet" / "dotnet"
+    own_dotnet.parent.mkdir()
+    own_dotnet.write_text("")
+    dotnet_link = home / ".local" / "bin" / "dotnet"
+    dotnet_link.parent.mkdir(parents=True)
+    dotnet_link.symlink_to(own_dotnet)
+    set_up_tools(CCR_AGENT_PROXY_ENABLED="1")
+    assert dotnet_link.readlink() == own_dotnet
+
+
+@pytest.mark.skipif(os.geteuid() != 0, reason="cloud tools install only as root")
+def test_cloud_session_links_dotnet_once_mise_has_it(
+    set_up_tools: SetUpTools, home: Path
+) -> None:
+    mise_dotnet = home / "mise-installs" / "dotnet"
+    mise_dotnet.parent.mkdir()
+    mise_dotnet.write_text("")
+    set_up_tools(CCR_AGENT_PROXY_ENABLED="1")
+    assert (home / ".local" / "bin" / "dotnet").readlink() == mise_dotnet
+
+
+@pytest.mark.skipif(os.geteuid() != 0, reason="cloud tools install only as root")
+def test_cloud_session_links_plugin_tools_into_the_local_bin(
+    set_up_tools: SetUpTools, home: Path
+) -> None:
+    local_bin = home / ".local" / "bin"
+    local_bin.mkdir(parents=True)
+    (local_bin / "uv").write_text("own uv")
+    own_jq = home / "own-jq"
+    own_jq.write_text("")
+    (local_bin / "jq").symlink_to(own_jq)
+    old_mise_gh = home / ".local" / "share" / "mise" / "installs" / "gh" / "gh"
+    old_mise_gh.parent.mkdir(parents=True)
+    old_mise_gh.write_text("")
+    (local_bin / "gh").symlink_to(old_mise_gh)
+    (local_bin / "git-lfs").symlink_to(home / "stale-git-lfs")
+    set_up_tools(CCR_AGENT_PROXY_ENABLED="1")
+    assert (local_bin / "uv").read_text() == "own uv"
+    assert (local_bin / "jq").readlink() == own_jq
+    assert (local_bin / "gh").readlink() == home / "mise-installs" / "gh"
+    assert (local_bin / "git-lfs").readlink() == home / "mise-installs" / "git-lfs"
+
+
+@pytest.mark.skipif(os.geteuid() != 0, reason="cloud tools install only as root")
+def test_cloud_session_sets_up_git_lfs(set_up_tools: SetUpTools) -> None:
+    _, calls = set_up_tools(CCR_AGENT_PROXY_ENABLED="1")
+    assert "git lfs install --skip-repo" in calls
+
+
+@pytest.mark.skipif(os.geteuid() != 0, reason="cloud tools install only as root")
+def test_cloud_session_waits_for_another_tool_install(
+    set_up_tools: SetUpTools, home: Path
+) -> None:
+    holder = subprocess.run(
+        ["bash", "-c", "sleep 1 >/dev/null & echo $!"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+    lock = home / ".local" / "tool-install.pid"
+    lock.parent.mkdir(parents=True)
+    lock.write_text(f"{holder}\n")
+    _, calls = set_up_tools(CCR_AGENT_PROXY_ENABLED="1")
+    assert set(INSTALL_UP_FRONT) <= set(calls)
+    with pytest.raises(ProcessLookupError):
+        os.kill(int(holder), 0)
+    assert not lock.exists()
+
+
+@pytest.mark.skipif(os.geteuid() != 0, reason="cloud tools install only as root")
+@pytest.mark.parametrize("content", ["", "not a pid\n"])
+def test_cloud_session_takes_over_an_old_garbled_install_lock(
+    set_up_tools: SetUpTools, home: Path, content: str
+) -> None:
+    lock = home / ".local" / "tool-install.pid"
+    lock.parent.mkdir(parents=True)
+    lock.write_text(content)
+    an_hour_ago = time.time() - 3600
+    os.utime(lock, (an_hour_ago, an_hour_ago))
+    _, calls = set_up_tools(CCR_AGENT_PROXY_ENABLED="1")
+    assert set(INSTALL_UP_FRONT) <= set(calls)
+    assert not lock.exists()
+
+
+@pytest.mark.skipif(os.geteuid() != 0, reason="cloud tools install only as root")
+def test_cloud_session_keeps_going_after_a_plugin_tool_fails(
+    set_up_tools: SetUpTools, home: Path, tmp_path: Path
+) -> None:
+    repo = tmp_path / "projects" / "repo"
+    repo.mkdir(parents=True)
+    (repo / "mise.toml").write_text("[tools]\n")
+    status, calls = set_up_tools(
+        CCR_AGENT_PROXY_ENABLED="1",
+        CLAUDE_PROJECT_DIR=str(repo.parent),
+        MISE_TOOL_FAILS="gh",
+    )
+    assert status != 0
+    assert calls.count("mise install gh in home") == 2
+    assert "mise install jq in home" in calls
+    assert "git lfs install --skip-repo" in calls
+    assert "mise install in repo alone" in calls
+    assert (home / ".local" / "bin" / "jq").is_symlink()
+
+
+@pytest.mark.skipif(os.geteuid() != 0, reason="cloud tools install only as root")
+def test_repo_installs_ignore_the_global_mise_config(
+    set_up_tools: SetUpTools, home: Path, tmp_path: Path
+) -> None:
+    repo = tmp_path / "projects" / "repo"
+    repo.mkdir(parents=True)
+    (repo / "mise.toml").write_text("[tools]\n")
+    set_up_tools(CCR_AGENT_PROXY_ENABLED="1", CLAUDE_PROJECT_DIR=str(repo.parent))
+    global_config = home / ".config" / "mise" / "config.toml"
+    assert (home / "ignored").read_text() == f"{global_config}\n"
