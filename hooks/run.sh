@@ -5,6 +5,7 @@ set -euo pipefail
 export PATH="$HOME/.local/bin:$PATH"
 
 install_lock="$HOME/.local/tool-install.pid"
+abandoned_empty_lock_seconds=5
 
 take_install_lock() {
   (set -C; echo $$ > "$install_lock") 2>/dev/null
@@ -15,9 +16,16 @@ release_install_lock() {
   trap - EXIT
 }
 
+install_lock_is_old() {
+  local modified
+  modified=$(stat -c %Y "$install_lock" 2>/dev/null || stat -f %m "$install_lock" 2>/dev/null) || return 1
+  [ $(($(date +%s) - modified)) -ge "$abandoned_empty_lock_seconds" ]
+}
+
 install_lock_holder_is_gone() {
   local holder
   holder=$(cat "$install_lock" 2>/dev/null) || return 1
+  [ -n "$holder" ] || { install_lock_is_old; return; }
   ! kill -0 "$holder" 2>/dev/null
 }
 

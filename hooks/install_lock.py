@@ -6,6 +6,7 @@ from pathlib import Path
 
 INSTALL_LOCK = Path.home() / ".local" / "tool-install.pid"
 RETRY_SECONDS = 0.2
+ABANDONED_EMPTY_LOCK_SECONDS = 5
 
 
 def take_install_lock() -> bool:
@@ -18,20 +19,35 @@ def take_install_lock() -> bool:
     return True
 
 
-def install_lock_holder_is_gone() -> bool:
+def install_lock_is_old() -> bool:
     try:
-        holder = int(INSTALL_LOCK.read_text())
+        modified = INSTALL_LOCK.stat().st_mtime
     except OSError:
         return False
-    except ValueError:
-        return True
+    return time.time() - modified >= ABANDONED_EMPTY_LOCK_SECONDS
+
+
+def process_is_gone(process_id: int) -> bool:
     try:
-        os.kill(holder, 0)
+        os.kill(process_id, 0)
     except ProcessLookupError:
         return True
     except PermissionError:
         return False
     return False
+
+
+def install_lock_holder_is_gone() -> bool:
+    try:
+        holder = INSTALL_LOCK.read_text().strip()
+    except OSError:
+        return False
+    if not holder:
+        return install_lock_is_old()
+    try:
+        return process_is_gone(int(holder))
+    except ValueError:
+        return True
 
 
 @contextmanager

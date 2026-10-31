@@ -14,12 +14,14 @@ TOOLS = [
     "bash",
     "cat",
     "chmod",
+    "date",
     "dirname",
     "ln",
     "mkdir",
     "rm",
     "sh",
     "sleep",
+    "stat",
     "tail",
     "touch",
 ]
@@ -172,6 +174,32 @@ def test_runs_hooks_when_the_global_mise_config_cannot_change(
     assert result.stdout == "uv run hook.py\n"
     linked_uv = (home / ".local" / "bin" / "uv").readlink()
     assert linked_uv == home / "mise-x-installs" / "uv"
+
+
+@pytest.fixture
+def empty_lock(home: Path) -> Path:
+    lock = home / ".local" / "tool-install.pid"
+    lock.parent.mkdir(parents=True)
+    lock.write_text("")
+    return lock
+
+
+def test_waits_on_a_fresh_empty_lock(
+    environment: dict[str, str], empty_lock: Path
+) -> None:
+    waiting = start_hook(environment)
+    with pytest.raises(subprocess.TimeoutExpired):
+        waiting.wait(timeout=1)
+    kill_hook(waiting)
+    assert empty_lock.exists()
+
+
+def test_takes_over_an_old_empty_lock(
+    environment: dict[str, str], empty_lock: Path
+) -> None:
+    an_hour_ago = time.time() - 3600
+    os.utime(empty_lock, (an_hour_ago, an_hour_ago))
+    assert run_hook(environment).stdout == "uv run hook.py\n"
 
 
 def test_waits_while_another_hook_installs_uv(

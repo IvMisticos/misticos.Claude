@@ -3,6 +3,7 @@ import os
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 from typing import Protocol
 
@@ -356,12 +357,14 @@ def test_cloud_session_waits_for_another_tool_install(
 
 @pytest.mark.skipif(os.geteuid() != 0, reason="cloud tools install only as root")
 @pytest.mark.parametrize("content", ["", "not a pid\n"])
-def test_cloud_session_takes_over_a_garbled_install_lock(
+def test_cloud_session_takes_over_an_old_garbled_install_lock(
     set_up_tools: SetUpTools, home: Path, content: str
 ) -> None:
     lock = home / ".local" / "tool-install.pid"
     lock.parent.mkdir(parents=True)
     lock.write_text(content)
+    an_hour_ago = time.time() - 3600
+    os.utime(lock, (an_hour_ago, an_hour_ago))
     _, calls = set_up_tools(CCR_AGENT_PROXY_ENABLED="1")
     assert set(INSTALL_UP_FRONT) <= set(calls)
     assert not lock.exists()
