@@ -7,7 +7,7 @@
 
 from pathlib import Path
 
-from hook_io import added_directory_of, read_payload
+from hook_io import absolute_path_at, read_payload
 from setup_tools import (
     exit_if_any_failed,
     install_mise_tools_of_projects,
@@ -16,7 +16,7 @@ from setup_tools import (
 
 
 def main() -> None:
-    directory = added_directory_of(read_payload())
+    directory = absolute_path_at(read_payload(), "directory")
     if directory is None or not is_cloud_session_as_root():
         return
     exit_if_any_failed(install_mise_tools_of_projects(Path(directory)))

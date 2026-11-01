@@ -54,18 +54,15 @@ def read_payload() -> JsonObject:
     return json_object(sys.stdin.read()) or {}
 
 
+def absolute_path_at(payload: JsonObject, key: str) -> str | None:
+    path = payload.get(key)
+    if isinstance(path, str) and os.path.isabs(path):
+        return path
+    return None
+
+
 def scratchpad_of(payload: JsonObject) -> str | None:
-    scratchpad = payload.get("scratchpad_dir")
-    if isinstance(scratchpad, str) and os.path.isabs(scratchpad):
-        return scratchpad
-    return None
-
-
-def added_directory_of(payload: JsonObject) -> str | None:
-    directory = payload.get("directory")
-    if isinstance(directory, str) and os.path.isabs(directory):
-        return directory
-    return None
+    return absolute_path_at(payload, "scratchpad_dir")
 
 
 def event_name_of(payload: JsonObject) -> str:
