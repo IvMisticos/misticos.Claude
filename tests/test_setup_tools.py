@@ -414,10 +414,7 @@ def test_cloud_session_sets_up_git_lfs(set_up_tools: SetUpTools) -> None:
     assert "git lfs install --skip-repo" in calls
 
 
-@pytest.mark.skipif(os.geteuid() != 0, reason="cloud tools install only as root")
-def test_cloud_session_waits_for_another_tool_install(
-    set_up_tools: SetUpTools, home: Path
-) -> None:
+def hold_install_lock_for_a_second(home: Path) -> int:
     holder = subprocess.run(
         ["bash", "-c", "sleep 1 >/dev/null & echo $!"],
         capture_output=True,
@@ -427,11 +424,23 @@ def test_cloud_session_waits_for_another_tool_install(
     lock = home / ".local" / "tool-install.pid"
     lock.parent.mkdir(parents=True)
     lock.write_text(f"{holder}\n")
-    _, calls = set_up_tools(CCR_AGENT_PROXY_ENABLED="1")
-    assert set(UP_FRONT_TOOLS) <= installed_tools(home)
+    return int(holder)
+
+
+def assert_waited_for(holder: int, home: Path) -> None:
     with pytest.raises(ProcessLookupError):
-        os.kill(int(holder), 0)
-    assert not lock.exists()
+        os.kill(holder, 0)
+    assert not (home / ".local" / "tool-install.pid").exists()
+
+
+@pytest.mark.skipif(os.geteuid() != 0, reason="cloud tools install only as root")
+def test_cloud_session_waits_for_another_tool_install(
+    set_up_tools: SetUpTools, home: Path
+) -> None:
+    holder = hold_install_lock_for_a_second(home)
+    set_up_tools(CCR_AGENT_PROXY_ENABLED="1")
+    assert set(UP_FRONT_TOOLS) <= installed_tools(home)
+    assert_waited_for(holder, home)
 
 
 @pytest.mark.skipif(os.geteuid() != 0, reason="cloud tools install only as root")
@@ -582,3 +591,44 @@ def test_cloud_session_prefers_installed_mise_tools_to_the_network(
     set_up_tools(CCR_AGENT_PROXY_ENABLED="1", CLAUDE_PROJECT_DIR=str(repo.parent))
     assert "mise install in repo alone" in (home / "calls").read_text()
     assert not (home / "online-mise-calls").exists()
+
+
+@pytest.mark.skipif(os.geteuid() != 0, reason="cloud tools install only as root")
+def test_added_repo_waits_for_another_tool_install(
+    add_directory: AddDirectory, home: Path, tmp_path: Path
+) -> None:
+    repo = tmp_path / "added" / "repo"
+    repo.mkdir(parents=True)
+    (repo / "mise.toml").write_text("[tools]\n")
+    holder = hold_install_lock_for_a_second(home)
+    _, calls = add_directory(repo, CCR_AGENT_PROXY_ENABLED="1")
+    assert "mise install in repo alone" in calls
+    assert_waited_for(holder, home)
+
+
+@pytest.mark.skipif(os.geteuid() != 0, reason="cloud tools install only as root")
+def test_added_repo_without_mise_says_so(
+    hooks: Path, home: Path, tmp_path: Path
+) -> None:
+    repo = tmp_path / "added" / "repo"
+    repo.mkdir(parents=True)
+    (repo / "mise.toml").write_text("[tools]\n")
+    empty_bin = tmp_path / "empty-bin"
+    empty_bin.mkdir()
+    result = subprocess.run(
+        [sys.executable, hooks / "added_directory_tools.py"],
+        input=json.dumps({"directory": str(repo)}),
+        env={
+            "HOME": str(home),
+            "PATH": str(empty_bin),
+            "CCR_AGENT_PROXY_ENABLED": "1",
+        },
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=30,
+    )
+    assert (result.returncode, result.stderr) == (
+        1,
+        f"mise is not installed, so {repo} got none of its tools\n",
+    )

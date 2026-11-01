@@ -166,8 +166,12 @@ def install_apt_packages() -> None:
         run("apt-get", "install", "-y", *packages)
 
 
+def mise_is_installed() -> bool:
+    return shutil.which("mise", path=TOOLCHAIN_PATH) is not None or MISE.exists()
+
+
 def install_mise() -> None:
-    if shutil.which("mise") is None and not MISE.exists():
+    if not mise_is_installed():
         run_pipeline("curl -fsSL https://mise.run | sh")
 
 
