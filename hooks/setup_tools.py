@@ -15,6 +15,7 @@ from typing import NamedTuple
 
 from install_lock import install_lock
 from json_values import JsonObject, JsonValue, dict_or_empty, json_object
+from plugin_paths import DATA_ROOT
 
 HOOKS_DIR = Path(__file__).resolve().parent
 HOME = Path.home()
@@ -23,6 +24,8 @@ INSTALLED_PLUGINS = HOME / ".claude" / "plugins" / "installed_plugins.json"
 WEB_GUIDANCE_NAME = "modern-web-guidance"
 WEB_GUIDANCE_PLUGIN = f"{WEB_GUIDANCE_NAME}@googlechrome"
 WEB_GUIDANCE_MARKETPLACE = "GoogleChrome/modern-web-guidance"
+PLUGIN_DATA = Path(os.environ.get("CLAUDE_PLUGIN_DATA") or DATA_ROOT)
+WEB_GUIDANCE_OFFERED = PLUGIN_DATA / "web-guidance-offered"
 CLOUD_SESSION_MARK = "CCR_AGENT_PROXY_ENABLED"
 LOCAL_BIN = HOME / ".local" / "bin"
 MISE = LOCAL_BIN / "mise"
@@ -98,13 +101,14 @@ TOOLCHAIN_BIN_DIRS = (
 TOOLCHAIN_PATH = os.pathsep.join(
     [*map(str, TOOLCHAIN_BIN_DIRS), os.environ.get("PATH", "")]
 )
+MISE_DEFAULTS = {"MISE_YES": "1", "MISE_PREFER_OFFLINE": "1"}
 
 
 def run(
     *command: str, cwd: Path | None = None, overrides: Mapping[str, str] | None = None
 ) -> None:
     environment = {
-        "MISE_YES": "1",
+        **MISE_DEFAULTS,
         **os.environ,
         "PATH": TOOLCHAIN_PATH,
         **(overrides or {}),
@@ -162,8 +166,12 @@ def install_apt_packages() -> None:
         run("apt-get", "install", "-y", *packages)
 
 
+def mise_is_installed() -> bool:
+    return shutil.which("mise", path=TOOLCHAIN_PATH) is not None or MISE.exists()
+
+
 def install_mise() -> None:
-    if shutil.which("mise") is None and not MISE.exists():
+    if not mise_is_installed():
         run_pipeline("curl -fsSL https://mise.run | sh")
 
 
@@ -171,14 +179,19 @@ def mise() -> str:
     return shutil.which("mise", path=TOOLCHAIN_PATH) or str(MISE)
 
 
-def has_global_mise_tool(name: str) -> bool:
-    lookup = subprocess.run(
-        (mise(), "config", "get", "--global", f"tools.{name}"),
+def query_mise(*arguments: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        (mise(), *arguments),
         capture_output=True,
+        text=True,
         check=False,
         cwd=HOME,
+        env={**MISE_DEFAULTS, **os.environ},
     )
-    return lookup.returncode == 0
+
+
+def has_global_mise_tool(name: str) -> bool:
+    return query_mise("config", "get", "--global", f"tools.{name}").returncode == 0
 
 
 def use_global_mise_tool(name: str, tool: PluginTool) -> None:
@@ -217,15 +230,23 @@ def register_plugin_tools() -> list[str]:
 def project_uses(tool: PluginTool) -> bool:
     return any(
         has_any_file(directory, tool.lazy_unless_project_has)
-        for directory in project_directories()
+        for directory in directories_under(project_dir())
     )
 
 
-def plugin_tools_wanted_now() -> list[str]:
+def is_wanted_now(tool: PluginTool) -> bool:
+    return not tool.lazy_unless_project_has or project_uses(tool)
+
+
+def is_installed(tool: PluginTool) -> bool:
+    return installed_mise_binary(tool.binaries[0]) is not None
+
+
+def plugin_tools_to_install() -> list[str]:
     return [
         name
         for name, tool in PLUGIN_TOOLS.items()
-        if not tool.lazy_unless_project_has or project_uses(tool)
+        if is_wanted_now(tool) and not is_installed(tool)
     ]
 
 
@@ -240,7 +261,7 @@ def run_with_one_retry(
 
 def install_plugin_tools() -> list[str]:
     failed = []
-    for name in plugin_tools_wanted_now():
+    for name in plugin_tools_to_install():
         try:
             run_with_one_retry(mise(), "install", name, cwd=HOME)
         except subprocess.CalledProcessError:
@@ -249,9 +270,7 @@ def install_plugin_tools() -> list[str]:
 
 
 def installed_mise_binary(name: str) -> Path | None:
-    found = subprocess.run(
-        (mise(), "which", name), capture_output=True, text=True, check=False, cwd=HOME
-    )
+    found = query_mise("which", name)
     return Path(found.stdout.strip()) if found.returncode == 0 else None
 
 
@@ -295,15 +314,14 @@ def has_any_file(directory: Path, patterns: tuple[str, ...]) -> bool:
     return any(next(directory.glob(pattern), None) is not None for pattern in patterns)
 
 
-def project_directories() -> list[Path]:
-    root = project_dir()
+def directories_under(root: Path) -> list[Path]:
     return [root, *sorted(child for child in root.iterdir() if child.is_dir())]
 
 
-def directories_with_mise_config() -> list[Path]:
+def directories_with_mise_config(root: Path) -> list[Path]:
     return [
         directory
-        for directory in project_directories()
+        for directory in directories_under(root)
         if has_any_file(directory, MISE_CONFIG_PATTERNS)
     ]
 
@@ -320,9 +338,9 @@ def install_mise_tools(directory: Path) -> None:
     )
 
 
-def install_mise_tools_of_projects() -> list[str]:
+def install_mise_tools_of_projects(root: Path) -> list[str]:
     failed = []
-    for directory in directories_with_mise_config():
+    for directory in directories_with_mise_config(root):
         try:
             install_mise_tools(directory)
         except subprocess.CalledProcessError:
@@ -330,8 +348,17 @@ def install_mise_tools_of_projects() -> list[str]:
     return failed
 
 
+def is_cloud_session_as_root() -> bool:
+    return CLOUD_SESSION_MARK in os.environ and os.geteuid() == 0
+
+
+def exit_if_any_failed(failed: list[str]) -> None:
+    if failed:
+        sys.exit(f"tool setup failed: {', '.join(failed)}")
+
+
 def install_cloud_tools() -> None:
-    if CLOUD_SESSION_MARK not in os.environ or os.geteuid() != 0:
+    if not is_cloud_session_as_root():
         return
     install_apt_packages()
     with install_lock():
@@ -340,9 +367,8 @@ def install_cloud_tools() -> None:
         failed += install_plugin_tools()
         link_installed_plugin_binaries()
     failed += set_up_git_lfs()
-    failed += install_mise_tools_of_projects()
-    if failed:
-        sys.exit(f"tool setup failed: {', '.join(failed)}")
+    failed += install_mise_tools_of_projects(project_dir())
+    exit_if_any_failed(failed)
 
 
 def reapply_settings() -> None:
@@ -358,10 +384,17 @@ def set_up_web_guidance_plugin() -> None:
         enable_web_guidance_plugin()
 
 
+def offer_web_guidance_plugin() -> None:
+    if WEB_GUIDANCE_OFFERED.exists() or not web_guidance_plugin_wanted():
+        return
+    set_up_web_guidance_plugin()
+    WEB_GUIDANCE_OFFERED.parent.mkdir(parents=True, exist_ok=True)
+    WEB_GUIDANCE_OFFERED.touch()
+
+
 def main() -> None:
     try:
-        if web_guidance_plugin_wanted():
-            set_up_web_guidance_plugin()
+        offer_web_guidance_plugin()
     finally:
         install_cloud_tools()
 

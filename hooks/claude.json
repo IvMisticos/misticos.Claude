@@ -55,7 +55,7 @@
           },
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/run.sh\" --once setup_tools.py"
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/run.sh\" setup_tools.py"
           },
           {
             "type": "command",
@@ -199,6 +199,16 @@
           {
             "type": "command",
             "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/run.sh\" agent_scratch.py"
+          }
+        ]
+      }
+    ],
+    "DirectoryAdded": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/run.sh\" added_directory_tools.py"
           }
         ]
       }
