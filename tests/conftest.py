@@ -116,6 +116,20 @@ def text_at(value: JsonValue, *keys: str) -> str:
     return text
 
 
+def claude_hook_commands(event: str, script: str) -> list[str]:
+    hooks = json.loads((ROOT / "hooks" / "claude.json").read_text())["hooks"]
+    return [
+        hook["command"]
+        for group in hooks[event]
+        for hook in group["hooks"]
+        if script in hook["command"]
+    ]
+
+
+def plugin_hook_command(script: str) -> str:
+    return f'"${{CLAUDE_PLUGIN_ROOT}}/hooks/run.sh" {script}'
+
+
 def installed(tool: str) -> str:
     path = shutil.which(tool)
     assert path is not None, f"{tool} is not installed"

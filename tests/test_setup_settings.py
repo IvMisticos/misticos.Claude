@@ -7,7 +7,7 @@ from typing import Protocol
 
 import pytest
 import setup_settings
-from conftest import ROOT, FakeBin
+from conftest import ROOT, FakeBin, claude_hook_commands, plugin_hook_command
 from json_values import JsonObject
 
 HOOKS = ROOT / "hooks"
@@ -106,15 +106,9 @@ def test_broken_settings_are_left_alone(
 
 
 def test_settings_hook_runs_every_session() -> None:
-    hooks = json.loads((HOOKS / "claude.json").read_text())["hooks"]
-    commands = [
-        hook["command"]
-        for group in hooks["SessionStart"]
-        for hook in group["hooks"]
-        if "setup_settings.py" in hook["command"]
+    assert claude_hook_commands("SessionStart", "setup_settings.py") == [
+        plugin_hook_command("setup_settings.py")
     ]
-    assert commands
-    assert all("--once" not in command for command in commands)
 
 
 @pytest.mark.parametrize(

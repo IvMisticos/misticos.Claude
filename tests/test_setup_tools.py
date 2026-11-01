@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Protocol
 
 import pytest
-from conftest import ROOT, FakeBin
+from conftest import ROOT, FakeBin, claude_hook_commands, plugin_hook_command
 from json_values import JsonValue
 
 WEB_GUIDANCE_PLUGIN = "modern-web-guidance@googlechrome"
@@ -134,6 +134,12 @@ def mise_calls_in_projects(calls: list[str]) -> list[str]:
 def write_json(path: Path, value: JsonValue) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(value))
+
+
+def test_tools_hook_runs_every_session() -> None:
+    assert claude_hook_commands("SessionStart", "setup_tools.py") == [
+        plugin_hook_command("setup_tools.py")
+    ]
 
 
 def test_settings_are_reapplied_after_the_plugin_install(
@@ -400,3 +406,23 @@ def test_repo_installs_ignore_the_global_mise_config(
     set_up_tools(CCR_AGENT_PROXY_ENABLED="1", CLAUDE_PROJECT_DIR=str(repo.parent))
     global_config = home / ".config" / "mise" / "config.toml"
     assert (home / "ignored").read_text() == f"{global_config}\n"
+
+
+@pytest.mark.skipif(os.geteuid() != 0, reason="cloud tools install only as root")
+def test_every_session_installs_the_mise_tools_of_each_repo(
+    set_up_tools: SetUpTools, tmp_path: Path
+) -> None:
+    repo = tmp_path / "projects" / "repo"
+    repo.mkdir(parents=True)
+    (repo / "mise.toml").write_text("[tools]\n")
+    set_up_tools(CCR_AGENT_PROXY_ENABLED="1", CLAUDE_PROJECT_DIR=str(repo.parent))
+    _, calls = set_up_tools(
+        CCR_AGENT_PROXY_ENABLED="1", CLAUDE_PROJECT_DIR=str(repo.parent)
+    )
+    assert calls.count("mise install in repo alone") == 2
+
+
+@pytest.mark.skipif(os.geteuid() != 0, reason="cloud tools install only as root")
+def test_cloud_session_keeps_an_installed_mise(set_up_tools: SetUpTools) -> None:
+    _, calls = set_up_tools(CCR_AGENT_PROXY_ENABLED="1")
+    assert not any(call.startswith("curl ") for call in calls)
