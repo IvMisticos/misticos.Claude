@@ -98,13 +98,14 @@ TOOLCHAIN_BIN_DIRS = (
 TOOLCHAIN_PATH = os.pathsep.join(
     [*map(str, TOOLCHAIN_BIN_DIRS), os.environ.get("PATH", "")]
 )
+MISE_DEFAULTS = {"MISE_YES": "1", "MISE_PREFER_OFFLINE": "1"}
 
 
 def run(
     *command: str, cwd: Path | None = None, overrides: Mapping[str, str] | None = None
 ) -> None:
     environment = {
-        "MISE_YES": "1",
+        **MISE_DEFAULTS,
         **os.environ,
         "PATH": TOOLCHAIN_PATH,
         **(overrides or {}),
@@ -171,14 +172,19 @@ def mise() -> str:
     return shutil.which("mise", path=TOOLCHAIN_PATH) or str(MISE)
 
 
-def has_global_mise_tool(name: str) -> bool:
-    lookup = subprocess.run(
-        (mise(), "config", "get", "--global", f"tools.{name}"),
+def query_mise(*arguments: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        (mise(), *arguments),
         capture_output=True,
+        text=True,
         check=False,
         cwd=HOME,
+        env={**MISE_DEFAULTS, **os.environ},
     )
-    return lookup.returncode == 0
+
+
+def has_global_mise_tool(name: str) -> bool:
+    return query_mise("config", "get", "--global", f"tools.{name}").returncode == 0
 
 
 def use_global_mise_tool(name: str, tool: PluginTool) -> None:
@@ -221,11 +227,19 @@ def project_uses(tool: PluginTool) -> bool:
     )
 
 
-def plugin_tools_wanted_now() -> list[str]:
+def is_wanted_now(tool: PluginTool) -> bool:
+    return not tool.lazy_unless_project_has or project_uses(tool)
+
+
+def is_installed(tool: PluginTool) -> bool:
+    return installed_mise_binary(tool.binaries[0]) is not None
+
+
+def plugin_tools_to_install() -> list[str]:
     return [
         name
         for name, tool in PLUGIN_TOOLS.items()
-        if not tool.lazy_unless_project_has or project_uses(tool)
+        if is_wanted_now(tool) and not is_installed(tool)
     ]
 
 
@@ -240,7 +254,7 @@ def run_with_one_retry(
 
 def install_plugin_tools() -> list[str]:
     failed = []
-    for name in plugin_tools_wanted_now():
+    for name in plugin_tools_to_install():
         try:
             run_with_one_retry(mise(), "install", name, cwd=HOME)
         except subprocess.CalledProcessError:
@@ -249,9 +263,7 @@ def install_plugin_tools() -> list[str]:
 
 
 def installed_mise_binary(name: str) -> Path | None:
-    found = subprocess.run(
-        (mise(), "which", name), capture_output=True, text=True, check=False, cwd=HOME
-    )
+    found = query_mise("which", name)
     return Path(found.stdout.strip()) if found.returncode == 0 else None
 
 
