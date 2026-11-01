@@ -102,6 +102,7 @@ def hooks(tmp_path: Path) -> Path:
         "harnesses.py",
         "json_values.py",
         "install_lock.py",
+        "plugin_paths.py",
     ):
         shutil.copy(ROOT / "hooks" / name, hooks / name)
     run_sh = hooks / "run.sh"
@@ -220,6 +221,27 @@ def test_cloud_tools_install_after_a_plugin_failure(
     assert status != 0
     assert calls[:2] == [INSTALL, REAPPLY_SETTINGS]
     assert set(UP_FRONT_TOOLS) <= installed_tools(home)
+
+
+def test_plugin_is_offered_once(set_up_tools: SetUpTools) -> None:
+    set_up_tools()
+    assert set_up_tools() == (0, [INSTALL, REAPPLY_SETTINGS])
+
+
+def test_plugin_is_offered_again_after_a_failed_install(
+    set_up_tools: SetUpTools,
+) -> None:
+    set_up_tools(CLAUDE_FAILS_AT="install")
+    _, calls = set_up_tools()
+    assert calls == [INSTALL, REAPPLY_SETTINGS, INSTALL, REAPPLY_SETTINGS]
+
+
+def test_plugin_is_offered_once_per_plugin_data(
+    set_up_tools: SetUpTools, tmp_path: Path
+) -> None:
+    set_up_tools(CLAUDE_PLUGIN_DATA=str(tmp_path / "old-data"))
+    _, calls = set_up_tools(CLAUDE_PLUGIN_DATA=str(tmp_path / "new-data"))
+    assert calls == [INSTALL, REAPPLY_SETTINGS, INSTALL, REAPPLY_SETTINGS]
 
 
 def test_installed_plugin_is_left_alone(set_up_tools: SetUpTools, home: Path) -> None:

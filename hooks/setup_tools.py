@@ -15,6 +15,7 @@ from typing import NamedTuple
 
 from install_lock import install_lock
 from json_values import JsonObject, JsonValue, dict_or_empty, json_object
+from plugin_paths import DATA_ROOT
 
 HOOKS_DIR = Path(__file__).resolve().parent
 HOME = Path.home()
@@ -23,6 +24,8 @@ INSTALLED_PLUGINS = HOME / ".claude" / "plugins" / "installed_plugins.json"
 WEB_GUIDANCE_NAME = "modern-web-guidance"
 WEB_GUIDANCE_PLUGIN = f"{WEB_GUIDANCE_NAME}@googlechrome"
 WEB_GUIDANCE_MARKETPLACE = "GoogleChrome/modern-web-guidance"
+PLUGIN_DATA = Path(os.environ.get("CLAUDE_PLUGIN_DATA") or DATA_ROOT)
+WEB_GUIDANCE_OFFERED = PLUGIN_DATA / "web-guidance-offered"
 CLOUD_SESSION_MARK = "CCR_AGENT_PROXY_ENABLED"
 LOCAL_BIN = HOME / ".local" / "bin"
 MISE = LOCAL_BIN / "mise"
@@ -377,10 +380,17 @@ def set_up_web_guidance_plugin() -> None:
         enable_web_guidance_plugin()
 
 
+def offer_web_guidance_plugin() -> None:
+    if WEB_GUIDANCE_OFFERED.exists() or not web_guidance_plugin_wanted():
+        return
+    set_up_web_guidance_plugin()
+    WEB_GUIDANCE_OFFERED.parent.mkdir(parents=True, exist_ok=True)
+    WEB_GUIDANCE_OFFERED.touch()
+
+
 def main() -> None:
     try:
-        if web_guidance_plugin_wanted():
-            set_up_web_guidance_plugin()
+        offer_web_guidance_plugin()
     finally:
         install_cloud_tools()
 
