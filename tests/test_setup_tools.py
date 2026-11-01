@@ -453,7 +453,7 @@ def test_cloud_session_takes_over_an_old_garbled_install_lock(
     lock.write_text(content)
     an_hour_ago = time.time() - 3600
     os.utime(lock, (an_hour_ago, an_hour_ago))
-    _, calls = set_up_tools(CCR_AGENT_PROXY_ENABLED="1")
+    set_up_tools(CCR_AGENT_PROXY_ENABLED="1")
     assert set(UP_FRONT_TOOLS) <= installed_tools(home)
     assert not lock.exists()
 
