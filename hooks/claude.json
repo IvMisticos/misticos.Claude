@@ -203,6 +203,16 @@
         ]
       }
     ],
+    "DirectoryAdded": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/run.sh\" added_directory_tools.py"
+          }
+        ]
+      }
+    ],
     "PreToolUse": [
       {
         "matcher": "Agent|Task|mcp__Claude_Code_Remote__create_session|mcp__claude-code-remote__create_session",

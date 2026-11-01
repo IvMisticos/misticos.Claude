@@ -9,7 +9,7 @@ from typing import Protocol
 
 import pytest
 from conftest import ROOT, FakeBin, claude_hook_commands, plugin_hook_command
-from json_values import JsonValue
+from json_values import JsonObject, JsonValue
 
 WEB_GUIDANCE_PLUGIN = "modern-web-guidance@googlechrome"
 INSTALL = (
@@ -79,15 +79,34 @@ INSTALL_UP_FRONT = [
 ]
 
 
+class RunToolHook(Protocol):
+    def __call__(
+        self, script: str, payload: JsonObject, **extra_environment: str
+    ) -> tuple[int, list[str]]: ...
+
+
 class SetUpTools(Protocol):
     def __call__(self, **extra_environment: str) -> tuple[int, list[str]]: ...
+
+
+class AddDirectory(Protocol):
+    def __call__(
+        self, directory: Path, **extra_environment: str
+    ) -> tuple[int, list[str]]: ...
 
 
 @pytest.fixture
 def hooks(tmp_path: Path) -> Path:
     hooks = tmp_path / "hooks"
     hooks.mkdir()
-    for name in ("setup_tools.py", "json_values.py", "install_lock.py"):
+    for name in (
+        "setup_tools.py",
+        "added_directory_tools.py",
+        "hook_io.py",
+        "harnesses.py",
+        "json_values.py",
+        "install_lock.py",
+    ):
         shutil.copy(ROOT / "hooks" / name, hooks / name)
     run_sh = hooks / "run.sh"
     run_sh.write_text(FAKE_RUN)
@@ -96,16 +115,19 @@ def hooks(tmp_path: Path) -> Path:
 
 
 @pytest.fixture
-def set_up_tools(home: Path, fake_bin: FakeBin, hooks: Path) -> SetUpTools:
+def run_tool_hook(home: Path, fake_bin: FakeBin, hooks: Path) -> RunToolHook:
     bin_dir = fake_bin("claude", FAKE_CLAUDE)
     fake_bin("curl", FAKE_DOWNLOAD)
     fake_bin("apt-get", FAKE_DOWNLOAD)
     fake_bin("mise", FAKE_MISE)
     fake_bin("git", FAKE_DOWNLOAD)
 
-    def set_up(**extra_environment: str) -> tuple[int, list[str]]:
+    def run(
+        script: str, payload: JsonObject, **extra_environment: str
+    ) -> tuple[int, list[str]]:
         result = subprocess.run(
-            [sys.executable, hooks / "setup_tools.py"],
+            [sys.executable, hooks / script],
+            input=json.dumps(payload).encode(),
             env={
                 "HOME": str(home),
                 "PATH": f"{bin_dir}:/usr/bin:/bin",
@@ -120,7 +142,28 @@ def set_up_tools(home: Path, fake_bin: FakeBin, hooks: Path) -> SetUpTools:
         logged = calls.read_text().splitlines() if calls.exists() else []
         return result.returncode, logged
 
+    return run
+
+
+@pytest.fixture
+def set_up_tools(run_tool_hook: RunToolHook) -> SetUpTools:
+    def set_up(**extra_environment: str) -> tuple[int, list[str]]:
+        return run_tool_hook("setup_tools.py", {}, **extra_environment)
+
     return set_up
+
+
+@pytest.fixture
+def add_directory(run_tool_hook: RunToolHook) -> AddDirectory:
+    def add(directory: Path, **extra_environment: str) -> tuple[int, list[str]]:
+        payload: JsonObject = {
+            "hook_event_name": "DirectoryAdded",
+            "directory": str(directory),
+            "source": "register_repo_root",
+        }
+        return run_tool_hook("added_directory_tools.py", payload, **extra_environment)
+
+    return add
 
 
 def mise_calls_in_projects(calls: list[str]) -> list[str]:
@@ -426,3 +469,59 @@ def test_every_session_installs_the_mise_tools_of_each_repo(
 def test_cloud_session_keeps_an_installed_mise(set_up_tools: SetUpTools) -> None:
     _, calls = set_up_tools(CCR_AGENT_PROXY_ENABLED="1")
     assert not any(call.startswith("curl ") for call in calls)
+
+
+def test_directory_added_hook_runs_on_every_add() -> None:
+    assert claude_hook_commands("DirectoryAdded", "added_directory_tools.py") == [
+        plugin_hook_command("added_directory_tools.py")
+    ]
+
+
+@pytest.mark.skipif(os.geteuid() != 0, reason="cloud tools install only as root")
+def test_added_repo_gets_only_its_own_mise_tools(
+    add_directory: AddDirectory, tmp_path: Path
+) -> None:
+    repo = tmp_path / "added" / "repo"
+    repo.mkdir(parents=True)
+    (repo / "mise.toml").write_text("[tools]\n")
+    assert add_directory(repo, CCR_AGENT_PROXY_ENABLED="1") == (
+        0,
+        ["mise trust --all --quiet in repo", "mise install in repo alone"],
+    )
+
+
+@pytest.mark.skipif(os.geteuid() != 0, reason="cloud tools install only as root")
+def test_added_directory_gets_the_mise_tools_of_its_repos(
+    add_directory: AddDirectory, tmp_path: Path
+) -> None:
+    added = tmp_path / "added"
+    for name in ("first", "second"):
+        (added / name).mkdir(parents=True)
+        (added / name / ".tool-versions").write_text("")
+    _, calls = add_directory(added, CCR_AGENT_PROXY_ENABLED="1")
+    assert [call for call in calls if call.startswith("mise install")] == [
+        "mise install in first alone",
+        "mise install in second alone",
+    ]
+
+
+@pytest.mark.skipif(os.geteuid() != 0, reason="cloud tools install only as root")
+def test_failed_mise_install_in_an_added_repo_fails_the_hook(
+    add_directory: AddDirectory, tmp_path: Path
+) -> None:
+    repo = tmp_path / "added" / "repo"
+    repo.mkdir(parents=True)
+    (repo / "mise.toml").write_text("[tools]\n")
+    status, _ = add_directory(
+        repo, CCR_AGENT_PROXY_ENABLED="1", MISE_FAILS_AT="install repo"
+    )
+    assert status != 0
+
+
+def test_added_repo_outside_the_cloud_gets_no_tools(
+    add_directory: AddDirectory, tmp_path: Path
+) -> None:
+    repo = tmp_path / "added" / "repo"
+    repo.mkdir(parents=True)
+    (repo / "mise.toml").write_text("[tools]\n")
+    assert add_directory(repo) == (0, [])

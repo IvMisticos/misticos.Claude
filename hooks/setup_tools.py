@@ -217,7 +217,7 @@ def register_plugin_tools() -> list[str]:
 def project_uses(tool: PluginTool) -> bool:
     return any(
         has_any_file(directory, tool.lazy_unless_project_has)
-        for directory in project_directories()
+        for directory in directories_under(project_dir())
     )
 
 
@@ -295,15 +295,14 @@ def has_any_file(directory: Path, patterns: tuple[str, ...]) -> bool:
     return any(next(directory.glob(pattern), None) is not None for pattern in patterns)
 
 
-def project_directories() -> list[Path]:
-    root = project_dir()
+def directories_under(root: Path) -> list[Path]:
     return [root, *sorted(child for child in root.iterdir() if child.is_dir())]
 
 
-def directories_with_mise_config() -> list[Path]:
+def directories_with_mise_config(root: Path) -> list[Path]:
     return [
         directory
-        for directory in project_directories()
+        for directory in directories_under(root)
         if has_any_file(directory, MISE_CONFIG_PATTERNS)
     ]
 
@@ -320,9 +319,9 @@ def install_mise_tools(directory: Path) -> None:
     )
 
 
-def install_mise_tools_of_projects() -> list[str]:
+def install_mise_tools_of_projects(root: Path) -> list[str]:
     failed = []
-    for directory in directories_with_mise_config():
+    for directory in directories_with_mise_config(root):
         try:
             install_mise_tools(directory)
         except subprocess.CalledProcessError:
@@ -330,8 +329,17 @@ def install_mise_tools_of_projects() -> list[str]:
     return failed
 
 
+def is_cloud_session_as_root() -> bool:
+    return CLOUD_SESSION_MARK in os.environ and os.geteuid() == 0
+
+
+def exit_if_any_failed(failed: list[str]) -> None:
+    if failed:
+        sys.exit(f"tool setup failed: {', '.join(failed)}")
+
+
 def install_cloud_tools() -> None:
-    if CLOUD_SESSION_MARK not in os.environ or os.geteuid() != 0:
+    if not is_cloud_session_as_root():
         return
     install_apt_packages()
     with install_lock():
@@ -340,9 +348,8 @@ def install_cloud_tools() -> None:
         failed += install_plugin_tools()
         link_installed_plugin_binaries()
     failed += set_up_git_lfs()
-    failed += install_mise_tools_of_projects()
-    if failed:
-        sys.exit(f"tool setup failed: {', '.join(failed)}")
+    failed += install_mise_tools_of_projects(project_dir())
+    exit_if_any_failed(failed)
 
 
 def reapply_settings() -> None:

@@ -61,6 +61,13 @@ def scratchpad_of(payload: JsonObject) -> str | None:
     return None
 
 
+def added_directory_of(payload: JsonObject) -> str | None:
+    directory = payload.get("directory")
+    if isinstance(directory, str) and os.path.isabs(directory):
+        return directory
+    return None
+
+
 def event_name_of(payload: JsonObject) -> str:
     event = payload.get("hook_event_name")
     return event if isinstance(event, str) else ""
