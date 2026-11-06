@@ -339,14 +339,24 @@ pull_request_write_tools() {
   [ -n "$matched_form" ]
 }
 
+asks_for_help() {
+  has_flag --help || has_flag -h
+}
+
+uploads_a_file() {
+  has_flag --attach
+}
+
 guards_pull_request_writes() {
-  [ "${CLAUDE_CODE_REMOTE-}" = true ] && [ -z "${ALLOW_GH_PULL_REQUEST_WRITE-}" ]
+  [ "${CLAUDE_CODE_REMOTE-}" = true ] || return 1
+  [ -z "${ALLOW_GH_PULL_REQUEST_WRITE-}" ] || return 1
+  ! asks_for_help && ! uploads_a_file
 }
 
 gh=$(real_tool gh)
+arguments=("$@")
 
 if guards_pull_request_writes; then
-  arguments=("$@")
   find_command "$@"
   if [ "$command" = api ]; then
     describe_api_request "$@"
