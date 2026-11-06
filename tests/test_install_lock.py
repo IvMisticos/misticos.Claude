@@ -41,3 +41,14 @@ def test_a_garbled_lock_is_abandoned(lock: Path) -> None:
 def test_a_lock_of_a_live_process_is_held(lock: Path) -> None:
     lock.write_text(f"{os.getpid()}\n")
     assert not install_lock.install_lock_holder_is_gone()
+
+
+def test_a_lock_of_another_users_process_is_abandoned(
+    lock: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def refuse(process_id: int, signal: int) -> None:
+        raise PermissionError
+
+    lock.write_text("1\n")
+    monkeypatch.setattr(os, "kill", refuse)
+    assert install_lock.install_lock_holder_is_gone()
