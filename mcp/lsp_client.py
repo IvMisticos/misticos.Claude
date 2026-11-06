@@ -47,6 +47,7 @@ class LanguageServer:
         server = cls(name, process, language_ids, root)
         try:
             await server.initialize()
+            await server.wait_until_quiet()
         except Exception:
             server.stop()
             raise
@@ -98,7 +99,6 @@ class LanguageServer:
             },
         )
         self.notify("initialized", {})
-        await self.wait_until_quiet()
 
     def stop(self) -> None:
         if self.process.returncode is None:
