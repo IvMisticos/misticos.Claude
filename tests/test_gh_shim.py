@@ -192,6 +192,11 @@ def test_denies_pull_request_writes_through_graphql(
             "update_issue_comment",
         ),
         (
+            ["api", "-X", "PUT", "repositories/123/pulls/1/merge"],
+            "merge_pull_request",
+        ),
+        (["api", "repositories/123/pulls", "-f", "title=x"], "create_pull_request"),
+        (
             ["--jq", ".url", "api", "-X", "POST", "repos/o/r/pulls"],
             "create_pull_request",
         ),
@@ -315,6 +320,7 @@ def test_denies_a_graphql_query_from_a_file_or_standard_input(
         ["api", "repos/o/r/issues/1/labels", "-f", "labels[]=x"],
         ["api", "-X", "PUT", "repos/o/r/issues/1/lock"],
         ["api", "repos/o/r/issues", "-f", "title=x"],
+        ["api", "repositories/123/issues", "-f", "title=x"],
         ["api", "search/code?q=mergePullRequest"],
         ["api", "repos/o/r/issues/1/comments", "-f", "body=createPullRequest fails"],
         ["api", "graphql", "-f", "query=query { viewer { login } }"],

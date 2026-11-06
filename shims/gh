@@ -233,8 +233,8 @@ describe_api_request() {
       deny_unchecked_query
     fi
     graphql_query=$query_field
-  elif [[ $path =~ (^|/)repos/[^/]+/[^/]+/(.+)$ ]]; then
-    repository_resource=${BASH_REMATCH[2]}
+  elif [[ $path =~ (^|/)(repos/[^/]+/[^/]+|repositories/[0-9]+)/(.+)$ ]]; then
+    repository_resource=${BASH_REMATCH[3]}
   fi
 }
 
