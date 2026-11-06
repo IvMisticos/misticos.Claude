@@ -1,6 +1,5 @@
 import json
 import os
-import shutil
 import subprocess
 import sys
 import time
@@ -9,41 +8,9 @@ from typing import Protocol
 
 import pytest
 from conftest import ROOT, FakeBin, claude_hook_commands, plugin_hook_command
-from json_values import JsonObject, JsonValue
+from json_values import JsonObject
 
-WEB_GUIDANCE_PLUGIN = "modern-web-guidance@googlechrome"
-INSTALL = (
-    "claude plugin install modern-web-guidance"
-    " --marketplace GoogleChrome/modern-web-guidance --scope user"
-)
-REAPPLY_SETTINGS = "run.sh setup_settings.py"
-ENABLE = f"claude plugin enable {WEB_GUIDANCE_PLUGIN} --scope user"
-ENABLE_IN_SETTINGS = """
-import json, sys
-from pathlib import Path
-settings_path, plugin, action = Path(sys.argv[1]), sys.argv[2], sys.argv[3]
-settings = json.loads(settings_path.read_text()) if settings_path.exists() else {}
-enabled = settings.setdefault("enabledPlugins", {})
-if action == "enable" and enabled.get(plugin) is True:
-    sys.exit("already_in_goal_state")
-enabled[plugin] = True
-settings_path.parent.mkdir(parents=True, exist_ok=True)
-settings_path.write_text(json.dumps(settings))
-"""
-FAKE_CLAUDE = f"""#!/usr/bin/env bash
-echo "claude $*" >> "$HOME/calls"
-[ "$2" != "${{CLAUDE_FAILS_AT-}}" ] || exit 1
-case "$2" in
-  install)
-    exec python3 -c '{ENABLE_IN_SETTINGS}' "$HOME/.claude/settings.json" "$3@googlechrome" "$2" ;;
-  enable)
-    exec python3 -c '{ENABLE_IN_SETTINGS}' "$HOME/.claude/settings.json" "$3" "$2" ;;
-esac
-"""
-FAKE_RUN = """#!/usr/bin/env bash
-echo "run.sh $*" >> "$HOME/calls"
-[ -z "${STALE_SETTINGS-}" ] || echo '{}' > "$HOME/.claude/settings.json"
-"""
+HOOKS = ROOT / "hooks"
 FAKE_DOWNLOAD = """#!/usr/bin/env bash
 echo "$(basename "$0") $*" >> "$HOME/calls"
 """
@@ -92,29 +59,8 @@ class AddDirectory(Protocol):
 
 
 @pytest.fixture
-def hooks(tmp_path: Path) -> Path:
-    hooks = tmp_path / "hooks"
-    hooks.mkdir()
-    for name in (
-        "setup_tools.py",
-        "added_directory_tools.py",
-        "hook_io.py",
-        "harnesses.py",
-        "json_values.py",
-        "install_lock.py",
-        "plugin_paths.py",
-    ):
-        shutil.copy(ROOT / "hooks" / name, hooks / name)
-    run_sh = hooks / "run.sh"
-    run_sh.write_text(FAKE_RUN)
-    run_sh.chmod(0o755)
-    return hooks
-
-
-@pytest.fixture
-def run_tool_hook(home: Path, fake_bin: FakeBin, hooks: Path) -> RunToolHook:
-    bin_dir = fake_bin("claude", FAKE_CLAUDE)
-    fake_bin("curl", FAKE_DOWNLOAD)
+def run_tool_hook(home: Path, fake_bin: FakeBin) -> RunToolHook:
+    bin_dir = fake_bin("curl", FAKE_DOWNLOAD)
     fake_bin("apt-get", FAKE_DOWNLOAD)
     fake_bin("mise", FAKE_MISE)
     fake_bin("git", FAKE_DOWNLOAD)
@@ -123,7 +69,7 @@ def run_tool_hook(home: Path, fake_bin: FakeBin, hooks: Path) -> RunToolHook:
         script: str, payload: JsonObject, **extra_environment: str
     ) -> tuple[int, list[str]]:
         result = subprocess.run(
-            [sys.executable, hooks / script],
+            [sys.executable, HOOKS / script],
             input=json.dumps(payload).encode(),
             env={
                 "HOME": str(home),
@@ -181,80 +127,13 @@ def mise_calls_in_projects(calls: list[str]) -> list[str]:
     ]
 
 
-def write_json(path: Path, value: JsonValue) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(value))
-
-
 def test_tools_hook_runs_every_session() -> None:
     assert claude_hook_commands("SessionStart", "setup_tools.py") == [
         plugin_hook_command("setup_tools.py")
     ]
 
 
-def test_settings_are_reapplied_after_the_plugin_install(
-    set_up_tools: SetUpTools,
-) -> None:
-    assert set_up_tools() == (0, [INSTALL, REAPPLY_SETTINGS])
-
-
-def test_plugin_is_enabled_when_reapplied_settings_lost_it(
-    set_up_tools: SetUpTools,
-) -> None:
-    assert set_up_tools(STALE_SETTINGS="1") == (
-        0,
-        [INSTALL, REAPPLY_SETTINGS, ENABLE],
-    )
-
-
-def test_failed_install_still_reapplies_settings(set_up_tools: SetUpTools) -> None:
-    status, calls = set_up_tools(CLAUDE_FAILS_AT="install")
-    assert status != 0
-    assert calls == [INSTALL, REAPPLY_SETTINGS]
-
-
-@pytest.mark.skipif(os.geteuid() != 0, reason="cloud tools install only as root")
-def test_cloud_tools_install_after_a_plugin_failure(
-    set_up_tools: SetUpTools, home: Path
-) -> None:
-    status, calls = set_up_tools(CLAUDE_FAILS_AT="install", CCR_AGENT_PROXY_ENABLED="1")
-    assert status != 0
-    assert calls[:2] == [INSTALL, REAPPLY_SETTINGS]
-    assert set(UP_FRONT_TOOLS) <= installed_tools(home)
-
-
-def test_plugin_is_offered_once(set_up_tools: SetUpTools) -> None:
-    set_up_tools()
-    assert set_up_tools() == (0, [INSTALL, REAPPLY_SETTINGS])
-
-
-def test_plugin_is_offered_again_after_a_failed_install(
-    set_up_tools: SetUpTools,
-) -> None:
-    set_up_tools(CLAUDE_FAILS_AT="install")
-    _, calls = set_up_tools()
-    assert calls == [INSTALL, REAPPLY_SETTINGS, INSTALL, REAPPLY_SETTINGS]
-
-
-def test_plugin_is_offered_once_per_plugin_data(
-    set_up_tools: SetUpTools, tmp_path: Path
-) -> None:
-    set_up_tools(CLAUDE_PLUGIN_DATA=str(tmp_path / "old-data"))
-    _, calls = set_up_tools(CLAUDE_PLUGIN_DATA=str(tmp_path / "new-data"))
-    assert calls == [INSTALL, REAPPLY_SETTINGS, INSTALL, REAPPLY_SETTINGS]
-
-
-def test_installed_plugin_is_left_alone(set_up_tools: SetUpTools, home: Path) -> None:
-    installed = home / ".claude" / "plugins" / "installed_plugins.json"
-    write_json(installed, {"plugins": {WEB_GUIDANCE_PLUGIN: []}})
-    assert set_up_tools() == (0, [])
-
-
-def test_plugin_the_user_disabled_is_not_installed(
-    set_up_tools: SetUpTools, home: Path
-) -> None:
-    settings = home / ".claude" / "settings.json"
-    write_json(settings, {"enabledPlugins": {WEB_GUIDANCE_PLUGIN: False}})
+def test_tools_hook_outside_the_cloud_does_nothing(set_up_tools: SetUpTools) -> None:
     assert set_up_tools() == (0, [])
 
 
@@ -607,16 +486,14 @@ def test_added_repo_waits_for_another_tool_install(
 
 
 @pytest.mark.skipif(os.geteuid() != 0, reason="cloud tools install only as root")
-def test_added_repo_without_mise_says_so(
-    hooks: Path, home: Path, tmp_path: Path
-) -> None:
+def test_added_repo_without_mise_says_so(home: Path, tmp_path: Path) -> None:
     repo = tmp_path / "added" / "repo"
     repo.mkdir(parents=True)
     (repo / "mise.toml").write_text("[tools]\n")
     empty_bin = tmp_path / "empty-bin"
     empty_bin.mkdir()
     result = subprocess.run(
-        [sys.executable, hooks / "added_directory_tools.py"],
+        [sys.executable, HOOKS / "added_directory_tools.py"],
         input=json.dumps({"directory": str(repo)}),
         env={
             "HOME": str(home),

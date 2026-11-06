@@ -10,17 +10,26 @@
 import json
 import os
 import shutil
+import subprocess
 import sys
 import tempfile
 import tomllib
 from pathlib import Path
 
 import tomli_w
-from json_values import JsonObject, JsonValue
+from json_values import JsonObject, JsonValue, dict_or_empty, json_object
+from plugin_paths import DATA_ROOT
 
 HOME = Path.home()
 CLAUDE_DIR = HOME / ".claude"
+CLAUDE_SETTINGS = CLAUDE_DIR / "settings.json"
+INSTALLED_PLUGINS = CLAUDE_DIR / "plugins" / "installed_plugins.json"
 CODEX_DIR = HOME / ".codex"
+WEB_GUIDANCE_NAME = "modern-web-guidance"
+WEB_GUIDANCE_PLUGIN = f"{WEB_GUIDANCE_NAME}@googlechrome"
+WEB_GUIDANCE_MARKETPLACE = "GoogleChrome/modern-web-guidance"
+PLUGIN_DATA = Path(os.environ.get("CLAUDE_PLUGIN_DATA") or DATA_ROOT)
+WEB_GUIDANCE_OFFERED = PLUGIN_DATA / "web-guidance-offered"
 AUTO_COMPACT_WINDOW_TOKENS = 400_000
 REMOTE_SERVER_NAMES = ("claude-code-remote", "Claude_Code_Remote")
 REMOTE_SESSION_TOOLS = (
@@ -145,10 +154,55 @@ def list_setting(settings: JsonObject, key: str) -> list[JsonValue]:
     return value
 
 
+def web_guidance_plugin_choice() -> bool | None:
+    enabled = object_setting(read_json(CLAUDE_SETTINGS), "enabledPlugins")
+    choice = enabled.get(WEB_GUIDANCE_PLUGIN)
+    return choice if isinstance(choice, bool) else None
+
+
+def web_guidance_plugin_is_installed() -> bool:
+    try:
+        installed = json_object(INSTALLED_PLUGINS.read_text()) or {}
+    except OSError:
+        return False
+    return WEB_GUIDANCE_PLUGIN in dict_or_empty(installed.get("plugins"))
+
+
+def web_guidance_plugin_wanted() -> bool:
+    return (
+        not web_guidance_plugin_is_installed()
+        and web_guidance_plugin_choice() is not False
+    )
+
+
+def install_web_guidance_plugin() -> None:
+    subprocess.run(
+        (
+            "claude",
+            "plugin",
+            "install",
+            WEB_GUIDANCE_NAME,
+            "--marketplace",
+            WEB_GUIDANCE_MARKETPLACE,
+            "--scope",
+            "user",
+        ),
+        check=True,
+        stdout=sys.stderr,
+    )
+
+
+def offer_web_guidance_plugin() -> None:
+    if WEB_GUIDANCE_OFFERED.exists() or not web_guidance_plugin_wanted():
+        return
+    install_web_guidance_plugin()
+    WEB_GUIDANCE_OFFERED.parent.mkdir(parents=True, exist_ok=True)
+    WEB_GUIDANCE_OFFERED.touch()
+
+
 def configure_claude_settings() -> None:
-    CLAUDE_DIR.mkdir(parents=True, exist_ok=True)
-    settings_path = CLAUDE_DIR / "settings.json"
-    settings = read_json(settings_path)
+    CLAUDE_SETTINGS.parent.mkdir(parents=True, exist_ok=True)
+    settings = read_json(CLAUDE_SETTINGS)
     wanted = dict(settings)
     wanted["attribution"] = {"commit": "", "pr": "", "sessionUrl": False}
     wanted["autoMemoryEnabled"] = False
@@ -197,7 +251,7 @@ def configure_claude_settings() -> None:
         "CLAUDE_CODE_TURN_UPDATES": "0",
     }
     if wanted != settings:
-        write_atomically(settings_path, json.dumps(wanted, indent=2) + "\n")
+        write_atomically(CLAUDE_SETTINGS, json.dumps(wanted, indent=2) + "\n")
 
 
 def configure_codex() -> None:
@@ -221,8 +275,11 @@ def configure_codex() -> None:
 
 
 def main() -> None:
-    configure_claude_settings()
-    configure_codex()
+    try:
+        offer_web_guidance_plugin()
+    finally:
+        configure_claude_settings()
+        configure_codex()
 
 
 if __name__ == "__main__":
