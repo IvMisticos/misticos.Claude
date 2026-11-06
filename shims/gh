@@ -52,10 +52,12 @@ pull_request_review_write          graphql  addPullRequestReview
 pull_request_review_write          graphql  submitPullRequestReview
 pull_request_review_write          graphql  deletePullRequestReview
 add_reply_to_pull_request_comment  rest     POST pulls/*/comments in_reply_to
+add_reply_to_pull_request_comment  rest     POST pulls/*/comments --input
 add_reply_to_pull_request_comment  rest     POST pulls/*/comments/*/replies
 add_reply_to_pull_request_comment  rest     POST pulls/comments/*/reactions
 add_reply_to_pull_request_comment  graphql  addPullRequestReviewComment inReplyTo
 add_reply_to_pull_request_comment  graphql  addPullRequestReviewThreadReply
+add_comment_to_pending_review      rest     POST pulls/*/comments --input
 add_comment_to_pending_review      rest     POST pulls/*/comments
 add_comment_to_pending_review      graphql  addPullRequestReviewComment
 add_comment_to_pending_review      graphql  addPullRequestReviewThread
@@ -75,7 +77,7 @@ method=""
 sends_fields=false
 api_positionals=0
 api_flag_awaiting_value=""
-field_names=()
+request_parts=()
 fields_text=""
 query_field=""
 reads_query_from_file=false
@@ -84,10 +86,10 @@ repository_resource=""
 graphql_query=""
 
 deny() {
-  local tool=$1
-  echo "gh: use the GitHub MCP tool $tool for this." \
+  local tools=${1//$'\n'/ or }
+  echo "gh: use the GitHub MCP tool $tools for this." \
     "The agent that opened a pull request, or its parent, manages it." \
-    "If you lack $tool, ask your parent agent to do it." \
+    "If you lack $tools, ask your parent agent to do it." \
     "Run gh with ALLOW_GH_PULL_REQUEST_WRITE=1 only when the user asks." >&2
   exit 1
 }
@@ -138,7 +140,7 @@ api_short_flag_takes_value() {
 record_field() {
   local field=$1 name=${1%%=*}
   sends_fields=true
-  field_names+=("${name%%\[*}")
+  request_parts+=("${name%%\[*}")
   fields_text+=$'\n'$field
   [[ $field == query=* ]] && query_field=${field#query=}
   return 0
@@ -156,6 +158,7 @@ record_api_flag() {
     --input)
       sends_fields=true
       reads_query_from_file=true
+      request_parts+=(--input)
       ;;
   esac
   return 0
@@ -260,10 +263,10 @@ has_flag() {
   return 1
 }
 
-sends_field() {
-  local name
-  for name in "${field_names[@]}"; do
-    [ "$name" = "$1" ] && return 0
+sends() {
+  local part
+  for part in "${request_parts[@]}"; do
+    [ "$part" = "$1" ] && return 0
   done
   return 1
 }
@@ -303,7 +306,7 @@ matches_rest_form() {
   read -ra words <<< "$1"
   [ "$api_method" = "${words[0]}" ] || return 1
   [[ $repository_resource =~ ^${words[1]//\*/[^/]+}$ ]] || return 1
-  meets_conditions sends_field "${words[@]:2}"
+  meets_conditions sends "${words[@]:2}"
 }
 
 matches_graphql_form() {
@@ -323,15 +326,17 @@ matches_form() {
   esac
 }
 
-pull_request_write_tool() {
-  local tool interface form
+pull_request_write_tools() {
+  local tool interface form matched_form=""
   while read -r tool interface form; do
-    if matches_form "$interface" "$form"; then
+    if [ -z "$matched_form" ] && matches_form "$interface" "$form"; then
+      matched_form="$interface $form"
+    fi
+    if [ -n "$matched_form" ] && [ "$interface $form" = "$matched_form" ]; then
       printf '%s\n' "$tool"
-      return 0
     fi
   done <<< "$PULL_REQUEST_WRITES"
-  return 1
+  [ -n "$matched_form" ]
 }
 
 guards_pull_request_writes() {
@@ -346,8 +351,8 @@ if guards_pull_request_writes; then
   if [ "$command" = api ]; then
     describe_api_request "$@"
   fi
-  if tool=$(pull_request_write_tool); then
-    deny "$tool"
+  if tools=$(pull_request_write_tools); then
+    deny "$tools"
   fi
 fi
 

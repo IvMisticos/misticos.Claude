@@ -297,6 +297,16 @@ def test_names_the_reply_tool_for_a_review_comment_reply(
     assert suggested_tool(result) == "add_reply_to_pull_request_comment"
 
 
+@pytest.mark.parametrize("body", ["reply.json", "-"])
+def test_names_both_comment_tools_for_a_review_comment_body_it_cannot_see(
+    run_gh_in_cloud: ShimRun, body: str
+) -> None:
+    result = run_gh_in_cloud("api", "repos/o/r/pulls/1/comments", "--input", body)
+    assert result.returncode == 1
+    both_tools = "add_reply_to_pull_request_comment or add_comment_to_pending_review"
+    assert f"use the GitHub MCP tool {both_tools} for this." in result.stderr
+
+
 @pytest.mark.parametrize(
     "arguments",
     [
