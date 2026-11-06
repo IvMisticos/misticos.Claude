@@ -88,6 +88,7 @@ function briefFor(angle, research) {
 const research = parseResearch(args)
 const findingsByAngle = {}
 const limitedAngles = new Set()
+const unstartedAngles = new Set()
 const failedAngles = new Set()
 let searchLimitReached = false
 let nextAngleIndex = 0
@@ -110,7 +111,7 @@ async function scoutNextAngles() {
   while (nextAngleIndex < research.angles.length) {
     const angle = research.angles[nextAngleIndex++]
     if (searchLimitReached) {
-      limitedAngles.add(angle)
+      unstartedAngles.add(angle)
       continue
     }
     const findings = await scout(angle)
@@ -135,8 +136,16 @@ function inAngleOrder(angles) {
 if (limitedAngles.size) {
   log(`${limitedAngles.size} angles reached the search limit. Run them again in a later turn.`)
 }
+if (unstartedAngles.size) {
+  log(`${unstartedAngles.size} angles did not start because of the search limit. Run them in a later turn.`)
+}
 if (failedAngles.size) {
   log(`${failedAngles.size} angles failed.`)
 }
 
-return { findingsByAngle, limitedAngles: inAngleOrder(limitedAngles), failedAngles: inAngleOrder(failedAngles) }
+return {
+  findingsByAngle,
+  limitedAngles: inAngleOrder(limitedAngles),
+  unstartedAngles: inAngleOrder(unstartedAngles),
+  failedAngles: inAngleOrder(failedAngles),
+}
