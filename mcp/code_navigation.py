@@ -17,9 +17,10 @@ from result_formatting import (
     Call,
     calls_text,
     diagnostics_text,
+    document_symbols_text,
     hover_text,
     locations_text,
-    symbols_text,
+    workspace_symbols_text,
 )
 from server_registry import server_for, stop_all_servers
 from text_positions import to_uri
@@ -99,8 +100,8 @@ async def rename(file: str, line: int, column: int, new_name: str) -> str:
 async def document_symbols(file: str) -> str:
     """Outline of a file: classes, functions, methods, fields, with positions."""
     path, server = await server_at(file)
-    return symbols_text(
-        await about_document("textDocument/documentSymbol", path, server)
+    return document_symbols_text(
+        path, await about_document("textDocument/documentSymbol", path, server)
     )
 
 
@@ -108,7 +109,9 @@ async def document_symbols(file: str) -> str:
 async def workspace_symbols(query: str, file_in_project: str) -> str:
     """Symbols matching query across the project that contains file_in_project; that file picks the language."""
     _, server = await server_at(file_in_project)
-    return symbols_text(await server.request("workspace/symbol", {"query": query}))
+    return workspace_symbols_text(
+        await server.request("workspace/symbol", {"query": query})
+    )
 
 
 @mcp.tool()
