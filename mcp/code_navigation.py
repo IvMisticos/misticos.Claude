@@ -14,6 +14,7 @@ from pathlib import Path
 from lsp_client import LanguageServer
 from lsp_types import LSPAny
 from mcp.server.mcpserver import MCPServer
+from open_documents import Document, read_document
 from result_formatting import (
     Call,
     calls_text,
@@ -43,8 +44,11 @@ def resolved(file: str) -> Path:
     return path
 
 
-async def about_document(method: str, path: Path, server: LanguageServer) -> LSPAny:
-    return await server.ask_about(path, method, {"textDocument": {"uri": to_uri(path)}})
+async def about_document(
+    method: str, document: Document, server: LanguageServer
+) -> LSPAny:
+    params = {"textDocument": {"uri": to_uri(document.path)}}
+    return await server.ask_about(document, method, params)
 
 
 class CodeNavigation:
@@ -64,9 +68,9 @@ class CodeNavigation:
             self.callees,
         ]
 
-    async def server_at(self, file: str) -> tuple[Path, LanguageServer]:
-        path = resolved(file)
-        return path, await self.server_for(path)
+    async def document_and_server(self, file: str) -> tuple[Document, LanguageServer]:
+        document = read_document(resolved(file))
+        return document, await self.server_for(document.path)
 
     async def at_position(
         self,
@@ -76,8 +80,8 @@ class CodeNavigation:
         column: int,
         extra: dict[str, LSPAny] | None = None,
     ) -> LSPAny:
-        path, server = await self.server_at(file)
-        return await server.at_position(method, path, line, column, extra)
+        document, server = await self.document_and_server(file)
+        return await server.at_position(method, document, line, column, extra)
 
     async def definition(self, file: str, line: int, column: int) -> str:
         """Where the symbol at file:line:column (1-based) is defined."""
@@ -114,23 +118,22 @@ class CodeNavigation:
 
     async def document_symbols(self, file: str) -> str:
         """Outline of a file: classes, functions, methods, fields, with positions."""
-        path, server = await self.server_at(file)
-        return document_symbols_text(
-            path, await about_document("textDocument/documentSymbol", path, server)
-        )
+        document, server = await self.document_and_server(file)
+        symbols = await about_document("textDocument/documentSymbol", document, server)
+        return document_symbols_text(document.path, symbols)
 
     async def workspace_symbols(self, query: str, file_in_project: str) -> str:
         """Symbols matching query across the project that contains file_in_project; that file picks the language."""
-        path, server = await self.server_at(file_in_project)
+        document, server = await self.document_and_server(file_in_project)
         return workspace_symbols_text(
-            await server.ask_about(path, "workspace/symbol", {"query": query})
+            await server.ask_about(document, "workspace/symbol", {"query": query})
         )
 
     async def diagnostics(self, file: str) -> str:
         """Compile errors and warnings in a file, without building the project."""
-        path, server = await self.server_at(file)
-        report = await about_document("textDocument/diagnostic", path, server)
-        return diagnostics_text(path, report["items"])
+        document, server = await self.document_and_server(file)
+        report = await about_document("textDocument/diagnostic", document, server)
+        return diagnostics_text(document.path, report["items"])
 
     async def callers(self, file: str, line: int, column: int) -> str:
         """Functions that call the function at file:line:column (1-based), each with the places it calls from."""
@@ -144,15 +147,15 @@ class CodeNavigation:
         self, direction: str, file: str, line: int, column: int
     ) -> str:
         method, other_end = CALL_DIRECTIONS[direction]
-        path, server = await self.server_at(file)
+        document, server = await self.document_and_server(file)
         functions = await server.at_position(
-            "textDocument/prepareCallHierarchy", path, line, column
+            "textDocument/prepareCallHierarchy", document, line, column
         )
         if not functions:
-            raise ValueError(f"no function at {path}:{line}:{column}")
+            raise ValueError(f"no function at {document.path}:{line}:{column}")
         calls: list[Call] = []
         for function in functions:
-            for call in await server.ask_about(path, method, {"item": function}) or []:
+            for call in await server.request(method, {"item": function}) or []:
                 call_site_owner = call.get("from", function)
                 calls.append(
                     Call(call[other_end], call_site_owner["uri"], call["fromRanges"])
