@@ -170,12 +170,23 @@ def fake_bin(tmp_path: Path) -> FakeBin:
     return add
 
 
+def session_mise_shims() -> Path:
+    data_home = os.environ.get("XDG_DATA_HOME") or Path.home() / ".local" / "share"
+    return Path(os.environ.get("MISE_DATA_DIR") or Path(data_home) / "mise") / "shims"
+
+
 def real_uv_directories() -> list[str]:
+    path_without_mise_shims = os.pathsep.join(
+        directory
+        for directory in os.environ["PATH"].split(os.pathsep)
+        if Path(directory) != session_mise_shims()
+    )
     found = subprocess.run(
         ["bash", "-c", '. "$1" && real_tool uv', "bash", REAL_TOOL_LIBRARY],
         capture_output=True,
         text=True,
         check=False,
+        env={**os.environ, "REAL_TOOL_PATH": path_without_mise_shims},
     )
     return [os.path.dirname(found.stdout.strip())] if found.returncode == 0 else []
 
