@@ -19,7 +19,7 @@ from hook_io import (
     denied,
     run_pre_tool_use,
 )
-from json_values import JsonObject, dict_or_empty
+from json_values import JsonObject, dict_or_empty, text_or_none
 from model_cap import (
     Model,
     capped_input,
@@ -48,10 +48,6 @@ def read_toml(path: Path) -> dict[str, object]:
             return tomllib.load(toml_file)
     except (OSError, ValueError):
         return {}
-
-
-def text_or_none(value: object) -> str | None:
-    return value if isinstance(value, str) and value else None
 
 
 def parsed_role_file(path: Path) -> RoleFile:
