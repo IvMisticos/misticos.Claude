@@ -26,8 +26,7 @@ PLUGIN_AGENTS = AgentFolder(PLUGIN_ROOT / "agents", "*.md", f"{PLUGIN_NAME}:")
 
 def definition_text(definition_path: Path) -> str:
     try:
-        with open(definition_path, encoding="utf-8", errors="replace") as definition:
-            return definition.read().lstrip("\ufeff").replace("\r\n", "\n")
+        return definition_path.read_text(encoding="utf-8-sig", errors="replace")
     except OSError:
         return ""
 
