@@ -1,5 +1,6 @@
 import json
 import os
+import stat
 from pathlib import Path
 
 import pytest
@@ -96,3 +97,9 @@ def test_a_write_never_shows_a_partial_record(
     write_most_free_since_cleanup(record, {"3": GIB})
     assert json.loads(seen[0]) == {"1": int(1.5 * GIB), "2": 3 * GIB}
     assert json.loads(record.read_bytes()) == {"3": GIB}
+
+
+def test_a_write_keeps_the_mode_of_the_record(record: Path) -> None:
+    record.chmod(0o640)
+    write_most_free_since_cleanup(record, {"3": GIB})
+    assert stat.S_IMODE(record.stat().st_mode) == 0o640
