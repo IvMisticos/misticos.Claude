@@ -1,18 +1,24 @@
 import os
 import subprocess
 import sys
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
 from conftest import (
     SHIMS,
+    SYSTEM_DIRS,
     FakeBin,
     ShimRun,
     ShimRunner,
     WrappedShimRunner,
+    program_writer,
     real_uv_directories,
-    without_session_variables,
+    run_shim,
+    shim_environment,
 )
+
+type FakeMise = Callable[[str], Path]
 
 PRINT_ENVIRONMENT = """#!/usr/bin/env bash
 echo "PATH=$PATH"
@@ -88,44 +94,45 @@ def test_missing_python_installs_outside_the_project(
 
 
 @pytest.fixture
-def environment_with_only_local_uv(home: Path) -> dict[str, str]:
+def local_uv(home: Path) -> None:
     local_bin = home / ".local" / "bin"
     local_bin.mkdir(parents=True)
     (local_bin / "uv").symlink_to(Path(real_uv_directories()[0]) / "uv")
-    environment = without_session_variables(os.environ)
-    environment.update(
-        HOME=str(home), PATH=os.pathsep.join([str(SHIMS), "/usr/bin", "/bin"])
-    )
-    return environment
 
 
-def run_shim(
-    name: str, environment: dict[str, str], *arguments: str
-) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        [SHIMS / name, *arguments],
-        env=environment,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+@pytest.fixture
+def fake_mise(fake_bin: FakeBin) -> FakeMise:
+    def add(script: str) -> Path:
+        return fake_bin("mise", script)
+
+    return add
 
 
-def test_runs_uv_when_it_is_only_in_the_local_bin(
-    environment_with_only_local_uv: dict[str, str],
-) -> None:
-    result = run_shim("uv", environment_with_only_local_uv, "--version")
+@pytest.fixture
+def fake_mise_shim(home: Path) -> FakeBin:
+    mise_shims = home / ".local" / "share" / "mise" / "shims"
+    mise_shims.mkdir(parents=True)
+    return program_writer(mise_shims)
+
+
+def queue_environment(home: Path, *tool_dirs: Path) -> dict[str, str]:
+    return shim_environment(home, SHIMS, *tool_dirs, *SYSTEM_DIRS)
+
+
+@pytest.mark.usefixtures("local_uv")
+def test_runs_uv_when_it_is_only_in_the_local_bin(home: Path) -> None:
+    result = run_shim("uv", queue_environment(home), "--version")
 
     assert result.returncode == 0, result.stderr
     assert result.stdout.startswith("uv ")
 
 
-def test_runs_a_missing_tool_through_mise(
-    environment_with_only_local_uv: dict[str, str], fake_bin: FakeBin
-) -> None:
-    mise_dir = fake_bin("mise", '#!/usr/bin/env bash\necho "mise $*"\n')
-    environment = environment_with_only_local_uv
-    environment["PATH"] += os.pathsep + str(mise_dir)
+MISE_PRINTING_ITS_COMMAND = '#!/usr/bin/env bash\necho "mise $*"\n'
+
+
+@pytest.mark.usefixtures("local_uv")
+def test_runs_a_missing_tool_through_mise(home: Path, fake_mise: FakeMise) -> None:
+    environment = queue_environment(home, fake_mise(MISE_PRINTING_ITS_COMMAND))
 
     result = run_shim("bun", environment, "--version")
 
@@ -141,13 +148,10 @@ esac
 """
 
 
-def test_runs_uv_through_mise_when_uv_is_missing(home: Path, fake_bin: FakeBin) -> None:
-    mise_dir = fake_bin("mise", MISE_WITH_UV_AND_PYTHON)
-    environment = without_session_variables(os.environ)
-    environment.update(
-        HOME=str(home),
-        PATH=os.pathsep.join([str(SHIMS), str(mise_dir), "/usr/bin", "/bin"]),
-    )
+def test_runs_uv_through_mise_when_uv_is_missing(
+    home: Path, fake_mise: FakeMise
+) -> None:
+    environment = queue_environment(home, fake_mise(MISE_WITH_UV_AND_PYTHON))
 
     result = run_shim("uv", environment, "--version")
 
@@ -164,41 +168,23 @@ exec "$@"
 """
 
 
+@pytest.mark.usefixtures("local_uv")
 def test_mise_runs_cargo_from_rust_without_reentering_the_shim(
-    environment_with_only_local_uv: dict[str, str], fake_bin: FakeBin, home: Path
+    home: Path, fake_mise: FakeMise
 ) -> None:
-    mise_dir = fake_bin("mise", MISE_RUNNING_FROM_PATH)
-    environment = environment_with_only_local_uv
-    environment["PATH"] += os.pathsep + str(mise_dir)
+    environment = queue_environment(home, fake_mise(MISE_RUNNING_FROM_PATH))
 
-    result = subprocess.run(
-        [SHIMS / "cargo", "build"],
-        env=environment,
-        capture_output=True,
-        text=True,
-        check=False,
-        timeout=10,
-    )
+    result = run_shim("cargo", environment, "build")
 
     assert result.returncode == 1
     assert (home / "mise-calls").read_text() == "mise --quiet x rust -- cargo build\n"
 
 
-def test_reports_a_tool_mise_does_not_provide(
-    environment_with_only_local_uv: dict[str, str], fake_bin: FakeBin, home: Path
-) -> None:
-    mise_dir = fake_bin("mise", MISE_RUNNING_FROM_PATH)
-    environment = environment_with_only_local_uv
-    environment["PATH"] += os.pathsep + str(mise_dir)
+@pytest.mark.usefixtures("local_uv")
+def test_reports_a_tool_mise_does_not_provide(home: Path, fake_mise: FakeMise) -> None:
+    environment = queue_environment(home, fake_mise(MISE_RUNNING_FROM_PATH))
 
-    result = subprocess.run(
-        [SHIMS / "queue", "tool", "unknown-tool"],
-        env=environment,
-        capture_output=True,
-        text=True,
-        check=False,
-        timeout=10,
-    )
+    result = run_shim("queue", environment, "tool", "unknown-tool")
 
     assert result.returncode == 127
     assert result.stderr == "queue: unknown-tool is not installed\n"
@@ -207,53 +193,37 @@ def test_reports_a_tool_mise_does_not_provide(
 
 def test_held_tool_runs_without_uv(home: Path, fake_bin: FakeBin) -> None:
     cargo_dir = fake_bin("cargo", '#!/usr/bin/env bash\necho "cargo $*"\n')
-    environment = without_session_variables(os.environ)
-    environment.update(
-        HOME=str(home),
-        HARNESS_QUEUE_HELD="1",
-        PATH=os.pathsep.join([str(SHIMS), str(cargo_dir), "/usr/bin", "/bin"]),
-    )
+    environment = queue_environment(home, cargo_dir)
 
-    result = run_shim("cargo", environment, "build")
+    result = run_shim("cargo", {**environment, "HARNESS_QUEUE_HELD": "1"}, "build")
 
     assert result.returncode == 0, result.stderr
     assert result.stdout == "cargo build\n"
 
 
-def test_queues_a_build_that_mise_runs(
-    environment_with_only_local_uv: dict[str, str], fake_bin: FakeBin
-) -> None:
-    mise_dir = fake_bin(
-        "mise", '#!/usr/bin/env bash\necho "held=${HARNESS_QUEUE_HELD-} $*"\n'
-    )
-    environment = environment_with_only_local_uv
-    environment["PATH"] += os.pathsep + str(mise_dir)
+@pytest.mark.usefixtures("local_uv")
+def test_queues_a_build_that_mise_runs(home: Path, fake_mise: FakeMise) -> None:
+    mise_dir = fake_mise('#!/usr/bin/env bash\necho "held=${HARNESS_QUEUE_HELD-} $*"\n')
 
-    result = run_shim("dotnet", environment, "build")
+    result = run_shim("dotnet", queue_environment(home, mise_dir), "build")
 
     assert result.returncode == 0, result.stderr
     assert result.stdout == "held=1 --quiet x dotnet -- dotnet build\n"
 
 
-def test_reports_a_tool_that_mise_cannot_run_either(
-    environment_with_only_local_uv: dict[str, str],
-) -> None:
-    result = run_shim("bun", environment_with_only_local_uv, "--version")
+@pytest.mark.usefixtures("local_uv")
+def test_reports_a_tool_that_mise_cannot_run_either(home: Path) -> None:
+    result = run_shim("bun", queue_environment(home), "--version")
 
     assert result.returncode == 127
     assert result.stderr == "queue: bun is not installed\n"
 
 
-def test_runs_a_tool_from_the_mise_shims(
-    environment_with_only_local_uv: dict[str, str], home: Path
-) -> None:
-    mise_shims = home / ".local" / "share" / "mise" / "shims"
-    mise_shims.mkdir(parents=True)
-    bun = mise_shims / "bun"
-    bun.write_text('#!/usr/bin/env bash\necho "bun $*"\n')
-    bun.chmod(0o755)
+@pytest.mark.usefixtures("local_uv")
+def test_runs_a_tool_from_the_mise_shims(home: Path, fake_mise_shim: FakeBin) -> None:
+    fake_mise_shim("bun", '#!/usr/bin/env bash\necho "bun $*"\n')
 
-    result = run_shim("bun", environment_with_only_local_uv, "--version")
+    result = run_shim("bun", queue_environment(home), "--version")
 
     assert result.returncode == 0, result.stderr
     assert result.stdout == "bun --version\n"
@@ -322,13 +292,8 @@ exit 127
 
 
 @pytest.fixture
-def mise_uv_shim(home: Path) -> Path:
-    mise_shims = home / ".local" / "share" / "mise" / "shims"
-    mise_shims.mkdir(parents=True)
-    shim = mise_shims / "uv"
-    shim.write_text(MISE_SHIM_FALLING_THROUGH)
-    shim.chmod(0o755)
-    return mise_shims
+def mise_uv_shim(fake_mise_shim: FakeBin) -> Path:
+    return fake_mise_shim("uv", MISE_SHIM_FALLING_THROUGH)
 
 
 def mise_shim_calls(home: Path) -> int:
@@ -339,54 +304,27 @@ def mise_shim_calls(home: Path) -> int:
 def test_queue_never_runs_its_uv_through_a_mise_shim(
     home: Path, mise_uv_shim: Path
 ) -> None:
-    environment = without_session_variables(os.environ)
-    environment.update(
-        HOME=str(home),
-        PATH=os.pathsep.join([str(SHIMS), str(mise_uv_shim), "/usr/bin", "/bin"]),
-    )
-
-    result = subprocess.run(
-        [SHIMS / "uv", "--version"],
-        env=environment,
-        capture_output=True,
-        text=True,
-        check=False,
-        timeout=20,
-    )
+    result = run_shim("uv", queue_environment(home, mise_uv_shim), "--version")
 
     assert mise_shim_calls(home) == 0
     assert result.returncode == 127
     assert result.stderr == "queue: uv is not installed\n"
 
 
+@pytest.mark.usefixtures("local_uv")
 def test_mise_shim_falling_through_to_the_plugin_shim_stops(
-    environment_with_only_local_uv: dict[str, str], home: Path, mise_uv_shim: Path
+    home: Path, mise_uv_shim: Path
 ) -> None:
-    environment = environment_with_only_local_uv
-    environment["PATH"] = os.pathsep.join(
-        [str(SHIMS), str(mise_uv_shim), "/usr/bin", "/bin"]
-    )
-
-    result = subprocess.run(
-        [SHIMS / "uv", "--version"],
-        env=environment,
-        capture_output=True,
-        text=True,
-        check=False,
-        timeout=20,
-    )
+    result = run_shim("uv", queue_environment(home, mise_uv_shim), "--version")
 
     assert result.returncode == 0, result.stderr
     assert result.stdout.startswith("uv ")
     assert mise_shim_calls(home) == 1
 
 
-def test_runs_bunx_through_mises_bun(
-    environment_with_only_local_uv: dict[str, str], fake_bin: FakeBin
-) -> None:
-    mise_dir = fake_bin("mise", '#!/usr/bin/env bash\necho "mise $*"\n')
-    environment = environment_with_only_local_uv
-    environment["PATH"] += os.pathsep + str(mise_dir)
+@pytest.mark.usefixtures("local_uv")
+def test_runs_bunx_through_mises_bun(home: Path, fake_mise: FakeMise) -> None:
+    environment = queue_environment(home, fake_mise(MISE_PRINTING_ITS_COMMAND))
 
     result = run_shim("bunx", environment, "cowsay")
 
