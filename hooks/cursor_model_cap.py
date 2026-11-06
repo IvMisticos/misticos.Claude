@@ -7,18 +7,14 @@
 
 from hook_io import run_cursor_subagent_start
 from json_values import JsonObject
-from model_cap import outranks, parsed_model
+from model_cap import denial_reason, parsed_model
 
 
 def spawn_denial(payload: JsonObject) -> str | None:
-    caller = parsed_model(payload.get("model"))
+    subject = f"Subagent {payload.get('subagent_type')}"
     subagent_model = parsed_model(payload.get("subagent_model"))
-    if subagent_model is None or caller is None or not outranks(subagent_model, caller):
-        return None
-    return (
-        f"Blocked subagent {payload.get('subagent_type')} on {subagent_model.name}, "
-        f"above the caller's {caller.name}. Pick one at or below {caller.name}."
-    )
+    caller = parsed_model(payload.get("model"))
+    return denial_reason(subject, subagent_model, caller)
 
 
 if __name__ == "__main__":

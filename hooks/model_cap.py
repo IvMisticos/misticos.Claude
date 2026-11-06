@@ -74,6 +74,17 @@ def capped_input(
     return {**tool_input, "model": name_of(caller)}
 
 
+def denial_reason(
+    subject: str, model: Model | None, caller: Model | None
+) -> str | None:
+    if model is None or caller is None or not outranks(model, caller):
+        return None
+    return (
+        f"{subject} runs on {model.name}, above your {caller.name}. "
+        "Do the work yourself, or use a subagent at or below your model."
+    )
+
+
 def project_folders(cwd: Path) -> Iterator[Path]:
     for folder in (cwd, *cwd.parents):
         yield folder

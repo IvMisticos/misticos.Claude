@@ -26,4 +26,4 @@ def test_denies_a_subagent_above_the_caller() -> None:
     }
     output = run_json_hook(CURSOR_MODEL_CAP, payload)
     assert json_at(output, "permission") == "deny"
-    assert "explore on claude-opus-4-1" in text_at(output, "user_message")
+    assert "explore runs on claude-opus-4-1" in text_at(output, "user_message")

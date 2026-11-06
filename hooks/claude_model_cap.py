@@ -23,6 +23,7 @@ from model_cap import (
     Model,
     capped_input,
     claude_alias,
+    denial_reason,
     outranks,
     parsed_model,
     project_folders,
@@ -34,6 +35,7 @@ INHERIT = "inherit"
 TRUTHY_FLAGS = ("1", "true", "yes", "on")
 FRONTMATTER = re.compile(r"---\s*\n([\s\S]*?)---\s*\n?")
 SUBAGENT_MODEL_VARIABLE = "CLAUDE_CODE_SUBAGENT_MODEL"
+FORCED_SUBAGENTS = "With CLAUDE_CODE_SUBAGENT_MODEL_FORCE set, every subagent"
 PLUGIN_NAME = "misticos"
 PLUGIN_AGENTS_DIR = PLUGIN_ROOT / "agents"
 
@@ -126,12 +128,8 @@ def wanted_agent_model(definition: str | None, caller: Model | None) -> Model | 
 
 def forced_decision(caller: Model | None) -> PreToolUseDecision | None:
     forced_model = parsed_model(os.environ.get(SUBAGENT_MODEL_VARIABLE))
-    if forced_model is None or caller is None or not outranks(forced_model, caller):
-        return None
-    return denied(
-        f"CLAUDE_CODE_SUBAGENT_MODEL_FORCE runs every subagent on "
-        f"{forced_model.name}, above your {caller.name}. Do the work yourself."
-    )
+    reason = denial_reason(FORCED_SUBAGENTS, forced_model, caller)
+    return denied(reason) if reason else None
 
 
 def requested_model_decision(

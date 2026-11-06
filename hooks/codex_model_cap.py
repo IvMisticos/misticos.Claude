@@ -20,7 +20,13 @@ from hook_io import (
     run_pre_tool_use,
 )
 from json_values import JsonObject, dict_or_empty
-from model_cap import Model, capped_input, outranks, parsed_model, project_folders
+from model_cap import (
+    Model,
+    capped_input,
+    denial_reason,
+    parsed_model,
+    project_folders,
+)
 
 DEFAULT_ROLE = "default"
 
@@ -141,12 +147,8 @@ def role_decision(
         if applies_role(spawn, named_role)
         else None
     )
-    if fixed_model is None or caller is None or not outranks(fixed_model, caller):
-        return None
-    return denied(
-        f"The {role_name} role runs on {fixed_model.name}, above your {caller.name}. "
-        "Spawn with a role at or below your model."
-    )
+    reason = denial_reason(f"The {role_name} role", fixed_model, caller)
+    return denied(reason) if reason else None
 
 
 def request_decision(
