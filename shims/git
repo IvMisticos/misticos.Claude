@@ -32,12 +32,8 @@ is_identity_key() {
   matches_ignoring_case "$1" "^$identity_key_pattern$"
 }
 
-environment_sets_identity() {
-  [ -n "${GIT_AUTHOR_NAME-}${GIT_AUTHOR_EMAIL-}${GIT_COMMITTER_NAME-}${GIT_COMMITTER_EMAIL-}" ]
-}
-
 environment_identity_differs_from_harness() {
-  [ -n "${HARNESS_GIT_IDENTITY+set}" ] || { environment_sets_identity; return; }
+  [ -n "${HARNESS_GIT_IDENTITY+set}" ] || { git_identity_environment_is_set; return; }
   [ "$(git_identity_from_environment)" != "$HARNESS_GIT_IDENTITY" ]
 }
 

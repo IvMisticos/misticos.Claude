@@ -3,6 +3,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
 from conftest import ROOT, without_session_variables
 
 SESSION_ENVIRONMENT = ROOT / "hooks" / "session_environment.py"
@@ -55,6 +56,29 @@ def test_mise_shims_follow_the_plugin_shims_after_every_source(tmp_path: Path) -
     )
     shims = ROOT / "shims"
     assert sourced.stdout == f"{shims}:{mise_shims}:/usr/bin:/bin\n"
+
+
+@pytest.mark.parametrize("shell", ["bash", "dash"])
+def test_missing_identity_library_leaves_the_environment_untouched(
+    tmp_path: Path, shell: str
+) -> None:
+    shims = tmp_path / "shims"
+    shims.mkdir()
+    hook = ROOT / "hooks" / "session_environment.sh"
+    sourced = subprocess.run(
+        [
+            shell,
+            "-c",
+            f'. {hook} {shims} /project; echo "after:${{HARNESS_GIT_IDENTITY+set}}:$PATH"',
+            "sh",
+            "/outer",
+        ],
+        env={**without_session_variables(os.environ), "PATH": "/usr/bin:/bin"},
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert sourced.stdout == "after::/usr/bin:/bin\n"
 
 
 def test_shim_accepts_the_identity_the_session_environment_recorded(
