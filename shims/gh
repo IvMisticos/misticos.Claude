@@ -311,9 +311,13 @@ pull_request_write_tool() {
   return 1
 }
 
+guards_pull_request_writes() {
+  [ "${CLAUDE_CODE_REMOTE-}" = true ] && [ -z "${ALLOW_GH_PULL_REQUEST_WRITE-}" ]
+}
+
 gh=$(real_tool gh)
 
-if [ -z "${ALLOW_GH_PULL_REQUEST_WRITE-}" ]; then
+if guards_pull_request_writes; then
   find_command "$@"
   if [ "$command" = api ]; then
     describe_api_request "$@"

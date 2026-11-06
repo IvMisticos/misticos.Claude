@@ -115,7 +115,7 @@ def test_puts_the_shims_first_on_the_path(run_rewritten: RunRewritten) -> None:
 def test_denies_pull_request_writes_through_the_shim(
     run_rewritten: RunRewritten,
 ) -> None:
-    assert run_rewritten("gh pr merge 1").returncode == 1
+    assert run_rewritten("gh pr merge 1", CLAUDE_CODE_REMOTE="true").returncode == 1
 
 
 def test_names_the_project(run_rewritten: RunRewritten, project: Path) -> None:

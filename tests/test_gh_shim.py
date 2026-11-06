@@ -10,7 +10,12 @@ SUGGESTED_TOOL = re.compile(r"use the GitHub MCP tool (\w+) ")
 
 
 @pytest.fixture
-def run_gh(shim_runner: ShimRunner) -> ShimRun:
+def run_gh_in_cloud(shim_runner: ShimRunner) -> ShimRun:
+    return shim_runner("gh", FAKE_GH, CLAUDE_CODE_REMOTE="true")
+
+
+@pytest.fixture
+def run_gh_elsewhere(shim_runner: ShimRunner) -> ShimRun:
     return shim_runner("gh", FAKE_GH)
 
 
@@ -23,6 +28,14 @@ def suggested_tool(result: subprocess.CompletedProcess[str]) -> str:
 
 def mutation(name: str) -> str:
     return f"mutation {{ {name}(input: {{}}) {{ clientMutationId }} }}"
+
+
+WRITES_ON_EVERY_PATH = [
+    ["pr", "merge", "1"],
+    ["api", "-X", "POST", "repos/o/r/pulls/1/reviews"],
+    ["api", "graphql", "-f", f"query={mutation('resolveReviewThread')}"],
+    ["api", "graphql", "--input", "-"],
+]
 
 
 def assert_ran(result: subprocess.CompletedProcess[str], arguments: list[str]) -> None:
@@ -61,9 +74,9 @@ def assert_ran(result: subprocess.CompletedProcess[str], arguments: list[str]) -
     ],
 )
 def test_denies_pull_request_writes_from_the_cli(
-    run_gh: ShimRun, arguments: list[str], tool: str
+    run_gh_in_cloud: ShimRun, arguments: list[str], tool: str
 ) -> None:
-    assert suggested_tool(run_gh(*arguments)) == tool
+    assert suggested_tool(run_gh_in_cloud(*arguments)) == tool
 
 
 @pytest.mark.parametrize(
@@ -101,9 +114,9 @@ def test_denies_pull_request_writes_from_the_cli(
     ],
 )
 def test_denies_pull_request_writes_through_rest(
-    run_gh: ShimRun, method: str, endpoint: str, tool: str
+    run_gh_in_cloud: ShimRun, method: str, endpoint: str, tool: str
 ) -> None:
-    assert suggested_tool(run_gh("api", "-X", method, endpoint)) == tool
+    assert suggested_tool(run_gh_in_cloud("api", "-X", method, endpoint)) == tool
 
 
 @pytest.mark.parametrize(
@@ -132,9 +145,9 @@ def test_denies_pull_request_writes_through_rest(
     ],
 )
 def test_denies_pull_request_writes_through_graphql(
-    run_gh: ShimRun, name: str, tool: str
+    run_gh_in_cloud: ShimRun, name: str, tool: str
 ) -> None:
-    result = run_gh("api", "graphql", "-f", f"query={mutation(name)}")
+    result = run_gh_in_cloud("api", "graphql", "-f", f"query={mutation(name)}")
     assert suggested_tool(result) == tool
 
 
@@ -245,9 +258,9 @@ def test_denies_pull_request_writes_through_graphql(
     ],
 )
 def test_denies_pull_request_writes_however_gh_is_called(
-    run_gh: ShimRun, arguments: list[str], tool: str
+    run_gh_in_cloud: ShimRun, arguments: list[str], tool: str
 ) -> None:
-    assert suggested_tool(run_gh(*arguments)) == tool
+    assert suggested_tool(run_gh_in_cloud(*arguments)) == tool
 
 
 @pytest.fixture
@@ -260,34 +273,36 @@ def merge_mutation_files(tmp_path: Path) -> tuple[Path, Path]:
 
 
 def test_checks_a_graphql_query_read_from_a_field_file(
-    run_gh: ShimRun, merge_mutation_files: tuple[Path, Path]
+    run_gh_in_cloud: ShimRun, merge_mutation_files: tuple[Path, Path]
 ) -> None:
     query, _ = merge_mutation_files
-    result = run_gh("api", "graphql", "-F", f"query=@{query}")
+    result = run_gh_in_cloud("api", "graphql", "-F", f"query=@{query}")
     assert suggested_tool(result) == "merge_pull_request"
 
 
 def test_checks_a_graphql_query_read_from_a_short_field_file(
-    run_gh: ShimRun, merge_mutation_files: tuple[Path, Path]
+    run_gh_in_cloud: ShimRun, merge_mutation_files: tuple[Path, Path]
 ) -> None:
     query, _ = merge_mutation_files
-    result = run_gh("api", "graphql", f"-F=query=@{query}")
+    result = run_gh_in_cloud("api", "graphql", f"-F=query=@{query}")
     assert suggested_tool(result) == "merge_pull_request"
 
 
 def test_checks_a_graphql_query_read_from_the_input_file(
-    run_gh: ShimRun, merge_mutation_files: tuple[Path, Path]
+    run_gh_in_cloud: ShimRun, merge_mutation_files: tuple[Path, Path]
 ) -> None:
     _, body = merge_mutation_files
-    result = run_gh("api", "graphql", "--input", str(body))
+    result = run_gh_in_cloud("api", "graphql", "--input", str(body))
     assert suggested_tool(result) == "merge_pull_request"
 
 
-def test_runs_a_graphql_query_read_from_a_file(run_gh: ShimRun, tmp_path: Path) -> None:
+def test_runs_a_graphql_query_read_from_a_file(
+    run_gh_in_cloud: ShimRun, tmp_path: Path
+) -> None:
     query = tmp_path / "query.graphql"
     query.write_text("query { viewer { login } }")
     arguments = ["api", "graphql", "-F", f"query=@{query}"]
-    assert_ran(run_gh(*arguments), arguments)
+    assert_ran(run_gh_in_cloud(*arguments), arguments)
 
 
 @pytest.mark.parametrize(
@@ -298,9 +313,9 @@ def test_runs_a_graphql_query_read_from_a_file(run_gh: ShimRun, tmp_path: Path) 
     ],
 )
 def test_denies_a_graphql_query_read_from_standard_input(
-    run_gh: ShimRun, arguments: list[str]
+    run_gh_in_cloud: ShimRun, arguments: list[str]
 ) -> None:
-    result = run_gh(*arguments)
+    result = run_gh_in_cloud(*arguments)
     assert result.returncode == 1
     assert "not on standard input" in result.stderr
 
@@ -373,19 +388,26 @@ def test_denies_a_graphql_query_read_from_standard_input(
         ["api", "-H", "Accept: x/pulls", "repos/o/r/issues", "-f", "title=x"],
     ],
 )
-def test_runs_other_commands(run_gh: ShimRun, arguments: list[str]) -> None:
-    assert_ran(run_gh(*arguments), arguments)
+def test_runs_other_commands(run_gh_in_cloud: ShimRun, arguments: list[str]) -> None:
+    assert_ran(run_gh_in_cloud(*arguments), arguments)
 
 
-@pytest.mark.parametrize(
-    "arguments",
-    [
-        ["pr", "merge", "1"],
-        ["api", "-X", "POST", "repos/o/r/pulls/1/reviews"],
-        ["api", "graphql", "-f", f"query={mutation('resolveReviewThread')}"],
-    ],
-)
+@pytest.mark.parametrize("arguments", WRITES_ON_EVERY_PATH)
 def test_runs_pull_request_writes_on_request(
-    run_gh: ShimRun, arguments: list[str]
+    run_gh_in_cloud: ShimRun, arguments: list[str]
 ) -> None:
-    assert_ran(run_gh(*arguments, ALLOW_GH_PULL_REQUEST_WRITE="1"), arguments)
+    assert_ran(run_gh_in_cloud(*arguments, ALLOW_GH_PULL_REQUEST_WRITE="1"), arguments)
+
+
+@pytest.mark.parametrize("arguments", WRITES_ON_EVERY_PATH)
+def test_runs_pull_request_writes_outside_claude_cloud(
+    run_gh_elsewhere: ShimRun, arguments: list[str]
+) -> None:
+    assert_ran(run_gh_elsewhere(*arguments), arguments)
+
+
+def test_runs_pull_request_writes_when_the_session_is_not_remote(
+    run_gh_elsewhere: ShimRun,
+) -> None:
+    result = run_gh_elsewhere("pr", "merge", "1", CLAUDE_CODE_REMOTE="false")
+    assert_ran(result, ["pr", "merge", "1"])
