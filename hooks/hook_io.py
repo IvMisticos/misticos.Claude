@@ -118,10 +118,6 @@ def cwd_of(payload: JsonObject) -> str:
     return cwd if isinstance(cwd, str) and cwd else os.getcwd()
 
 
-def pre_tool_use_output(decision: PreToolUseDecision) -> ClaudeOutput:
-    return {"hookSpecificOutput": {"hookEventName": "PreToolUse", **decision}}
-
-
 def allowed_with(updated_input: JsonObject) -> PreToolUseDecision:
     return {"permissionDecision": "allow", "updatedInput": updated_input}
 
@@ -162,14 +158,43 @@ def write_block(reason: str, shape: OutputShape = OutputShape.CLAUDE) -> None:
     json.dump(block_output(reason, shape), sys.stdout)
 
 
-def write_pre_tool_use_decision(decide: PreToolUseDecider) -> None:
-    decision = decide(read_payload())
-    if decision:
-        json.dump(pre_tool_use_output(decision), sys.stdout)
+def claude_pre_tool_use(decision: PreToolUseDecision) -> ClaudeOutput:
+    return {"hookSpecificOutput": {"hookEventName": "PreToolUse", **decision}}
 
 
-def run_pre_tool_use(decide: PreToolUseDecider) -> None:
-    run_hook(lambda: write_pre_tool_use_decision(decide))
+def cursor_permission(decision: PreToolUseDecision) -> CursorPermission:
+    permission: CursorPermission = {
+        "permission": decision.get("permissionDecision", "allow")
+    }
+    if "permissionDecisionReason" in decision:
+        permission["user_message"] = decision["permissionDecisionReason"]
+    if "updatedInput" in decision:
+        permission["updated_input"] = decision["updatedInput"]
+    return permission
+
+
+def pre_tool_use_output(
+    decision: PreToolUseDecision | None, shape: OutputShape
+) -> ClaudeOutput | CursorPermission | None:
+    match shape:
+        case OutputShape.CURSOR:
+            return cursor_permission(decision) if decision else {"permission": "allow"}
+        case OutputShape.CLAUDE:
+            return claude_pre_tool_use(decision) if decision else None
+
+
+def write_pre_tool_use_decision(
+    decision: PreToolUseDecision | None, shape: OutputShape
+) -> None:
+    output = pre_tool_use_output(decision, shape)
+    if output:
+        json.dump(output, sys.stdout)
+
+
+def run_pre_tool_use(
+    decide: PreToolUseDecider, shape: OutputShape = OutputShape.CLAUDE
+) -> None:
+    run_hook(lambda: write_pre_tool_use_decision(decide(read_payload()), shape))
 
 
 def run_hook(main: Callable[[], object]) -> None:
