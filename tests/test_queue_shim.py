@@ -2,7 +2,7 @@ import os
 import signal
 import subprocess
 import sys
-from collections.abc import Callable, Iterator
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -231,30 +231,23 @@ def test_runs_a_tool_from_the_mise_shims(home: Path, fake_mise_shim: FakeBin) ->
     assert result.stdout == "bun --version\n"
 
 
-@pytest.fixture
-def on_one_cpu() -> Iterator[None]:
-    allowed = os.sched_getaffinity(0)
-    os.sched_setaffinity(0, {min(allowed)})
-    yield
-    os.sched_setaffinity(0, allowed)
-
-
 STOP_THE_QUEUE_AND_KEEP_RUNNING = 'trap "" TERM; kill -TERM "$PPID"; echo run >> "$0"'
 
 
-@pytest.mark.usefixtures("local_uv", "on_one_cpu")
+@pytest.mark.usefixtures("local_uv")
 def test_bench_stops_after_a_stop_signal(home: Path, tmp_path: Path) -> None:
     run_log = tmp_path / "runs"
 
     result = run_shim(
         "queue",
         queue_environment(home),
-        *["bench", "--alone", "--runs", "3", "--"],
+        *["bench", "--runs", "3", "--"],
         *["bash", "-c", STOP_THE_QUEUE_AND_KEEP_RUNNING, str(run_log)],
     )
 
     assert result.returncode == 128 + signal.SIGTERM, result.stderr
     assert run_log.read_text().splitlines() == ["run"]
+    assert "cannot pin cores" in result.stderr
 
 
 MISE_SHIM_FALLING_THROUGH = """#!/usr/bin/env bash

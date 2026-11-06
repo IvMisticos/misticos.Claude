@@ -28,6 +28,8 @@ LOCK_DIR_VARIABLE = "HARNESS_QUEUE_LOCK_DIR"
 LOCK_DIR = Path(
     os.environ.get(LOCK_DIR_VARIABLE) or f"/tmp/misticos-queue-{os.getuid()}"
 )
+NO_PINNING_VARIABLE = "HARNESS_QUEUE_NO_PINNING"
+PINS_CORES = CAN_PIN_CORES and not os.environ.get(NO_PINNING_VARIABLE)
 MACHINE_LOCK = LOCK_DIR / "machine.lock"
 TURNSTILE_LOCK = LOCK_DIR / "turnstile.lock"
 BENCHMARK_LOCK = LOCK_DIR / "benchmark.lock"
@@ -170,7 +172,7 @@ class HeldRunner:
 
 
 def restore_pinning_of_killed_benchmark() -> None:
-    if not CAN_PIN_CORES:
+    if not PINS_CORES:
         return
     benchmark = try_lock(BENCHMARK_LOCK, fcntl.LOCK_EX)
     if benchmark is None:
@@ -229,11 +231,11 @@ def run_benchmark(
             locked(BENCHMARK_LOCK, fcntl.LOCK_EX, "waiting for the running benchmark")
         )
         plan = None
-        if CAN_PIN_CORES:
+        if PINS_CORES:
             restore_abandoned_pinning(PINNING_STATE)
             plan = plan_cores(cores, alone)
         elif not alone:
-            notice("this system cannot pin cores, so the benchmark runs alone")
+            notice("the queue cannot pin cores here, so the benchmark runs alone")
         if alone or plan is None:
             held.enter_context(
                 machine_locked(fcntl.LOCK_EX, "waiting for builds to finish")

@@ -12,7 +12,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
 
 from json_values import JsonObject, JsonValue
-from work_queue import LOCK_DIR_VARIABLE
+from work_queue import LOCK_DIR_VARIABLE, NO_PINNING_VARIABLE
 
 ROOT = Path(__file__).resolve().parent.parent
 SHIMS = ROOT / "shims"
@@ -99,6 +99,7 @@ def shim_environment(home: Path, *path_dirs: Path | str) -> dict[str, str]:
             "HOME": str(home),
             "PATH": os.pathsep.join(map(str, path_dirs)),
             LOCK_DIR_VARIABLE: str(home / "queue"),
+            NO_PINNING_VARIABLE: "1",
         }
     )
     return environment
