@@ -90,6 +90,7 @@ class LanguageServer:
                     "workspace": {"workspaceEdit": {"documentChanges": True}},
                     "textDocument": {
                         "hover": {"contentFormat": ["markdown", "plaintext"]},
+                        "documentSymbol": {"hierarchicalDocumentSymbolSupport": True},
                         "diagnostic": {},
                         "callHierarchy": {},
                     },
