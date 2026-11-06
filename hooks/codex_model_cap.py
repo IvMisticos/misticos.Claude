@@ -23,9 +23,9 @@ from json_values import JsonObject, dict_or_empty
 from model_cap import (
     Model,
     capped_input,
+    config_folders,
     denial_reason,
     parsed_model,
-    project_folders,
 )
 
 DEFAULT_ROLE = "default"
@@ -57,16 +57,6 @@ def text_or_none(value: object) -> str | None:
 def parsed_role_file(path: Path) -> RoleFile:
     table = read_toml(path)
     return RoleFile(text_or_none(table.get("name")), text_or_none(table.get("model")))
-
-
-def config_folders(cwd: str) -> list[Path]:
-    project_layers = [
-        folder / ".codex"
-        for folder in project_folders(Path(cwd))
-        if (folder / ".codex").is_dir()
-    ]
-    user_layer = Path(os.environ.get("CODEX_HOME") or "~/.codex").expanduser()
-    return [*project_layers, user_layer]
 
 
 def declared_role_files(folder: Path, agents: dict[str, object]) -> dict[str, Path]:
@@ -107,7 +97,9 @@ def parsed_layer(folder: Path) -> CodexLayer:
 
 
 def codex_layers(cwd: str) -> list[CodexLayer]:
-    return [parsed_layer(folder) for folder in config_folders(cwd)]
+    user_folder = Path(os.environ.get("CODEX_HOME") or "~/.codex").expanduser()
+    folders = config_folders(Path(cwd), Path(".codex"), user_folder)
+    return [parsed_layer(folder) for folder in folders]
 
 
 def role_model(role_name: str, layers: Iterable[CodexLayer]) -> str | None:

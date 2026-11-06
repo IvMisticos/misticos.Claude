@@ -3,7 +3,7 @@ from collections.abc import Iterable, Iterator
 from pathlib import Path
 from typing import NamedTuple
 
-from model_cap import project_folders
+from model_cap import config_folders
 from plugin_paths import PLUGIN_ROOT
 
 FRONTMATTER = re.compile(r"---\s*\n([\s\S]*?)---\s*\n?")
@@ -46,9 +46,9 @@ def frontmatter_fields(text: str) -> dict[str, str]:
 
 
 def agent_folders(cwd: Path) -> list[AgentFolder]:
-    project_dirs = [folder / ".claude" / "agents" for folder in project_folders(cwd)]
-    own_dirs = [*project_dirs, Path("~/.claude/agents").expanduser()]
-    return [*(AgentFolder(path, "**/*.md") for path in own_dirs), PLUGIN_AGENTS]
+    agents = Path(".claude", "agents")
+    folders = config_folders(cwd, agents, Path.home() / agents)
+    return [*(AgentFolder(folder, "**/*.md") for folder in folders), PLUGIN_AGENTS]
 
 
 def agent_definitions(folders: Iterable[AgentFolder]) -> Iterator[AgentDefinition]:
