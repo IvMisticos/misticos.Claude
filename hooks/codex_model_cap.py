@@ -20,7 +20,7 @@ from hook_io import (
     run_pre_tool_use,
 )
 from json_values import JsonObject, dict_or_empty
-from model_cap import Model, outranks, parsed_model, project_folders
+from model_cap import Model, capped_input, outranks, parsed_model, project_folders
 
 DEFAULT_ROLE = "default"
 
@@ -153,9 +153,8 @@ def request_decision(
     spawn: JsonObject, layers: list[CodexLayer], caller: Model | None
 ) -> PreToolUseDecision | None:
     requested = parsed_model(spawn.get("model") or default_subagent_model(layers))
-    if caller is None or not outranks(requested, caller):
-        return None
-    return allowed_with({**spawn, "model": caller.name})
+    capped = capped_input(spawn, requested, caller)
+    return allowed_with(capped) if capped else None
 
 
 def cap_decision(payload: JsonObject) -> PreToolUseDecision | None:

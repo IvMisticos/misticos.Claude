@@ -1,9 +1,9 @@
 import re
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import NamedTuple
 
-from json_values import JsonValue
+from json_values import JsonObject, JsonValue
 
 DATE_DIGITS = 8
 
@@ -57,6 +57,21 @@ def outranks(requested: Model | None, caller: Model | None) -> bool:
     if requested.family != caller.family:
         return requested.rank > caller.rank
     return requested.version > caller.version
+
+
+def full_name(model: Model) -> str:
+    return model.name
+
+
+def capped_input(
+    tool_input: JsonObject,
+    requested: Model | None,
+    caller: Model | None,
+    name_of: Callable[[Model], str | None] = full_name,
+) -> JsonObject | None:
+    if caller is None or not outranks(requested, caller):
+        return None
+    return {**tool_input, "model": name_of(caller)}
 
 
 def project_folders(cwd: Path) -> Iterator[Path]:

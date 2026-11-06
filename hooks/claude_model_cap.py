@@ -19,7 +19,14 @@ from hook_io import (
     transcript_path_of,
 )
 from json_values import JsonObject, JsonValue, dict_or_empty
-from model_cap import Model, claude_alias, outranks, parsed_model, project_folders
+from model_cap import (
+    Model,
+    capped_input,
+    claude_alias,
+    outranks,
+    parsed_model,
+    project_folders,
+)
 from plugin_paths import PLUGIN_ROOT
 from transcript import recent_entries
 
@@ -31,8 +38,12 @@ PLUGIN_NAME = "misticos"
 PLUGIN_AGENTS_DIR = PLUGIN_ROOT / "agents"
 
 
+def with_input(tool_input: JsonObject) -> PreToolUseDecision:
+    return {"updatedInput": tool_input}
+
+
 def with_model(tool_input: JsonObject, model: str | None) -> PreToolUseDecision:
-    return {"updatedInput": {**tool_input, "model": model}}
+    return with_input({**tool_input, "model": model})
 
 
 def latest_model(
@@ -126,9 +137,9 @@ def forced_decision(caller: Model | None) -> PreToolUseDecision | None:
 def requested_model_decision(
     tool_input: JsonObject, caller: Model | None
 ) -> PreToolUseDecision | None:
-    if not outranks(parsed_model(tool_input.get("model")), caller):
-        return None
-    return with_model(tool_input, claude_alias(caller))
+    requested = parsed_model(tool_input.get("model"))
+    capped = capped_input(tool_input, requested, caller, claude_alias)
+    return with_input(capped) if capped else None
 
 
 def definition_model_decision(
@@ -163,7 +174,7 @@ def agent_decision(
     agent_input = without_effort(tool_input)
     decision = agent_model_decision(agent_input, cwd, caller)
     if decision is None and agent_input != tool_input:
-        return {"updatedInput": agent_input}
+        return with_input(agent_input)
     return decision
 
 
@@ -172,9 +183,8 @@ def session_decision(
 ) -> PreToolUseDecision | None:
     requested = tool_input.get("model")
     requested_model = parsed_model(requested) if requested else main_model
-    if caller is None or not outranks(requested_model, caller):
-        return None
-    return with_model(tool_input, caller.name)
+    capped = capped_input(tool_input, requested_model, caller)
+    return with_input(capped) if capped else None
 
 
 def cap_decision(payload: JsonObject) -> PreToolUseDecision | None:
