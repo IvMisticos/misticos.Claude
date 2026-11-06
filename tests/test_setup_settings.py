@@ -144,16 +144,20 @@ def test_second_run_writes_nothing(
     assert enabled.items() >= ENABLED_PLUGINS.items()
 
 
-def test_broken_settings_are_left_alone(
-    configure_settings: ConfigureSettings, home: Path
+@pytest.mark.parametrize(
+    "stored", ["{not json", "[]", json.dumps({"enabledPlugins": [1]})]
+)
+def test_malformed_settings_fail_the_hook_once_and_stay_untouched(
+    configure_settings: ConfigureSettings, home: Path, stored: str
 ) -> None:
     settings_path = home / ".claude" / "settings.json"
     settings_path.parent.mkdir(parents=True)
-    settings_path.write_text("{broken")
+    settings_path.write_text(stored)
     result = configure_settings(check=False)
-    assert result.returncode != 0
-    assert b"JSONDecodeError" in result.stderr
-    assert settings_path.read_text() == "{broken"
+    assert result.returncode == 1
+    assert result.stderr.count(b"Traceback") == 1
+    assert claude_calls(home) == []
+    assert settings_path.read_text() == stored
 
 
 def test_settings_hook_runs_every_session() -> None:

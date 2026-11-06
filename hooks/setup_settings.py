@@ -227,8 +227,9 @@ def configure_codex() -> None:
 
 
 def main() -> None:
+    web_guidance_choice = plugin_choice(WEB_GUIDANCE_PLUGIN)
     try:
-        offer_web_guidance_plugin(plugin_choice(WEB_GUIDANCE_PLUGIN))
+        offer_web_guidance_plugin(web_guidance_choice)
     finally:
         configure_claude_settings()
         configure_codex()
