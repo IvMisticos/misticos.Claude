@@ -55,3 +55,14 @@ def test_first_workspace_symbols_query_finds_symbols(tmp_path: Path) -> None:
         )
     )
     assert symbols == f"Greeter (class) {source}:1:7"
+
+
+def test_workspace_symbols_accept_a_file_that_is_not_utf8(tmp_path: Path) -> None:
+    source = tmp_path / "greeter.py"
+    source.write_bytes(b"class Greeter:  # caf\xe9\n    def greet(self) -> None: ...\n")
+    symbols = asyncio.run(
+        ask_fake_server(
+            tmp_path, lambda tools: tools.workspace_symbols("Greeter", str(source))
+        )
+    )
+    assert symbols == f"Greeter (class) {source}:1:7"

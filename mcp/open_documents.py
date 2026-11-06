@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import NamedTuple
 
 from lsp_types import LSPAny
-from text_positions import read_text, to_uri
+from text_positions import to_uri
 
 FIRST_VERSION = 1
 
@@ -14,7 +14,8 @@ class Document(NamedTuple):
 
 
 def read_document(path: Path) -> Document:
-    return Document(path, read_text(path))
+    with open(path, encoding="utf-8", errors="replace", newline="") as file:
+        return Document(path, file.read())
 
 
 class OpenedDocument(NamedTuple):
