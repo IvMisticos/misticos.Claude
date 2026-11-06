@@ -64,7 +64,7 @@ type PreToolUseDecider = Callable[[JsonObject], PreToolUseDecision | None]
 
 
 def read_payload() -> JsonObject:
-    return json_object(sys.stdin.read()) or {}
+    return json_object(sys.stdin.buffer.read()) or {}
 
 
 def absolute_path_at(payload: JsonObject, key: str) -> str | None:
