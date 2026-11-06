@@ -1,0 +1,49 @@
+from pathlib import Path
+
+import pytest
+from work_queue import parse_bench_arguments, run_repeatedly
+
+RECORD_RUN = 'echo run >> "$0"'
+FAIL_ON_SECOND_RUN = f'{RECORD_RUN}; [ "$(wc -l < "$0")" -lt 2 ]'
+
+
+@pytest.fixture
+def run_log(tmp_path: Path) -> Path:
+    return tmp_path / "runs"
+
+
+def recorded_runs(run_log: Path) -> list[str]:
+    return run_log.read_text().splitlines()
+
+
+def test_bench_runs_once_by_default() -> None:
+    arguments = parse_bench_arguments(["bench", "--", "true"])
+
+    assert arguments.runs == 1
+    assert arguments.command == ["true"]
+
+
+def test_bench_reads_the_number_of_runs() -> None:
+    assert parse_bench_arguments(["bench", "--runs", "3", "--", "true"]).runs == 3
+
+
+def test_bench_rejects_zero_runs(capsys: pytest.CaptureFixture[str]) -> None:
+    with pytest.raises(SystemExit) as exit_info:
+        parse_bench_arguments(["bench", "--runs", "0", "--", "true"])
+
+    assert exit_info.value.code == 2
+    assert "needs at least 1" in capsys.readouterr().err
+
+
+def test_repeats_the_command(run_log: Path) -> None:
+    status = run_repeatedly(["bash", "-c", RECORD_RUN, str(run_log)], 3)
+
+    assert status == 0
+    assert recorded_runs(run_log) == ["run"] * 3
+
+
+def test_stops_at_the_first_failing_run(run_log: Path) -> None:
+    status = run_repeatedly(["bash", "-c", FAIL_ON_SECOND_RUN, str(run_log)], 5)
+
+    assert status == 1
+    assert recorded_runs(run_log) == ["run"] * 2

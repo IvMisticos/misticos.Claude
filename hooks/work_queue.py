@@ -23,7 +23,10 @@ from core_pinning import CAN_PIN_CORES, pinned, plan_cores, restore_abandoned_pi
 from queued_commands import queues
 
 HELD_VARIABLE = "HARNESS_QUEUE_HELD"
-LOCK_DIR = Path("/tmp") / f"misticos-queue-{os.getuid()}"
+LOCK_DIR_VARIABLE = "HARNESS_QUEUE_LOCK_DIR"
+LOCK_DIR = Path(
+    os.environ.get(LOCK_DIR_VARIABLE) or f"/tmp/misticos-queue-{os.getuid()}"
+)
 MACHINE_LOCK = LOCK_DIR / "machine.lock"
 TURNSTILE_LOCK = LOCK_DIR / "turnstile.lock"
 BENCHMARK_LOCK = LOCK_DIR / "benchmark.lock"
@@ -197,7 +200,7 @@ def positive_count(text: str) -> int:
     return count
 
 
-def parse_bench_arguments() -> argparse.Namespace:
+def parse_bench_arguments(argv: Sequence[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(prog="queue")
     modes = parser.add_subparsers(dest="mode", required=True)
     bench = modes.add_parser("bench")
@@ -205,7 +208,7 @@ def parse_bench_arguments() -> argparse.Namespace:
     bench.add_argument("--runs", type=positive_count, default=1)
     bench.add_argument("--alone", action="store_true")
     bench.add_argument("command", nargs=argparse.REMAINDER)
-    arguments = parser.parse_args()
+    arguments = parser.parse_args(argv)
     if arguments.command[:1] == ["--"]:
         arguments.command = arguments.command[1:]
     if not arguments.command:
@@ -222,7 +225,7 @@ def main() -> int:
         signal.signal(stop_signal, exit_on_signal)
     if sys.argv[1:2] == ["tool"]:
         return run_tool(parse_tool_run(sys.argv[2:]))
-    arguments = parse_bench_arguments()
+    arguments = parse_bench_arguments(sys.argv[1:])
     return run_benchmark(
         arguments.command, arguments.cores, arguments.alone, arguments.runs
     )
