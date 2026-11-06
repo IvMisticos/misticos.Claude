@@ -88,6 +88,22 @@ def home_environment(home: Path) -> dict[str, str]:
     return {"HOME": str(home), "PATH": "/usr/bin:/bin"}
 
 
+def session_data_home() -> Path:
+    return Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local" / "share")
+
+
+def session_mise_shims() -> Path:
+    return (
+        Path(os.environ.get("MISE_DATA_DIR") or session_data_home() / "mise") / "shims"
+    )
+
+
+def session_uv_pythons() -> Path:
+    return Path(
+        os.environ.get("UV_PYTHON_INSTALL_DIR") or session_data_home() / "uv" / "python"
+    )
+
+
 def shim_environment(home: Path, *path_dirs: Path | str) -> dict[str, str]:
     environment = {
         name: value
@@ -98,6 +114,7 @@ def shim_environment(home: Path, *path_dirs: Path | str) -> dict[str, str]:
         {
             "HOME": str(home),
             "PATH": os.pathsep.join(map(str, path_dirs)),
+            "UV_PYTHON_INSTALL_DIR": str(session_uv_pythons()),
             LOCK_DIR_VARIABLE: str(home / "queue"),
             NO_PINNING_VARIABLE: "1",
         }
@@ -217,11 +234,6 @@ def fake_bin(tmp_path: Path) -> FakeBin:
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     return program_writer(bin_dir)
-
-
-def session_mise_shims() -> Path:
-    data_home = os.environ.get("XDG_DATA_HOME") or Path.home() / ".local" / "share"
-    return Path(os.environ.get("MISE_DATA_DIR") or Path(data_home) / "mise") / "shims"
 
 
 def real_uv_directories() -> list[str]:
