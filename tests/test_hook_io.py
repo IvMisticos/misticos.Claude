@@ -1,10 +1,18 @@
 import io
+import json
 import sys
 from typing import NoReturn
 
 import pytest
 from harnesses import OutputShape
-from hook_io import read_payload, run_hook, run_pre_tool_use
+from hook_io import (
+    denied,
+    pre_tool_use_output,
+    read_payload,
+    run_cursor_subagent_start,
+    run_hook,
+    run_pre_tool_use,
+)
 from json_values import JsonObject
 
 
@@ -48,3 +56,21 @@ def test_crashing_decider_lets_the_tool_run(
     written = capsys.readouterr()
     assert written.out == output
     assert "RuntimeError" in written.err
+
+
+def test_crashing_subagent_check_lets_the_subagent_start(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(sys, "stdin", stdin_with(b"{}"))
+    run_cursor_subagent_start(crashing_decider)
+    written = capsys.readouterr()
+    assert json.loads(written.out) == {"permission": "allow"}
+    assert "RuntimeError" in written.err
+
+
+def test_cursor_tool_denial_tells_the_agent_why() -> None:
+    assert pre_tool_use_output(denied("Too big."), OutputShape.CURSOR) == {
+        "permission": "deny",
+        "user_message": "Too big.",
+        "agent_message": "Too big.",
+    }

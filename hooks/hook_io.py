@@ -54,13 +54,18 @@ class CursorFollowup(TypedDict):
     followup_message: str
 
 
-class CursorPermission(TypedDict, total=False):
+class CursorSubagentPermission(TypedDict, total=False):
     permission: Required[Literal["allow", "deny"]]
     user_message: str
+
+
+class CursorToolPermission(CursorSubagentPermission, total=False):
+    agent_message: str
     updated_input: JsonObject
 
 
 type PreToolUseDecider = Callable[[JsonObject], PreToolUseDecision | None]
+type SubagentStartDecider = Callable[[JsonObject], str | None]
 
 
 def read_payload() -> JsonObject:
@@ -162,12 +167,13 @@ def claude_pre_tool_use(decision: PreToolUseDecision) -> ClaudeOutput:
     return {"hookSpecificOutput": {"hookEventName": "PreToolUse", **decision}}
 
 
-def cursor_permission(decision: PreToolUseDecision) -> CursorPermission:
-    permission: CursorPermission = {
+def cursor_tool_permission(decision: PreToolUseDecision) -> CursorToolPermission:
+    permission: CursorToolPermission = {
         "permission": decision.get("permissionDecision", "allow")
     }
     if "permissionDecisionReason" in decision:
         permission["user_message"] = decision["permissionDecisionReason"]
+        permission["agent_message"] = decision["permissionDecisionReason"]
     if "updatedInput" in decision:
         permission["updated_input"] = decision["updatedInput"]
     return permission
@@ -175,10 +181,12 @@ def cursor_permission(decision: PreToolUseDecision) -> CursorPermission:
 
 def pre_tool_use_output(
     decision: PreToolUseDecision | None, shape: OutputShape
-) -> ClaudeOutput | CursorPermission | None:
+) -> ClaudeOutput | CursorToolPermission | None:
     match shape:
         case OutputShape.CURSOR:
-            return cursor_permission(decision) if decision else {"permission": "allow"}
+            if not decision:
+                return {"permission": "allow"}
+            return cursor_tool_permission(decision)
         case OutputShape.CLAUDE:
             return claude_pre_tool_use(decision) if decision else None
 
@@ -205,6 +213,20 @@ def run_pre_tool_use(
     decide: PreToolUseDecider, shape: OutputShape = OutputShape.CLAUDE
 ) -> None:
     run_hook(lambda: write_pre_tool_use_decision(payload_decision(decide), shape))
+
+
+def cursor_subagent_permission(denial: str | None) -> CursorSubagentPermission:
+    if denial is None:
+        return {"permission": "allow"}
+    return {"permission": "deny", "user_message": denial}
+
+
+def write_cursor_subagent_permission(denial: str | None) -> None:
+    json.dump(cursor_subagent_permission(denial), sys.stdout)
+
+
+def run_cursor_subagent_start(find_denial: SubagentStartDecider) -> None:
+    run_hook(lambda: write_cursor_subagent_permission(payload_decision(find_denial)))
 
 
 def run_hook(main: Callable[[], object]) -> None:

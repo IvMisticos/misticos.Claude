@@ -5,22 +5,21 @@
 # root = ["."]
 # ///
 
-from harnesses import OutputShape
-from hook_io import PreToolUseDecision, denied, run_pre_tool_use
+from hook_io import run_cursor_subagent_start
 from json_values import JsonObject
 from model_cap import outranks
 
 
-def spawn_decision(payload: JsonObject) -> PreToolUseDecision | None:
+def spawn_denial(payload: JsonObject) -> str | None:
     caller = payload.get("model")
     subagent_model = payload.get("subagent_model")
     if not outranks(subagent_model, caller):
         return None
-    return denied(
+    return (
         f"Blocked subagent {payload.get('subagent_type')} on {subagent_model}, "
         f"above the caller's {caller}. Pick one at or below {caller}."
     )
 
 
 if __name__ == "__main__":
-    run_pre_tool_use(spawn_decision, OutputShape.CURSOR)
+    run_cursor_subagent_start(spawn_denial)
