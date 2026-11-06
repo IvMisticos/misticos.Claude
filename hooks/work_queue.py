@@ -107,20 +107,45 @@ def build_slot() -> Generator[None]:
         yield
 
 
+def signal_exit_status(signal_number: int) -> int:
+    return 128 + signal_number
+
+
 def exit_status(returncode: int) -> int:
-    return 128 - returncode if returncode < 0 else returncode
+    return signal_exit_status(-returncode) if returncode < 0 else returncode
 
 
-def run_held(command: Sequence[str]) -> int:
-    environment = {**os.environ, HELD_VARIABLE: "1"}
-    child = subprocess.Popen(command, env=environment)
+class HeldRunner:
+    def __init__(self) -> None:
+        self.received_stop_signal: int | None = None
+        self.starting_child = False
+        self.running_child: subprocess.Popen[bytes] | None = None
 
-    def forward_to_child(signal_number: int, _frame: FrameType | None) -> None:
-        child.send_signal(signal_number)
+    def handle_stop_signal(self, signal_number: int, _frame: FrameType | None) -> None:
+        self.received_stop_signal = signal_number
+        if self.running_child:
+            self.running_child.send_signal(signal_number)
+        elif not self.starting_child:
+            sys.exit(signal_exit_status(signal_number))
 
-    for stop_signal in STOP_SIGNALS:
-        signal.signal(stop_signal, forward_to_child)
-    return exit_status(child.wait())
+    def start(self, command: Sequence[str]) -> subprocess.Popen[bytes]:
+        environment = {**os.environ, HELD_VARIABLE: "1"}
+        self.starting_child = True
+        try:
+            child = subprocess.Popen(command, env=environment)
+            self.running_child = child
+        finally:
+            self.starting_child = False
+        if self.received_stop_signal:
+            child.send_signal(self.received_stop_signal)
+        return child
+
+    def run(self, command: Sequence[str]) -> int:
+        child = self.start(command)
+        try:
+            return exit_status(child.wait())
+        finally:
+            self.running_child = None
 
 
 def restore_pinning_of_killed_benchmark() -> None:
@@ -133,11 +158,11 @@ def restore_pinning_of_killed_benchmark() -> None:
         restore_abandoned_pinning(PINNING_STATE)
 
 
-def run_build(command: Sequence[str]) -> int:
+def run_build(command: Sequence[str], runner: HeldRunner) -> int:
     restore_pinning_of_killed_benchmark()
     alone_message = "waiting for a benchmark that runs alone"
     with build_slot(), machine_locked(fcntl.LOCK_SH, alone_message):
-        return run_held(command)
+        return runner.run(command)
 
 
 class ToolRun(NamedTuple):
@@ -158,22 +183,26 @@ def exec_unqueued(command: list[str]) -> NoReturn:
     os.execv(command[0], command)
 
 
-def run_tool(tool: ToolRun) -> int:
+def run_tool(tool: ToolRun, runner: HeldRunner) -> int:
     command = [*tool.command, *tool.arguments]
     if not queues(tool.name, tool.arguments):
         exec_unqueued(command)
-    return run_build(command)
+    return run_build(command, runner)
 
 
-def run_repeatedly(command: Sequence[str], runs: int) -> int:
+def run_repeatedly(command: Sequence[str], runs: int, runner: HeldRunner) -> int:
     for _ in range(runs):
-        status = run_held(command)
+        status = runner.run(command)
+        if runner.received_stop_signal:
+            return signal_exit_status(runner.received_stop_signal)
         if status != 0:
             return status
     return 0
 
 
-def run_benchmark(command: Sequence[str], cores: int, alone: bool, runs: int) -> int:
+def run_benchmark(
+    command: Sequence[str], cores: int, alone: bool, runs: int, runner: HeldRunner
+) -> int:
     with contextlib.ExitStack() as held:
         held.enter_context(
             locked(BENCHMARK_LOCK, fcntl.LOCK_EX, "waiting for the running benchmark")
@@ -190,7 +219,7 @@ def run_benchmark(command: Sequence[str], cores: int, alone: bool, runs: int) ->
             )
         if plan:
             held.enter_context(pinned(plan, PINNING_STATE))
-        return run_repeatedly(command, runs)
+        return run_repeatedly(command, runs, runner)
 
 
 def positive_count(text: str) -> int:
@@ -216,18 +245,15 @@ def parse_bench_arguments(argv: Sequence[str]) -> argparse.Namespace:
     return arguments
 
 
-def exit_on_signal(signal_number: int, _frame: FrameType | None) -> NoReturn:
-    sys.exit(128 + signal_number)
-
-
 def main() -> int:
+    runner = HeldRunner()
     for stop_signal in STOP_SIGNALS:
-        signal.signal(stop_signal, exit_on_signal)
+        signal.signal(stop_signal, runner.handle_stop_signal)
     if sys.argv[1:2] == ["tool"]:
-        return run_tool(parse_tool_run(sys.argv[2:]))
+        return run_tool(parse_tool_run(sys.argv[2:]), runner)
     arguments = parse_bench_arguments(sys.argv[1:])
     return run_benchmark(
-        arguments.command, arguments.cores, arguments.alone, arguments.runs
+        arguments.command, arguments.cores, arguments.alone, arguments.runs, runner
     )
 
 
