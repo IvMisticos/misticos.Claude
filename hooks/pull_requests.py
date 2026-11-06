@@ -7,11 +7,13 @@ from gh_commands import GhPrCall, gh_api_words, gh_argument_lists, gh_pr_call
 from json_values import JsonObject, JsonValue, dict_or_empty, json_object
 
 NAME = r"[\w.-]+"
-LINK_END = r"(?=[/?#]|$)"
+LINK_END = r"(?!\w)"
 PULL_REQUEST_EVENT = re.compile(rf'"pr"\s*:\s*"({NAME})/({NAME})#(\d+)"')
-PULL_REQUEST_URL = re.compile(rf"https://github\.com/({NAME})/({NAME})/pull/(\d+)")
+PULL_REQUEST_URL = re.compile(
+    rf"https://github\.com/({NAME})/({NAME})/pull/(\d+){LINK_END}"
+)
 PULL_REQUEST_TARGETS = (
-    re.compile(rf"https://github\.com/({NAME})/({NAME})/pull/(\d+){LINK_END}"),
+    PULL_REQUEST_URL,
     re.compile(
         rf"(?:https://api\.github\.com)?/?repos/({NAME})/({NAME})/pulls/(\d+){LINK_END}"
     ),
