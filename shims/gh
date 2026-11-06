@@ -277,9 +277,9 @@ matches_graphql_form() {
 }
 
 matches_form() {
-  local path=$1 form=$2
+  local interface=$1 form=$2
   shift 2
-  case $path in
+  case $interface in
     cli) matches_cli_form "$form" "$@" ;;
     rest) matches_rest_form "$form" ;;
     graphql) matches_graphql_form "$form" ;;
@@ -288,9 +288,9 @@ matches_form() {
 }
 
 pull_request_write_tool() {
-  local tool path form
-  while read -r tool path form; do
-    if matches_form "$path" "$form" "$@"; then
+  local tool interface form
+  while read -r tool interface form; do
+    if matches_form "$interface" "$form" "$@"; then
       printf '%s\n' "$tool"
       return 0
     fi
