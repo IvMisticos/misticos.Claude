@@ -87,8 +87,7 @@ function briefFor(angle, research) {
 
 const research = parseResearch(args)
 const findingsByAngle = {}
-const limitedAngles = new Set()
-const unstartedAngles = new Set()
+const leftAngles = new Set()
 const failedAngles = new Set()
 let searchLimitReached = false
 let nextAngleIndex = 0
@@ -111,7 +110,7 @@ async function scoutNextAngles() {
   while (nextAngleIndex < research.angles.length) {
     const angle = research.angles[nextAngleIndex++]
     if (searchLimitReached) {
-      unstartedAngles.add(angle)
+      leftAngles.add(angle)
       continue
     }
     const findings = await scout(angle)
@@ -122,22 +121,27 @@ async function scoutNextAngles() {
     findingsByAngle[angle.name] = findings
     if (findings.reachedSearchLimit) {
       searchLimitReached = true
-      limitedAngles.add(angle)
+      leftAngles.add(angle)
     }
   }
 }
 
 await parallel(Array.from({ length: SCOUTS_AT_ONCE }, () => scoutNextAngles))
 
-function inAngleOrder(angles) {
-  return research.angles.filter(angle => angles.has(angle))
+function urlsIn(findings) {
+  return [...findings.facts, ...findings.numbers, ...findings.quotes].map(item => item.url)
 }
 
-if (limitedAngles.size) {
-  log(`${limitedAngles.size} angles reached the search limit. Run them again in a later turn.`)
+function forNextTurn(angle) {
+  const found = findingsByAngle[angle.name] ? urlsIn(findingsByAngle[angle.name]) : []
+  const known = [...new Set([...(angle.known ?? []), ...found])]
+  return known.length ? { ...angle, known } : angle
 }
-if (unstartedAngles.size) {
-  log(`${unstartedAngles.size} angles did not start because of the search limit. Run them in a later turn.`)
+
+const leftAnglesInOrder = research.angles.filter(angle => leftAngles.has(angle)).map(forNextTurn)
+
+if (leftAngles.size) {
+  log(`${leftAngles.size} angles are left because of the search limit. Run them again in a later turn.`)
 }
 if (failedAngles.size) {
   log(`${failedAngles.size} angles failed.`)
@@ -145,7 +149,6 @@ if (failedAngles.size) {
 
 return {
   findingsByAngle,
-  limitedAngles: inAngleOrder(limitedAngles),
-  unstartedAngles: inAngleOrder(unstartedAngles),
-  failedAngles: inAngleOrder(failedAngles),
+  leftAngles: leftAnglesInOrder,
+  failedAngles: research.angles.filter(angle => failedAngles.has(angle)),
 }
