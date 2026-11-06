@@ -1,10 +1,14 @@
 import json
 import os
 import stat
+import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
+import cleanup_policy
 import pytest
 from cleanup_policy import (
+    clean_up_low_disks,
     most_free_since_cleanup,
     needs_cleanup,
     write_most_free_since_cleanup,
@@ -103,3 +107,28 @@ def test_a_write_keeps_the_mode_of_the_record(record: Path) -> None:
     record.chmod(0o640)
     write_most_free_since_cleanup(record, {"3": GIB})
     assert stat.S_IMODE(record.stat().st_mode) == 0o640
+
+
+def test_two_concurrent_runs_start_one_cleanup(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    low = disk(250, 1)
+
+    def slow_disks(paths: object) -> list[Disk]:
+        time.sleep(0.1)
+        return [low]
+
+    cleanups: list[set[str]] = []
+
+    def count_cleanup(devices: set[str]) -> list[str]:
+        cleanups.append(devices)
+        return []
+
+    monkeypatch.setattr(cleanup_policy, "disks", slow_disks)
+    monkeypatch.setattr(cleanup_policy, "cleared_caches", count_cleanup)
+    record = tmp_path / "free.json"
+    with ThreadPoolExecutor(2) as pool:
+        runs = [pool.submit(clean_up_low_disks, ["/"], record) for _ in range(2)]
+        for run in runs:
+            run.result()
+    assert len(cleanups) == 1
