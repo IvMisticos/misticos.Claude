@@ -108,9 +108,7 @@ def message_id(entry: JsonObject) -> JsonValue:
     return dict_or_empty(entry.get("message")).get("id") or entry.get("uuid")
 
 
-def transcript_history(transcript_path: JsonValue) -> list[Prompt | Reply]:
-    if not (isinstance(transcript_path, str) and transcript_path):
-        return []
+def transcript_history(transcript_path: str) -> list[Prompt | Reply]:
     history: list[Prompt | str] = []
     reply_texts: dict[str, str] = {}
     for entry in tail_entries(transcript_path):

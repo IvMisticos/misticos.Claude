@@ -65,6 +65,10 @@ def scratchpad_of(payload: JsonObject) -> str | None:
     return absolute_path_at(payload, "scratchpad_dir")
 
 
+def transcript_path_of(payload: JsonObject) -> str | None:
+    return absolute_path_at(payload, "transcript_path")
+
+
 def event_name_of(payload: JsonObject) -> str:
     event = payload.get("hook_event_name")
     return event if isinstance(event, str) else ""

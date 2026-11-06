@@ -17,6 +17,7 @@ from hook_io import (
     read_payload,
     run_hook,
     session_id_of,
+    transcript_path_of,
     write_context,
 )
 from json_values import JsonObject, JsonValue, dict_or_empty
@@ -161,7 +162,8 @@ def nags_from_transcript(
 ) -> tuple[list[str], NagState]:
     if event not in NAG_EVENTS:
         return [], state
-    history = transcript_history(payload.get("transcript_path"))
+    transcript_path = transcript_path_of(payload)
+    history = transcript_history(transcript_path) if transcript_path else []
     nags, memory = due_nags(history, state.memory)
     if event in PROMPT_EVENTS and not is_wake_prompt(payload.get("prompt")):
         memory = copy.replace(memory, submitted_prompt=submitted_prompt_id(payload))

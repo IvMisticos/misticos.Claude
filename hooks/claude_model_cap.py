@@ -11,7 +11,13 @@ import re
 from collections.abc import Iterator
 from pathlib import Path
 
-from hook_io import PreToolUseDecision, cwd_of, denied, run_pre_tool_use
+from hook_io import (
+    PreToolUseDecision,
+    cwd_of,
+    denied,
+    run_pre_tool_use,
+    transcript_path_of,
+)
 from json_values import JsonObject, JsonValue, dict_or_empty
 from model_cap import outranks, project_folders, tier_rank
 from plugin_paths import PLUGIN_ROOT
@@ -50,9 +56,9 @@ def caller_model(payload: JsonObject, main_model: JsonValue) -> JsonValue:
     agent_id = payload.get("agent_id")
     if not agent_id:
         return main_model
-    main_transcript = payload["transcript_path"]
-    if not isinstance(main_transcript, str):
-        raise TypeError(f"transcript_path {main_transcript!r} is not a path")
+    main_transcript = transcript_path_of(payload)
+    if main_transcript is None:
+        return None
     transcript_path = subagent_transcript(main_transcript, agent_id)
     return latest_model(transcript_path, include_sidechains=True)
 
@@ -176,10 +182,8 @@ def session_decision(
 
 def cap_decision(payload: JsonObject) -> PreToolUseDecision | None:
     tool_input = dict_or_empty(payload.get("tool_input"))
-    transcript_path = payload.get("transcript_path")
-    main_model = latest_model(
-        transcript_path if isinstance(transcript_path, str) else ""
-    )
+    transcript_path = transcript_path_of(payload)
+    main_model = latest_model(transcript_path) if transcript_path else None
     caller = caller_model(payload, main_model)
     if payload.get("tool_name") in ("Agent", "Task"):
         return agent_decision(tool_input, cwd_of(payload), caller)
