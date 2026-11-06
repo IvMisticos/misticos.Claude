@@ -16,7 +16,9 @@ HOOKS = Path(__file__).resolve().parent.parent / "hooks"
         pytest.param("codex_model_cap.py", {"tool_input": "spawn"}),
     ],
 )
-def test_crash_exits_quietly(hook: str, malformed_payload: JsonObject) -> None:
+def test_malformed_payload_is_left_alone(
+    hook: str, malformed_payload: JsonObject
+) -> None:
     result = subprocess.run(
         [sys.executable, HOOKS / hook],
         input=json.dumps(malformed_payload),
