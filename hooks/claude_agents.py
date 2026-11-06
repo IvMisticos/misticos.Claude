@@ -45,9 +45,9 @@ def frontmatter_fields(text: str) -> dict[str, str]:
     return fields
 
 
-def agent_folders(cwd: Path) -> list[AgentFolder]:
+def agent_folders(cwd: Path, home: Path) -> list[AgentFolder]:
     agents = Path(".claude", "agents")
-    folders = config_folders(cwd, agents, Path.home() / agents)
+    folders = config_folders(cwd, agents, home / agents)
     return [*(AgentFolder(folder, "**/*.md") for folder in folders), PLUGIN_AGENTS]
 
 
