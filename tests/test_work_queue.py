@@ -67,3 +67,22 @@ def test_holds_a_stop_signal_until_the_child_has_started() -> None:
     runner.handle_stop_signal(signal.SIGTERM, None)
 
     assert starting.pending_signal == signal.SIGTERM
+
+
+def test_stays_on_a_stop_signal_during_cleanup() -> None:
+    runner = HeldRunner()
+    runner.begin_cleanup()
+
+    runner.handle_stop_signal(signal.SIGTERM, None)
+
+    assert runner.state == "cleaning up"
+
+
+def test_exits_only_on_the_first_stop_signal() -> None:
+    runner = HeldRunner()
+    with pytest.raises(SystemExit):
+        runner.handle_stop_signal(signal.SIGTERM, None)
+
+    runner.handle_stop_signal(signal.SIGHUP, None)
+
+    assert runner.state == "cleaning up"

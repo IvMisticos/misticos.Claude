@@ -121,7 +121,9 @@ class StartingChild:
     pending_signal: int | None = None
 
 
-type HeldRunnerState = Literal["waiting"] | StartingChild | subprocess.Popen[bytes]
+type HeldRunnerState = (
+    Literal["waiting", "cleaning up"] | StartingChild | subprocess.Popen[bytes]
+)
 
 
 class HeldRunner:
@@ -137,7 +139,13 @@ class HeldRunner:
             case StartingChild() as starting:
                 starting.pending_signal = signal_number
             case "waiting":
+                self.begin_cleanup()
                 sys.exit(signal_exit_status(signal_number))
+            case "cleaning up":
+                pass
+
+    def begin_cleanup(self) -> None:
+        self.state = "cleaning up"
 
     def start(self, command: Sequence[str]) -> subprocess.Popen[bytes]:
         environment = {**os.environ, HELD_VARIABLE: "1"}
@@ -232,7 +240,10 @@ def run_benchmark(
             )
         if plan:
             held.enter_context(pinned(plan, PINNING_STATE))
-        return run_repeatedly(command, runs, runner)
+        try:
+            return run_repeatedly(command, runs, runner)
+        finally:
+            runner.begin_cleanup()
 
 
 def positive_count(text: str) -> int:
