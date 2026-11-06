@@ -7,10 +7,9 @@
 
 import glob
 import os
-import re
-from collections.abc import Iterator
 from pathlib import Path
 
+from claude_agents import agent_folders, definition_model
 from hook_io import (
     PreToolUseDecision,
     cwd_of,
@@ -26,18 +25,13 @@ from model_cap import (
     denial_reason,
     outranks,
     parsed_model,
-    project_folders,
 )
-from plugin_paths import PLUGIN_ROOT
 from transcript import recent_entries
 
 INHERIT = "inherit"
 TRUTHY_FLAGS = ("1", "true", "yes", "on")
-FRONTMATTER = re.compile(r"---\s*\n([\s\S]*?)---\s*\n?")
 SUBAGENT_MODEL_VARIABLE = "CLAUDE_CODE_SUBAGENT_MODEL"
 FORCED_SUBAGENTS = "With CLAUDE_CODE_SUBAGENT_MODEL_FORCE set, every subagent"
-PLUGIN_NAME = "misticos"
-PLUGIN_AGENTS_DIR = PLUGIN_ROOT / "agents"
 
 
 def with_input(tool_input: JsonObject) -> PreToolUseDecision:
@@ -77,48 +71,10 @@ def caller_model(payload: JsonObject, main_model: Model | None) -> Model | None:
     return latest_model(transcript_path, include_sidechains=True)
 
 
-def definition_text(definition_path: Path) -> str:
-    try:
-        with open(definition_path, encoding="utf-8", errors="replace") as definition:
-            return definition.read().lstrip("\ufeff").replace("\r\n", "\n")
-    except OSError:
-        return ""
-
-
-def frontmatter_fields(text: str) -> dict[str, str]:
-    block = FRONTMATTER.match(text)
-    if not block:
-        return {}
-    top_level_lines = (
-        line for line in block[1].splitlines() if line and not line[0].isspace()
-    )
-    fields: dict[str, str] = {}
-    for line in top_level_lines:
-        key, _, value = line.partition(":")
-        fields[key.strip()] = value.strip().strip("\"'")
-    return fields
-
-
-def agent_dirs(cwd: Path) -> list[Path]:
-    project_dirs = [folder / ".claude" / "agents" for folder in project_folders(cwd)]
-    return [*project_dirs, Path("~/.claude/agents").expanduser()]
-
-
-def agent_definitions(cwd: Path) -> Iterator[tuple[str, dict[str, str]]]:
-    sources = [(directory, "**/*.md", "") for directory in agent_dirs(cwd)]
-    sources.append((PLUGIN_AGENTS_DIR, "*.md", f"{PLUGIN_NAME}:"))
-    for directory, pattern, name_prefix in sources:
-        for path in sorted(directory.glob(pattern)):
-            fields = frontmatter_fields(definition_text(path))
-            yield name_prefix + fields.get("name", ""), fields
-
-
-def definition_model(subagent_type: JsonValue, cwd: str) -> str | None:
-    if not subagent_type:
+def agent_definition_model(subagent_type: JsonValue, cwd: str) -> str | None:
+    if not (isinstance(subagent_type, str) and subagent_type):
         return None
-    definitions = agent_definitions(Path(cwd))
-    named = (fields for name, fields in definitions if name == subagent_type)
-    return next(named, {}).get("model")
+    return definition_model(subagent_type, agent_folders(Path(cwd)))
 
 
 def wanted_agent_model(definition: str | None, caller: Model | None) -> Model | None:
@@ -156,7 +112,7 @@ def agent_model_decision(
     force_flag = os.environ.get("CLAUDE_CODE_SUBAGENT_MODEL_FORCE", "")
     if force_flag.strip().lower() in TRUTHY_FLAGS:
         return forced_decision(caller)
-    definition = definition_model(tool_input.get("subagent_type"), cwd)
+    definition = agent_definition_model(tool_input.get("subagent_type"), cwd)
     if tool_input.get("model") and claude_alias(parsed_model(definition)) is None:
         return requested_model_decision(tool_input, caller)
     return definition_model_decision(tool_input, definition, caller)
