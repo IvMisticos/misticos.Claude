@@ -14,10 +14,11 @@ import subprocess
 import sys
 import time
 from collections.abc import Generator, Sequence
+from dataclasses import dataclass
 from io import TextIOWrapper
 from pathlib import Path
 from types import FrameType
-from typing import NamedTuple, NoReturn
+from typing import Literal, NamedTuple, NoReturn
 
 from core_pinning import CAN_PIN_CORES, pinned, plan_cores, restore_abandoned_pinning
 from queued_commands import queues
@@ -115,29 +116,41 @@ def exit_status(returncode: int) -> int:
     return signal_exit_status(-returncode) if returncode < 0 else returncode
 
 
+@dataclass
+class StartingChild:
+    pending_signal: int | None = None
+
+
+type HeldRunnerState = Literal["waiting"] | StartingChild | subprocess.Popen[bytes]
+
+
 class HeldRunner:
     def __init__(self) -> None:
         self.received_stop_signal: int | None = None
-        self.starting_child = False
-        self.running_child: subprocess.Popen[bytes] | None = None
+        self.state: HeldRunnerState = "waiting"
 
     def handle_stop_signal(self, signal_number: int, _frame: FrameType | None) -> None:
         self.received_stop_signal = signal_number
-        if self.running_child:
-            self.running_child.send_signal(signal_number)
-        elif not self.starting_child:
-            sys.exit(signal_exit_status(signal_number))
+        match self.state:
+            case subprocess.Popen() as child:
+                child.send_signal(signal_number)
+            case StartingChild() as starting:
+                starting.pending_signal = signal_number
+            case "waiting":
+                sys.exit(signal_exit_status(signal_number))
 
     def start(self, command: Sequence[str]) -> subprocess.Popen[bytes]:
         environment = {**os.environ, HELD_VARIABLE: "1"}
-        self.starting_child = True
+        starting = StartingChild()
+        self.state = starting
         try:
             child = subprocess.Popen(command, env=environment)
-            self.running_child = child
-        finally:
-            self.starting_child = False
-        if self.received_stop_signal:
-            child.send_signal(self.received_stop_signal)
+        except BaseException:
+            self.state = "waiting"
+            raise
+        self.state = child
+        if starting.pending_signal:
+            child.send_signal(starting.pending_signal)
         return child
 
     def run(self, command: Sequence[str]) -> int:
@@ -145,7 +158,7 @@ class HeldRunner:
         try:
             return exit_status(child.wait())
         finally:
-            self.running_child = None
+            self.state = "waiting"
 
 
 def restore_pinning_of_killed_benchmark() -> None:

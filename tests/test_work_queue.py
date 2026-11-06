@@ -2,7 +2,7 @@ import signal
 from pathlib import Path
 
 import pytest
-from work_queue import HeldRunner, parse_bench_arguments, run_repeatedly
+from work_queue import HeldRunner, StartingChild, parse_bench_arguments, run_repeatedly
 
 RECORD_RUN = 'echo run >> "$0"'
 FAIL_ON_SECOND_RUN = f'{RECORD_RUN}; [ "$(wc -l < "$0")" -lt 2 ]'
@@ -57,3 +57,13 @@ def test_exits_on_a_stop_signal_while_no_child_runs() -> None:
         HeldRunner().handle_stop_signal(signal.SIGTERM, None)
 
     assert exit_info.value.code == 128 + signal.SIGTERM
+
+
+def test_holds_a_stop_signal_until_the_child_has_started() -> None:
+    runner = HeldRunner()
+    starting = StartingChild()
+    runner.state = starting
+
+    runner.handle_stop_signal(signal.SIGTERM, None)
+
+    assert starting.pending_signal == signal.SIGTERM
