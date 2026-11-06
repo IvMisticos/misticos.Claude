@@ -3,10 +3,23 @@ import os
 import sys
 import traceback
 from collections.abc import Callable
+from enum import StrEnum
 from typing import Literal, Required, TypedDict
 
 from harnesses import OutputShape
 from json_values import JsonObject, json_object
+
+
+class HookEvent(StrEnum):
+    USER_PROMPT_SUBMIT = "userpromptsubmit"
+    BEFORE_SUBMIT_PROMPT = "beforesubmitprompt"
+    POST_TOOL_USE = "posttooluse"
+    POST_TOOL_BATCH = "posttoolbatch"
+    AFTER_AGENT_RESPONSE = "afteragentresponse"
+    SUBAGENT_START = "subagentstart"
+    SUBAGENT_STOP = "subagentstop"
+    STOP = "stop"
+    SESSION_END = "sessionend"
 
 
 class PreToolUseDecision(TypedDict, total=False):
@@ -72,6 +85,13 @@ def transcript_path_of(payload: JsonObject) -> str | None:
 def event_name_of(payload: JsonObject) -> str:
     event = payload.get("hook_event_name")
     return event if isinstance(event, str) else ""
+
+
+def hook_event_of(payload: JsonObject) -> HookEvent | None:
+    try:
+        return HookEvent(event_name_of(payload).lower())
+    except ValueError:
+        return None
 
 
 def session_id_of(payload: JsonObject) -> str | None:

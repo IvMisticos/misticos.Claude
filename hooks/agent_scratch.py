@@ -13,7 +13,8 @@ from pathlib import Path
 
 from harnesses import OutputShape
 from hook_io import (
-    event_name_of,
+    HookEvent,
+    hook_event_of,
     read_payload,
     run_hook,
     scratchpad_of,
@@ -113,18 +114,18 @@ def delete_agent_folders_after_session(payload: JsonObject) -> None:
 
 
 HANDLERS = {
-    "SubagentStart": offer_agent_folder,
-    "SubagentStop": finish_agent,
-    "Stop": delete_agent_folders_when_idle,
-    "SessionEnd": delete_agent_folders_after_session,
+    HookEvent.SUBAGENT_START: offer_agent_folder,
+    HookEvent.SUBAGENT_STOP: finish_agent,
+    HookEvent.STOP: delete_agent_folders_when_idle,
+    HookEvent.SESSION_END: delete_agent_folders_after_session,
 }
 
 
 def main() -> None:
     payload = read_payload()
-    handle = HANDLERS.get(event_name_of(payload))
-    if handle:
-        handle(payload)
+    event = hook_event_of(payload)
+    if event in HANDLERS:
+        HANDLERS[event](payload)
 
 
 if __name__ == "__main__":

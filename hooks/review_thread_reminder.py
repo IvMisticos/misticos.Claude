@@ -11,9 +11,10 @@ from typing import NamedTuple
 
 from harnesses import harness_parser
 from hook_io import (
+    HookEvent,
     absolute_path_at,
     agent_session_key,
-    event_name_of,
+    hook_event_of,
     read_payload,
     run_hook,
     transcript_path_of,
@@ -33,7 +34,6 @@ from session_state import locked_session_file, read_record, write_record
 from transcript import TranscriptPart, positioned_entries, transcript_part_from
 
 STATE_DIR = DATA_ROOT / "review-threads"
-SUBAGENT_STOP = "subagentstop"
 
 
 class Memory(NamedTuple):
@@ -58,7 +58,7 @@ def ended_without_completing(payload: JsonObject) -> bool:
 
 
 def own_transcript(payload: JsonObject) -> str | None:
-    if event_name_of(payload).lower() == SUBAGENT_STOP:
+    if hook_event_of(payload) == HookEvent.SUBAGENT_STOP:
         return absolute_path_at(payload, "agent_transcript_path")
     return transcript_path_of(payload)
 
