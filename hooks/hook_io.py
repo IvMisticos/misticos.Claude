@@ -191,10 +191,20 @@ def write_pre_tool_use_decision(
         json.dump(output, sys.stdout)
 
 
+def payload_decision[Decision](
+    decide: Callable[[JsonObject], Decision | None],
+) -> Decision | None:
+    try:
+        return decide(read_payload())
+    except Exception:  # noqa: BLE001
+        traceback.print_exc()
+        return None
+
+
 def run_pre_tool_use(
     decide: PreToolUseDecider, shape: OutputShape = OutputShape.CLAUDE
 ) -> None:
-    run_hook(lambda: write_pre_tool_use_decision(decide(read_payload()), shape))
+    run_hook(lambda: write_pre_tool_use_decision(payload_decision(decide), shape))
 
 
 def run_hook(main: Callable[[], object]) -> None:

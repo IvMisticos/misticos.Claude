@@ -8,7 +8,7 @@
 import os
 
 from harnesses import harness_parser
-from hook_io import allowed_with, read_payload, run_hook, write_pre_tool_use_decision
+from hook_io import PreToolUseDecision, allowed_with, run_hook, run_pre_tool_use
 from json_values import JsonObject, dict_or_empty
 from session_environment import session_environment_command
 
@@ -20,14 +20,16 @@ def prefixed_input(tool_input: JsonObject) -> JsonObject | None:
     return {**tool_input, "command": f"{session_environment_command()}; {command}"}
 
 
+def prefixed_command(payload: JsonObject) -> PreToolUseDecision | None:
+    if os.name != "posix":
+        return None
+    updated_input = prefixed_input(dict_or_empty(payload.get("tool_input")))
+    return allowed_with(updated_input) if updated_input else None
+
+
 def main() -> None:
     options = harness_parser().parse_args()
-    if os.name != "posix":
-        return
-    updated_input = prefixed_input(dict_or_empty(read_payload().get("tool_input")))
-    if updated_input:
-        decision = allowed_with(updated_input)
-        write_pre_tool_use_decision(decision, options.harness.output_shape)
+    run_pre_tool_use(prefixed_command, options.harness.output_shape)
 
 
 if __name__ == "__main__":
