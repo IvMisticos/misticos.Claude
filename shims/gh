@@ -4,19 +4,95 @@ set -euo pipefail
 
 . "$(dirname "$0")/lib/real_tool.sh"
 
+readonly PULL_REQUEST_WRITES='
+create_pull_request                cli      pr create
+create_pull_request                cli      pr new
+create_pull_request                rest     POST pulls
+create_pull_request                graphql  createPullRequest
+update_pull_request                cli      pr edit --title
+update_pull_request                cli      pr edit -t
+update_pull_request                cli      pr edit --body
+update_pull_request                cli      pr edit -b
+update_pull_request                cli      pr edit --body-file
+update_pull_request                cli      pr edit -F
+update_pull_request                cli      pr edit --base
+update_pull_request                cli      pr edit -B
+update_pull_request                cli      pr edit --add-reviewer
+update_pull_request                cli      pr ready
+update_pull_request                cli      pr close
+update_pull_request                cli      pr reopen
+update_pull_request                rest     PATCH pulls/*
+update_pull_request                rest     POST pulls/*/requested_reviewers
+update_pull_request                rest     POST pulls/*/ccr/ready_for_review
+update_pull_request                rest     POST pulls/*/ccr/convert_to_draft
+update_pull_request                graphql  updatePullRequest
+update_pull_request                graphql  closePullRequest
+update_pull_request                graphql  reopenPullRequest
+update_pull_request                graphql  markPullRequestReadyForReview
+update_pull_request                graphql  convertPullRequestToDraft
+update_pull_request                graphql  requestReviews
+update_pull_request                graphql  requestReviewsByLogin
+enable_pr_auto_merge               cli      pr merge --auto
+enable_pr_auto_merge               rest     PUT pulls/*/ccr/auto_merge
+enable_pr_auto_merge               graphql  enablePullRequestAutoMerge
+disable_pr_auto_merge              cli      pr merge --disable-auto
+disable_pr_auto_merge              rest     DELETE pulls/*/ccr/auto_merge
+disable_pr_auto_merge              graphql  disablePullRequestAutoMerge
+merge_pull_request                 cli      pr merge
+merge_pull_request                 rest     PUT pulls/*/merge
+merge_pull_request                 graphql  mergePullRequest
+update_pull_request_branch         cli      pr update-branch
+update_pull_request_branch         rest     PUT pulls/*/update-branch
+update_pull_request_branch         graphql  updatePullRequestBranch
+pull_request_review_write          cli      pr review
+pull_request_review_write          rest     POST pulls/*/reviews
+pull_request_review_write          rest     POST pulls/*/reviews/*/events
+pull_request_review_write          rest     DELETE pulls/*/reviews/*
+pull_request_review_write          graphql  addPullRequestReview
+pull_request_review_write          graphql  submitPullRequestReview
+pull_request_review_write          graphql  deletePullRequestReview
+add_comment_to_pending_review      rest     POST pulls/*/comments
+add_comment_to_pending_review      graphql  addPullRequestReviewThread
+add_comment_to_pending_review      graphql  addPullRequestReviewComment
+add_reply_to_pull_request_comment  rest     POST pulls/*/comments/*/replies
+add_reply_to_pull_request_comment  rest     POST pulls/comments/*/reactions
+add_reply_to_pull_request_comment  graphql  addPullRequestReviewThreadReply
+resolve_review_thread              rest     POST pulls/*/ccr/comments/*/resolve
+resolve_review_thread              graphql  resolveReviewThread
+unresolve_review_thread            rest     POST pulls/*/ccr/comments/*/unresolve
+unresolve_review_thread            graphql  unresolveReviewThread
+update_issue_comment               cli      pr comment --edit-last
+add_issue_comment                  cli      pr comment --body
+add_issue_comment                  cli      pr comment -b
+add_issue_comment                  cli      pr comment --body-file
+add_issue_comment                  cli      pr comment -F
+'
+
 command=""
 subcommand=""
 endpoint=""
 method=""
 sends_fields=false
-reads_query_from_file=false
 api_positionals=0
 api_flag_awaiting_value=""
+query_field=""
+query_file=""
+api_method=""
+repository_resource=""
+graphql_query=""
 
 deny() {
-  echo "gh: the agent that opened a pull request, or its parent, manages it." \
-    "Create, edit, and merge pull requests with the GitHub MCP tools." \
-    "If you lack those tools, ask your parent agent to do it." \
+  local tool=$1
+  echo "gh: use the GitHub MCP tool $tool for this." \
+    "The agent that opened a pull request, or its parent, manages it." \
+    "If you lack $tool, ask your parent agent to do it." \
+    "Run gh with ALLOW_GH_PULL_REQUEST_WRITE=1 only when the user asks." >&2
+  exit 1
+}
+
+deny_unchecked_query() {
+  echo "gh: pass the GraphQL query with -f query=... or -F query=@file," \
+    "not on standard input, so gh can check it for pull request writes." \
     "Run gh with ALLOW_GH_PULL_REQUEST_WRITE=1 only when the user asks." >&2
   exit 1
 }
@@ -57,18 +133,33 @@ api_short_flag_takes_value() {
   return 1
 }
 
+record_raw_field() {
+  sends_fields=true
+  [[ $1 == query=* ]] && query_field=${1#query=}
+  return 0
+}
+
+record_typed_field() {
+  local value=$1
+  sends_fields=true
+  [[ $value == query=* ]] || return 0
+  value=${value#query=}
+  if [[ $value == @* ]]; then
+    query_file=${value#@}
+  else
+    query_field=$value
+  fi
+}
+
 record_api_flag() {
   local flag=$1 value=$2
   case $flag in
     -X | --method) method=$value ;;
-    -f | --raw-field) sends_fields=true ;;
-    -F | --field)
-      sends_fields=true
-      [[ $value == query=@* ]] && reads_query_from_file=true
-      ;;
+    -f | --raw-field) record_raw_field "$value" ;;
+    -F | --field) record_typed_field "$value" ;;
     --input)
       sends_fields=true
-      reads_query_from_file=true
+      query_file=$value
       ;;
   esac
   return 0
@@ -140,38 +231,96 @@ http_method() {
   fi
 }
 
-writes_a_pull_request() {
-  [ "$command" = pr ] || return 1
-  case $subcommand in
-    create | new | edit | merge) return 0 ;;
+read_graphql_query() {
+  [ "$query_file" != - ] || deny_unchecked_query
+  graphql_query=$query_field
+  [ -f "$query_file" ] && [ -r "$query_file" ] || return 0
+  graphql_query+=$'\n'$(<"$query_file")
+}
+
+describe_api_request() {
+  local path
+  parse_api_arguments "$@"
+  api_method=$(http_method)
+  path=${endpoint%%[?#]*}
+  path=${path%/}
+  if [[ $path == graphql || $path == */graphql ]]; then
+    read_graphql_query
+  elif [[ $path =~ (^|/)repos/[^/]+/[^/]+/(.+)$ ]]; then
+    repository_resource=${BASH_REMATCH[2]}
+  fi
+}
+
+names_flag() {
+  local word=$1 flag=$2
+  case $flag in
+    --*) [[ $word == "$flag" || $word == "$flag="* ]] ;;
+    *) [[ $word == "$flag"* ]] ;;
   esac
+}
+
+has_flag() {
+  local flag=$1 word
+  shift
+  for word in "$@"; do
+    [ "$word" != -- ] || return 1
+    names_flag "$word" "$flag" && return 0
+  done
   return 1
 }
 
-runs_a_pull_request_mutation() {
-  local path=${endpoint%%[?#]*}
-  path=${path%/}
-  [[ $path == graphql || $path == */graphql ]] || return 1
-  $reads_query_from_file && return 0
-  [[ $* =~ (create|update|merge|enqueue)PullRequest|enablePullRequestAutoMerge ]]
+matches_cli_form() {
+  local form=$1 form_command form_subcommand flag
+  shift
+  read -r form_command form_subcommand flag <<< "$form"
+  [ "$command $subcommand" = "$form_command $form_subcommand" ] || return 1
+  [ -z "$flag" ] || has_flag "$flag" "$@"
 }
 
-api_writes_pull_requests() {
-  local http
-  [ "$command" = api ] || return 1
-  parse_api_arguments "$@"
-  runs_a_pull_request_mutation "$@" && return 0
-  [[ $endpoint == */pulls* ]] || return 1
-  http=$(http_method)
-  [[ $http == POST || $http == PUT || $http == PATCH ]]
+matches_rest_form() {
+  local form_method resource_pattern
+  read -r form_method resource_pattern <<< "$1"
+  [ "$api_method" = "$form_method" ] || return 1
+  [[ $repository_resource =~ ^${resource_pattern//\*/[^/]+}$ ]]
+}
+
+matches_graphql_form() {
+  local mutation_alone="(^|[^_A-Za-z0-9])$1([^_A-Za-z0-9]|$)"
+  [[ $graphql_query =~ $mutation_alone ]]
+}
+
+matches_form() {
+  local path=$1 form=$2
+  shift 2
+  case $path in
+    cli) matches_cli_form "$form" "$@" ;;
+    rest) matches_rest_form "$form" ;;
+    graphql) matches_graphql_form "$form" ;;
+    *) return 1 ;;
+  esac
+}
+
+pull_request_write_tool() {
+  local tool path form
+  while read -r tool path form; do
+    if matches_form "$path" "$form" "$@"; then
+      printf '%s\n' "$tool"
+      return 0
+    fi
+  done <<< "$PULL_REQUEST_WRITES"
+  return 1
 }
 
 gh=$(real_tool gh)
 
 if [ -z "${ALLOW_GH_PULL_REQUEST_WRITE-}" ]; then
   find_command "$@"
-  writes_a_pull_request && deny
-  api_writes_pull_requests "$@" && deny
+  if [ "$command" = api ]; then
+    describe_api_request "$@"
+  fi
+  if tool=$(pull_request_write_tool "$@"); then
+    deny "$tool"
+  fi
 fi
 
 exec_real_tool gh "$gh" "$@"
