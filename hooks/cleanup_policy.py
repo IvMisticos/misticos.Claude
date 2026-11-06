@@ -1,5 +1,7 @@
 import contextlib
 import json
+import os
+import tempfile
 from collections.abc import Collection, Iterable
 from pathlib import Path
 
@@ -22,10 +24,22 @@ def read_most_free_since_cleanup(record: Path) -> dict[str, int]:
     return {device: free for device, free in stored.items() if isinstance(free, int)}
 
 
+def replace_atomically(path: Path, text: str) -> None:
+    descriptor, temporary_name = tempfile.mkstemp(dir=path.parent, prefix=path.name)
+    temporary = Path(temporary_name)
+    try:
+        with os.fdopen(descriptor, "w") as file:
+            file.write(text)
+        os.replace(temporary, path)
+    except BaseException:
+        temporary.unlink(missing_ok=True)
+        raise
+
+
 def write_most_free_since_cleanup(record: Path, most_free: dict[str, int]) -> None:
     with contextlib.suppress(OSError):
         record.parent.mkdir(parents=True, exist_ok=True)
-        record.write_text(json.dumps(most_free))
+        replace_atomically(record, json.dumps(most_free))
 
 
 def remember_free_space(record: Path, disks: Iterable[Disk]) -> None:

@@ -1,3 +1,5 @@
+import json
+import os
 from pathlib import Path
 
 import pytest
@@ -65,3 +67,32 @@ def test_measures_use_from_the_most_free_space_since_cleanup(
     most_free = most_free_since_cleanup(record, [disk(250, free_gib), still_low])
     assert most_free == {"1": int(5.3 * GIB), "2": 3 * GIB}
     assert needs_cleanup(disk(250, free_gib), most_free) == cleans_up
+
+
+def test_a_failed_write_keeps_the_record_whole(
+    record: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def fail(source: Path, target: Path) -> None:
+        raise OSError
+
+    before = record.read_bytes()
+    monkeypatch.setattr(os, "replace", fail)
+    write_most_free_since_cleanup(record, {"3": GIB})
+    assert record.read_bytes() == before
+    assert list(record.parent.iterdir()) == [record]
+
+
+def test_a_write_never_shows_a_partial_record(
+    record: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seen: list[bytes] = []
+    replace = os.replace
+
+    def peek(source: Path, target: Path) -> None:
+        seen.append(record.read_bytes())
+        replace(source, target)
+
+    monkeypatch.setattr(os, "replace", peek)
+    write_most_free_since_cleanup(record, {"3": GIB})
+    assert json.loads(seen[0]) == {"1": int(1.5 * GIB), "2": 3 * GIB}
+    assert json.loads(record.read_bytes()) == {"3": GIB}
