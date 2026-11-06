@@ -136,12 +136,14 @@ Don't restate the code. Write no PR body if the diff leaves no important questio
 
 Drive this loop to green unprompted. Until the project is in production, merge without asking. Stop when anything needs my decision. Otherwise come back only when the PR is ready to merge, or merged with CI on the target branch green.
 
+Draft PRs may not run CI. Then to save CI costs, mark a PR ready only after local checks and reviews pass, and mark it draft again when you expect more than one push.
+
 1. Never review unfinished work. Run every check and fix failures before pushing.
 2. Push the relevant changes and subscribe to the PR. No polling, no scheduled check-ins.
-3. Wait for remote CI. Fix failures, then repeat from step 1.
-4. With CI green, start a misticos:reviewer agent and name the PR in its prompt. Use no other review tool, such as skills, commands, or bots.
-5. Findings reach you as notifications. Address every reasonable finding, and bring me only those that change product behavior, public API, or cost, each with where it is and what it says, ranked by impact on users and grouped by root cause. No nitpicking.
-6. Repeat from step 1 until a review has no critical findings, then fix its remaining findings and end the reviews. If round 3 still has critical findings, the design is wrong: stop and reconsider.
+3. Start a misticos:reviewer agent and name the PR in its prompt. Use no other review tool, such as skills, commands, or bots.
+4. Findings reach you as notifications. Address every reasonable finding, and bring me only those that change product behavior, public API, or cost, each with where it is and what it says, ranked by impact on users and grouped by root cause. No nitpicking.
+5. Repeat from step 1 until a review has no critical findings, then fix its remaining findings and end the reviews. If round 3 still has critical findings, the design is wrong: stop and reconsider.
+6. Mark the PR ready. Fix CI failures as in steps 1 and 2.
 
 Skip this loop for a PR that is tiny or changes nothing functional or public, such as a typo, a formatting pass, or a version bump.
 
