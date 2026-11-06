@@ -68,7 +68,11 @@ def assert_ran(result: subprocess.CompletedProcess[str], arguments: list[str]) -
         (["pr", "comment", "1", "-b", "x"], "add_issue_comment"),
         (["pr", "comment", "1", "--body-file", "x.md"], "add_issue_comment"),
         (["pr", "comment", "1", "-F", "x.md"], "add_issue_comment"),
-        (["pr", "comment", "1", "--edit-last", "-b", "x"], "update_issue_comment"),
+        (["pr", "comment", "1"], "add_issue_comment"),
+        (
+            ["pr", "comment", "1", "--edit-last", "--create-if-none", "-b", "x"],
+            "add_issue_comment",
+        ),
     ],
 )
 def test_denies_pull_request_writes_from_the_cli(
@@ -188,10 +192,6 @@ def test_denies_pull_request_writes_through_graphql(
         (["pr", "merge", "--auto", "1", "--squash"], "enable_pr_auto_merge"),
         (["pr", "comment", "1", "--body=x"], "add_issue_comment"),
         (
-            ["pr", "comment", "1", "--edit-last", "--create-if-none", "-b", "x"],
-            "update_issue_comment",
-        ),
-        (
             ["api", "-X", "PUT", "repositories/123/pulls/1/merge"],
             "merge_pull_request",
         ),
@@ -266,6 +266,37 @@ def test_denies_pull_request_writes_however_gh_is_called(
     assert suggested_tool(run_gh_in_cloud(*arguments)) == tool
 
 
+REVIEW_COMMENT_REPLY = (
+    'query=mutation { addPullRequestReviewComment(input: {inReplyTo: "x"}) { id } }'
+)
+REVIEW_COMMENT_REPLY_IN_VARIABLES = (
+    "query=mutation($input: AddPullRequestReviewCommentInput!) "
+    "{ addPullRequestReviewComment(input: $input) { id } }"
+)
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    [
+        ["api", "repos/o/r/pulls/1/comments", "-F", "in_reply_to=5", "-f", "body=x"],
+        ["api", "graphql", "-f", REVIEW_COMMENT_REPLY],
+        [
+            "api",
+            "graphql",
+            "-f",
+            REVIEW_COMMENT_REPLY_IN_VARIABLES,
+            "-F",
+            "input[inReplyTo]=x",
+        ],
+    ],
+)
+def test_names_the_reply_tool_for_a_review_comment_reply(
+    run_gh_in_cloud: ShimRun, arguments: list[str]
+) -> None:
+    result = run_gh_in_cloud(*arguments)
+    assert suggested_tool(result) == "add_reply_to_pull_request_comment"
+
+
 @pytest.mark.parametrize(
     "arguments",
     [
@@ -285,6 +316,16 @@ def test_denies_a_graphql_query_from_a_file_or_standard_input(
     result = run_gh_in_cloud(*arguments)
     assert result.returncode == 1
     assert "pass the GraphQL query inline" in result.stderr
+
+
+REBASE_BRANCH_UPDATE = (
+    "query=mutation { updatePullRequestBranch("
+    'input: {pullRequestId: "x", updateMethod: REBASE}) { clientMutationId } }'
+)
+BRANCH_UPDATE_IN_VARIABLES = (
+    "query=mutation($method: PullRequestBranchUpdateMethod) { updatePullRequestBranch("
+    'input: {pullRequestId: "x", updateMethod: $method}) { clientMutationId } }'
+)
 
 
 @pytest.mark.parametrize(
@@ -308,6 +349,8 @@ def test_denies_a_graphql_query_from_a_file_or_standard_input(
         ["pr", "lock", "1"],
         ["pr", "unlock", "1"],
         ["pr", "comment", "1", "--delete-last"],
+        ["pr", "comment", "1", "--edit-last", "--body", "x"],
+        ["pr", "update-branch", "1", "--rebase"],
         ["pr", "revert", "1"],
         ["api", "repos/o/r/pulls"],
         ["api", "repos/o/r/pulls/1/ccr/review_threads"],
@@ -321,6 +364,10 @@ def test_denies_a_graphql_query_from_a_file_or_standard_input(
         ["api", "-X", "PUT", "repos/o/r/issues/1/lock"],
         ["api", "repos/o/r/issues", "-f", "title=x"],
         ["api", "repositories/123/issues", "-f", "title=x"],
+        ["api", "-X", "PATCH", "repos/o/r/issues/7", "-f", "state=closed"],
+        ["api", "-X", "PATCH", "repos/o/r/issues/comments/9", "-f", "body=x"],
+        ["api", "repos/o/r/issues/comments/9/reactions", "-f", "content=+1"],
+        ["api", "repos/o/r/issues/7/reactions", "-f", "content=+1"],
         ["api", "search/code?q=mergePullRequest"],
         ["api", "repos/o/r/issues/1/comments", "-f", "body=createPullRequest fails"],
         ["api", "graphql", "-f", "query=query { viewer { login } }"],
@@ -333,6 +380,8 @@ def test_denies_a_graphql_query_from_a_file_or_standard_input(
         ["api", "graphql", "-f", f"query={mutation('lockLockable')}"],
         ["api", "graphql", "-f", f"query={mutation('enqueuePullRequest')}"],
         ["api", "graphql", "-f", f"query={mutation('revertPullRequest')}"],
+        ["api", "graphql", "-f", REBASE_BRANCH_UPDATE],
+        ["api", "graphql", "-f", BRANCH_UPDATE_IN_VARIABLES, "-f", "method=REBASE"],
         [
             "api",
             "graphql",

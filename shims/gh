@@ -41,9 +41,9 @@ disable_pr_auto_merge              graphql  disablePullRequestAutoMerge
 merge_pull_request                 cli      pr merge
 merge_pull_request                 rest     PUT pulls/*/merge
 merge_pull_request                 graphql  mergePullRequest
-update_pull_request_branch         cli      pr update-branch
+update_pull_request_branch         cli      pr update-branch !--rebase
 update_pull_request_branch         rest     PUT pulls/*/update-branch
-update_pull_request_branch         graphql  updatePullRequestBranch
+update_pull_request_branch         graphql  updatePullRequestBranch !REBASE
 pull_request_review_write          cli      pr review
 pull_request_review_write          rest     POST pulls/*/reviews
 pull_request_review_write          rest     POST pulls/*/reviews/*/events
@@ -51,23 +51,23 @@ pull_request_review_write          rest     DELETE pulls/*/reviews/*
 pull_request_review_write          graphql  addPullRequestReview
 pull_request_review_write          graphql  submitPullRequestReview
 pull_request_review_write          graphql  deletePullRequestReview
-add_comment_to_pending_review      rest     POST pulls/*/comments
-add_comment_to_pending_review      graphql  addPullRequestReviewThread
-add_comment_to_pending_review      graphql  addPullRequestReviewComment
+add_reply_to_pull_request_comment  rest     POST pulls/*/comments in_reply_to
 add_reply_to_pull_request_comment  rest     POST pulls/*/comments/*/replies
 add_reply_to_pull_request_comment  rest     POST pulls/comments/*/reactions
+add_reply_to_pull_request_comment  graphql  addPullRequestReviewComment inReplyTo
 add_reply_to_pull_request_comment  graphql  addPullRequestReviewThreadReply
+add_comment_to_pending_review      rest     POST pulls/*/comments
+add_comment_to_pending_review      graphql  addPullRequestReviewComment
+add_comment_to_pending_review      graphql  addPullRequestReviewThread
 resolve_review_thread              rest     POST pulls/*/ccr/comments/*/resolve
 resolve_review_thread              graphql  resolveReviewThread
 unresolve_review_thread            rest     POST pulls/*/ccr/comments/*/unresolve
 unresolve_review_thread            graphql  unresolveReviewThread
-update_issue_comment               cli      pr comment --edit-last
-add_issue_comment                  cli      pr comment --body
-add_issue_comment                  cli      pr comment -b
-add_issue_comment                  cli      pr comment --body-file
-add_issue_comment                  cli      pr comment -F
+add_issue_comment                  cli      pr comment --create-if-none
+add_issue_comment                  cli      pr comment !--edit-last !--delete-last
 '
 
+arguments=()
 command=""
 subcommand=""
 endpoint=""
@@ -75,6 +75,8 @@ method=""
 sends_fields=false
 api_positionals=0
 api_flag_awaiting_value=""
+field_names=()
+fields_text=""
 query_field=""
 reads_query_from_file=false
 api_method=""
@@ -134,8 +136,11 @@ api_short_flag_takes_value() {
 }
 
 record_field() {
+  local field=$1 name=${1%%=*}
   sends_fields=true
-  [[ $1 == query=* ]] && query_field=${1#query=}
+  field_names+=("${name%%\[*}")
+  fields_text+=$'\n'$field
+  [[ $field == query=* ]] && query_field=${field#query=}
   return 0
 }
 
@@ -247,40 +252,71 @@ names_flag() {
 }
 
 has_flag() {
-  local flag=$1 word
-  shift
-  for word in "$@"; do
+  local word
+  for word in "${arguments[@]}"; do
     [ "$word" != -- ] || return 1
-    names_flag "$word" "$flag" && return 0
+    names_flag "$word" "$1" && return 0
   done
   return 1
 }
 
-matches_cli_form() {
-  local form=$1 form_command form_subcommand flag
+sends_field() {
+  local name
+  for name in "${field_names[@]}"; do
+    [ "$name" = "$1" ] && return 0
+  done
+  return 1
+}
+
+mentions() {
+  local word=$1 text=$2
+  local word_alone="(^|[^_A-Za-z0-9])$word([^_A-Za-z0-9]|$)"
+  [[ $text =~ $word_alone ]]
+}
+
+fields_mention() {
+  mentions "$1" "$fields_text"
+}
+
+meets_conditions() {
+  local test=$1 condition
   shift
-  read -r form_command form_subcommand flag <<< "$form"
-  [ "$command $subcommand" = "$form_command $form_subcommand" ] || return 1
-  [ -z "$flag" ] || has_flag "$flag" "$@"
+  for condition in "$@"; do
+    if [[ $condition == '!'* ]]; then
+      "$test" "${condition#!}" && return 1
+    else
+      "$test" "$condition" || return 1
+    fi
+  done
+  return 0
+}
+
+matches_cli_form() {
+  local -a words
+  read -ra words <<< "$1"
+  [ "$command $subcommand" = "${words[0]} ${words[1]}" ] || return 1
+  meets_conditions has_flag "${words[@]:2}"
 }
 
 matches_rest_form() {
-  local form_method resource_pattern
-  read -r form_method resource_pattern <<< "$1"
-  [ "$api_method" = "$form_method" ] || return 1
-  [[ $repository_resource =~ ^${resource_pattern//\*/[^/]+}$ ]]
+  local -a words
+  read -ra words <<< "$1"
+  [ "$api_method" = "${words[0]}" ] || return 1
+  [[ $repository_resource =~ ^${words[1]//\*/[^/]+}$ ]] || return 1
+  meets_conditions sends_field "${words[@]:2}"
 }
 
 matches_graphql_form() {
-  local mutation_alone="(^|[^_A-Za-z0-9])$1([^_A-Za-z0-9]|$)"
-  [[ $graphql_query =~ $mutation_alone ]]
+  local -a words
+  read -ra words <<< "$1"
+  mentions "${words[0]}" "$graphql_query" || return 1
+  meets_conditions fields_mention "${words[@]:1}"
 }
 
 matches_form() {
   local interface=$1 form=$2
-  shift 2
   case $interface in
-    cli) matches_cli_form "$form" "$@" ;;
+    cli) matches_cli_form "$form" ;;
     rest) matches_rest_form "$form" ;;
     graphql) matches_graphql_form "$form" ;;
     *) return 1 ;;
@@ -290,7 +326,7 @@ matches_form() {
 pull_request_write_tool() {
   local tool interface form
   while read -r tool interface form; do
-    if matches_form "$interface" "$form" "$@"; then
+    if matches_form "$interface" "$form"; then
       printf '%s\n' "$tool"
       return 0
     fi
@@ -305,11 +341,12 @@ guards_pull_request_writes() {
 gh=$(real_tool gh)
 
 if guards_pull_request_writes; then
+  arguments=("$@")
   find_command "$@"
   if [ "$command" = api ]; then
     describe_api_request "$@"
   fi
-  if tool=$(pull_request_write_tool "$@"); then
+  if tool=$(pull_request_write_tool); then
     deny "$tool"
   fi
 fi
