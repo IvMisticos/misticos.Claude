@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 from claude_model_cap import agent_decision, cap_decision
 from json_values import JsonObject, JsonValue
+from model_cap import parsed_model
 
 SCOUT: JsonObject = {"subagent_type": "misticos:scout", "prompt": "find"}
 ENGINEER: JsonObject = {"subagent_type": "misticos:engineer", "prompt": "build"}
@@ -24,7 +25,7 @@ def isolated_agent_lookup(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> No
 
 
 def decided_model(tool_input: JsonObject, caller: str | None, cwd: Path) -> JsonValue:
-    decision = agent_decision(tool_input, str(cwd), caller)
+    decision = agent_decision(tool_input, str(cwd), parsed_model(caller))
     return decision["updatedInput"]["model"] if decision else None
 
 

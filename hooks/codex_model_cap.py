@@ -19,8 +19,8 @@ from hook_io import (
     denied,
     run_pre_tool_use,
 )
-from json_values import JsonObject, JsonValue, dict_or_empty
-from model_cap import outranks, project_folders
+from json_values import JsonObject, dict_or_empty
+from model_cap import Model, outranks, parsed_model, project_folders
 
 DEFAULT_ROLE = "default"
 
@@ -132,32 +132,34 @@ def applies_role(spawn: JsonObject, named_role: str) -> bool:
 
 
 def role_decision(
-    spawn: JsonObject, layers: list[CodexLayer], caller: JsonValue
+    spawn: JsonObject, layers: list[CodexLayer], caller: Model | None
 ) -> PreToolUseDecision | None:
     named_role = str(spawn.get("agent_type") or "").strip()
     role_name = named_role or DEFAULT_ROLE
     fixed_model = (
-        role_model(role_name, layers) if applies_role(spawn, named_role) else None
+        parsed_model(role_model(role_name, layers))
+        if applies_role(spawn, named_role)
+        else None
     )
-    if not outranks(fixed_model, caller):
+    if fixed_model is None or caller is None or not outranks(fixed_model, caller):
         return None
     return denied(
-        f"The {role_name} role runs on {fixed_model}, above your {caller}. "
+        f"The {role_name} role runs on {fixed_model.name}, above your {caller.name}. "
         "Spawn with a role at or below your model."
     )
 
 
 def request_decision(
-    spawn: JsonObject, layers: list[CodexLayer], caller: JsonValue
+    spawn: JsonObject, layers: list[CodexLayer], caller: Model | None
 ) -> PreToolUseDecision | None:
-    requested = spawn.get("model") or default_subagent_model(layers)
-    if not outranks(requested, caller):
+    requested = parsed_model(spawn.get("model") or default_subagent_model(layers))
+    if caller is None or not outranks(requested, caller):
         return None
-    return allowed_with({**spawn, "model": caller})
+    return allowed_with({**spawn, "model": caller.name})
 
 
 def cap_decision(payload: JsonObject) -> PreToolUseDecision | None:
-    caller = payload.get("model")
+    caller = parsed_model(payload.get("model"))
     spawn = dict_or_empty(payload.get("tool_input"))
     layers = codex_layers(cwd_of(payload))
     return role_decision(spawn, layers, caller) or request_decision(

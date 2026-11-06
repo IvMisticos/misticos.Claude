@@ -19,29 +19,30 @@ from hook_io import (
     transcript_path_of,
 )
 from json_values import JsonObject, JsonValue, dict_or_empty
-from model_cap import outranks, project_folders, tier_rank
+from model_cap import Model, claude_alias, outranks, parsed_model, project_folders
 from plugin_paths import PLUGIN_ROOT
 from transcript import recent_entries
 
 INHERIT = "inherit"
 TRUTHY_FLAGS = ("1", "true", "yes", "on")
 FRONTMATTER = re.compile(r"---\s*\n([\s\S]*?)---\s*\n?")
-CLAUDE_ALIASES = ("haiku", "sonnet", "opus", "fable")
 SUBAGENT_MODEL_VARIABLE = "CLAUDE_CODE_SUBAGENT_MODEL"
 PLUGIN_NAME = "misticos"
 PLUGIN_AGENTS_DIR = PLUGIN_ROOT / "agents"
 
 
-def with_model(tool_input: JsonObject, model: JsonValue) -> PreToolUseDecision:
+def with_model(tool_input: JsonObject, model: str | None) -> PreToolUseDecision:
     return {"updatedInput": {**tool_input, "model": model}}
 
 
-def latest_model(transcript_path: str, include_sidechains: bool = False) -> JsonValue:
+def latest_model(
+    transcript_path: str, include_sidechains: bool = False
+) -> Model | None:
     for entry in recent_entries(transcript_path):
         if entry.get("isSidechain") and not include_sidechains:
             continue
-        model = dict_or_empty(entry.get("message")).get("model")
-        if tier_rank(model) is not None:
+        model = parsed_model(dict_or_empty(entry.get("message")).get("model"))
+        if model:
             return model
     return None
 
@@ -52,7 +53,7 @@ def subagent_transcript(transcript_path: str, agent_id: JsonValue) -> str:
     return next(iter(glob.glob(pattern, recursive=True)), "")
 
 
-def caller_model(payload: JsonObject, main_model: JsonValue) -> JsonValue:
+def caller_model(payload: JsonObject, main_model: Model | None) -> Model | None:
     agent_id = payload.get("agent_id")
     if not agent_id:
         return main_model
@@ -107,36 +108,31 @@ def definition_model(subagent_type: JsonValue, cwd: str) -> str | None:
     return next(named, {}).get("model")
 
 
-def claude_alias(model: JsonValue) -> str | None:
-    rank = tier_rank(model)
-    return next((alias for alias in CLAUDE_ALIASES if tier_rank(alias) == rank), None)
-
-
-def wanted_agent_model(definition: str | None, caller: JsonValue) -> JsonValue:
+def wanted_agent_model(definition: str | None, caller: Model | None) -> Model | None:
     model = definition or os.environ.get(SUBAGENT_MODEL_VARIABLE) or INHERIT
-    return caller if model == INHERIT else model
+    return caller if model == INHERIT else parsed_model(model)
 
 
-def forced_decision(caller: JsonValue) -> PreToolUseDecision | None:
-    forced_model = os.environ.get(SUBAGENT_MODEL_VARIABLE)
-    if not outranks(forced_model, caller):
+def forced_decision(caller: Model | None) -> PreToolUseDecision | None:
+    forced_model = parsed_model(os.environ.get(SUBAGENT_MODEL_VARIABLE))
+    if forced_model is None or caller is None or not outranks(forced_model, caller):
         return None
     return denied(
         f"CLAUDE_CODE_SUBAGENT_MODEL_FORCE runs every subagent on "
-        f"{forced_model}, above your {caller}. Do the work yourself."
+        f"{forced_model.name}, above your {caller.name}. Do the work yourself."
     )
 
 
 def requested_model_decision(
-    tool_input: JsonObject, caller: JsonValue
+    tool_input: JsonObject, caller: Model | None
 ) -> PreToolUseDecision | None:
-    if not outranks(tool_input.get("model"), caller):
+    if not outranks(parsed_model(tool_input.get("model")), caller):
         return None
     return with_model(tool_input, claude_alias(caller))
 
 
 def definition_model_decision(
-    tool_input: JsonObject, definition: str | None, caller: JsonValue
+    tool_input: JsonObject, definition: str | None, caller: Model | None
 ) -> PreToolUseDecision | None:
     wanted_model = wanted_agent_model(definition, caller)
     if claude_alias(wanted_model) is None:
@@ -146,13 +142,13 @@ def definition_model_decision(
 
 
 def agent_model_decision(
-    tool_input: JsonObject, cwd: str, caller: JsonValue
+    tool_input: JsonObject, cwd: str, caller: Model | None
 ) -> PreToolUseDecision | None:
     force_flag = os.environ.get("CLAUDE_CODE_SUBAGENT_MODEL_FORCE", "")
     if force_flag.strip().lower() in TRUTHY_FLAGS:
         return forced_decision(caller)
     definition = definition_model(tool_input.get("subagent_type"), cwd)
-    if tool_input.get("model") and claude_alias(definition) is None:
+    if tool_input.get("model") and claude_alias(parsed_model(definition)) is None:
         return requested_model_decision(tool_input, caller)
     return definition_model_decision(tool_input, definition, caller)
 
@@ -162,7 +158,7 @@ def without_effort(tool_input: JsonObject) -> JsonObject:
 
 
 def agent_decision(
-    tool_input: JsonObject, cwd: str, caller: JsonValue
+    tool_input: JsonObject, cwd: str, caller: Model | None
 ) -> PreToolUseDecision | None:
     agent_input = without_effort(tool_input)
     decision = agent_model_decision(agent_input, cwd, caller)
@@ -172,12 +168,13 @@ def agent_decision(
 
 
 def session_decision(
-    tool_input: JsonObject, main_model: JsonValue, caller: JsonValue
+    tool_input: JsonObject, main_model: Model | None, caller: Model | None
 ) -> PreToolUseDecision | None:
-    requested = tool_input.get("model") or main_model
-    if not outranks(requested, caller):
+    requested = tool_input.get("model")
+    requested_model = parsed_model(requested) if requested else main_model
+    if caller is None or not outranks(requested_model, caller):
         return None
-    return with_model(tool_input, caller)
+    return with_model(tool_input, caller.name)
 
 
 def cap_decision(payload: JsonObject) -> PreToolUseDecision | None:
