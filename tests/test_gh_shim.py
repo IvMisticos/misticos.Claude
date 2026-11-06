@@ -1,7 +1,5 @@
-import json
 import re
 import subprocess
-from pathlib import Path
 
 import pytest
 from conftest import FAKE_GH, ShimRun, ShimRunner
@@ -263,61 +261,25 @@ def test_denies_pull_request_writes_however_gh_is_called(
     assert suggested_tool(run_gh_in_cloud(*arguments)) == tool
 
 
-@pytest.fixture
-def merge_mutation_files(tmp_path: Path) -> tuple[Path, Path]:
-    query = tmp_path / "mutation.graphql"
-    query.write_text(mutation("mergePullRequest"))
-    body = tmp_path / "mutation.json"
-    body.write_text(json.dumps({"query": mutation("mergePullRequest")}))
-    return query, body
-
-
-def test_checks_a_graphql_query_read_from_a_field_file(
-    run_gh_in_cloud: ShimRun, merge_mutation_files: tuple[Path, Path]
-) -> None:
-    query, _ = merge_mutation_files
-    result = run_gh_in_cloud("api", "graphql", "-F", f"query=@{query}")
-    assert suggested_tool(result) == "merge_pull_request"
-
-
-def test_checks_a_graphql_query_read_from_a_short_field_file(
-    run_gh_in_cloud: ShimRun, merge_mutation_files: tuple[Path, Path]
-) -> None:
-    query, _ = merge_mutation_files
-    result = run_gh_in_cloud("api", "graphql", f"-F=query=@{query}")
-    assert suggested_tool(result) == "merge_pull_request"
-
-
-def test_checks_a_graphql_query_read_from_the_input_file(
-    run_gh_in_cloud: ShimRun, merge_mutation_files: tuple[Path, Path]
-) -> None:
-    _, body = merge_mutation_files
-    result = run_gh_in_cloud("api", "graphql", "--input", str(body))
-    assert suggested_tool(result) == "merge_pull_request"
-
-
-def test_runs_a_graphql_query_read_from_a_file(
-    run_gh_in_cloud: ShimRun, tmp_path: Path
-) -> None:
-    query = tmp_path / "query.graphql"
-    query.write_text("query { viewer { login } }")
-    arguments = ["api", "graphql", "-F", f"query=@{query}"]
-    assert_ran(run_gh_in_cloud(*arguments), arguments)
-
-
 @pytest.mark.parametrize(
     "arguments",
     [
+        ["api", "graphql", "-F", "query=@query.graphql"],
+        ["api", "graphql", "-F=query=@query.graphql"],
+        ["api", "graphql", "--field", "query=@query.graphql"],
+        ["api", "graphql", "-F", "query=@/dev/stdin"],
         ["api", "graphql", "-F", "query=@-"],
+        ["api", "graphql", "--input", "body.json"],
+        ["api", "graphql", "--input=body.json"],
         ["api", "graphql", "--input", "-"],
     ],
 )
-def test_denies_a_graphql_query_read_from_standard_input(
+def test_denies_a_graphql_query_from_a_file_or_standard_input(
     run_gh_in_cloud: ShimRun, arguments: list[str]
 ) -> None:
     result = run_gh_in_cloud(*arguments)
     assert result.returncode == 1
-    assert "not on standard input" in result.stderr
+    assert "pass the GraphQL query inline" in result.stderr
 
 
 @pytest.mark.parametrize(

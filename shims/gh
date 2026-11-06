@@ -76,7 +76,7 @@ sends_fields=false
 api_positionals=0
 api_flag_awaiting_value=""
 query_field=""
-query_file=""
+reads_query_from_file=false
 api_method=""
 repository_resource=""
 graphql_query=""
@@ -91,8 +91,8 @@ deny() {
 }
 
 deny_unchecked_query() {
-  echo "gh: pass the GraphQL query with -f query=... or -F query=@file," \
-    "not on standard input, so gh can check it for pull request writes." \
+  echo "gh: pass the GraphQL query inline with -f query=..., not from a file" \
+    "or standard input, so gh can check it for pull request writes." \
     "Run gh with ALLOW_GH_PULL_REQUEST_WRITE=1 only when the user asks." >&2
   exit 1
 }
@@ -133,33 +133,24 @@ api_short_flag_takes_value() {
   return 1
 }
 
-record_raw_field() {
+record_field() {
   sends_fields=true
   [[ $1 == query=* ]] && query_field=${1#query=}
   return 0
-}
-
-record_typed_field() {
-  local value=$1
-  sends_fields=true
-  [[ $value == query=* ]] || return 0
-  value=${value#query=}
-  if [[ $value == @* ]]; then
-    query_file=${value#@}
-  else
-    query_field=$value
-  fi
 }
 
 record_api_flag() {
   local flag=$1 value=$2
   case $flag in
     -X | --method) method=$value ;;
-    -f | --raw-field) record_raw_field "$value" ;;
-    -F | --field) record_typed_field "$value" ;;
+    -f | --raw-field) record_field "$value" ;;
+    -F | --field)
+      record_field "$value"
+      [[ $value == query=@* ]] && reads_query_from_file=true
+      ;;
     --input)
       sends_fields=true
-      query_file=$value
+      reads_query_from_file=true
       ;;
   esac
   return 0
@@ -231,13 +222,6 @@ http_method() {
   fi
 }
 
-read_graphql_query() {
-  [ "$query_file" != - ] || deny_unchecked_query
-  graphql_query=$query_field
-  [ -f "$query_file" ] && [ -r "$query_file" ] || return 0
-  graphql_query+=$'\n'$(<"$query_file")
-}
-
 describe_api_request() {
   local path
   parse_api_arguments "$@"
@@ -245,7 +229,10 @@ describe_api_request() {
   path=${endpoint%%[?#]*}
   path=${path%/}
   if [[ $path == graphql || $path == */graphql ]]; then
-    read_graphql_query
+    if $reads_query_from_file; then
+      deny_unchecked_query
+    fi
+    graphql_query=$query_field
   elif [[ $path =~ (^|/)repos/[^/]+/[^/]+/(.+)$ ]]; then
     repository_resource=${BASH_REMATCH[2]}
   fi
