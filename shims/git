@@ -3,6 +3,7 @@
 set -euo pipefail
 
 . "$(dirname "$0")/lib/real_tool.sh"
+. "$(dirname "$0")/lib/git_identity.sh"
 
 location_options=()
 subcommand=""
@@ -31,18 +32,13 @@ is_identity_key() {
   matches_ignoring_case "$1" "^$identity_key_pattern$"
 }
 
-environment_identity() {
-  printf '%s|%s|%s|%s' "${GIT_AUTHOR_NAME-}" "${GIT_AUTHOR_EMAIL-}" \
-    "${GIT_COMMITTER_NAME-}" "${GIT_COMMITTER_EMAIL-}"
-}
-
 environment_sets_identity() {
   [ -n "${GIT_AUTHOR_NAME-}${GIT_AUTHOR_EMAIL-}${GIT_COMMITTER_NAME-}${GIT_COMMITTER_EMAIL-}" ]
 }
 
 environment_identity_differs_from_harness() {
   [ -n "${HARNESS_GIT_IDENTITY+set}" ] || { environment_sets_identity; return; }
-  [ "$(environment_identity)" != "$HARNESS_GIT_IDENTITY" ]
+  [ "$(git_identity_from_environment)" != "$HARNESS_GIT_IDENTITY" ]
 }
 
 environment_changes_identity() {

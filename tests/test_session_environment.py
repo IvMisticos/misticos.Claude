@@ -55,3 +55,43 @@ def test_mise_shims_follow_the_plugin_shims_after_every_source(tmp_path: Path) -
     )
     shims = ROOT / "shims"
     assert sourced.stdout == f"{shims}:{mise_shims}:/usr/bin:/bin\n"
+
+
+def test_shim_accepts_the_identity_the_session_environment_recorded(
+    tmp_path: Path,
+) -> None:
+    project = tmp_path / "project"
+    home = tmp_path / "home"
+    env_file = tmp_path / "session.sh"
+    project.mkdir()
+    home.mkdir()
+    environment = {
+        **without_session_variables(os.environ),
+        "HOME": str(home),
+        "GIT_AUTHOR_NAME": "Author",
+        "GIT_AUTHOR_EMAIL": "author@example.com",
+        "GIT_COMMITTER_NAME": "Committer",
+        "GIT_COMMITTER_EMAIL": "committer@example.com",
+    }
+    subprocess.run(["git", "init", "-q", str(project)], env=environment, check=True)
+    subprocess.run(
+        [sys.executable, SESSION_ENVIRONMENT],
+        env={
+            **environment,
+            "CLAUDE_ENV_FILE": str(env_file),
+            "CLAUDE_PROJECT_DIR": str(project),
+        },
+        check=True,
+    )
+    committed = subprocess.run(
+        [
+            "bash",
+            "-c",
+            f"source {env_file}; git -C {project} commit -q --allow-empty -m test",
+        ],
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert committed.returncode == 0, committed.stderr

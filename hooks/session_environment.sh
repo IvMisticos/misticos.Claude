@@ -9,5 +9,7 @@ export PATH="$1:$PATH"
 export HARNESS_PROJECT_DIR="$2"
 if [ -z "${harness_git_identity_recorded-}" ]; then
   harness_git_identity_recorded=1
-  export HARNESS_GIT_IDENTITY="${GIT_AUTHOR_NAME-}|${GIT_AUTHOR_EMAIL-}|${GIT_COMMITTER_NAME-}|${GIT_COMMITTER_EMAIL-}"
+  . "$1/lib/git_identity.sh"
+  HARNESS_GIT_IDENTITY=$(git_identity_from_environment)
+  export HARNESS_GIT_IDENTITY
 fi
