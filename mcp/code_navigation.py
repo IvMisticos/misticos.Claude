@@ -53,8 +53,7 @@ async def at_position(
 
 
 async def about_document(method: str, path: Path, server: LanguageServer) -> LSPAny:
-    server.documents.open(path)
-    return await server.request(method, {"textDocument": {"uri": to_uri(path)}})
+    return await server.ask_about(path, method, {"textDocument": {"uri": to_uri(path)}})
 
 
 @mcp.tool()
@@ -108,9 +107,9 @@ async def document_symbols(file: str) -> str:
 @mcp.tool()
 async def workspace_symbols(query: str, file_in_project: str) -> str:
     """Symbols matching query across the project that contains file_in_project; that file picks the language."""
-    _, server = await server_at(file_in_project)
+    path, server = await server_at(file_in_project)
     return workspace_symbols_text(
-        await server.request("workspace/symbol", {"query": query})
+        await server.ask_about(path, "workspace/symbol", {"query": query})
     )
 
 
@@ -138,7 +137,7 @@ async def hierarchy_calls(direction: str, file: str, line: int, column: int) -> 
         raise ValueError(f"no function at {path}:{line}:{column}")
     calls: list[Call] = []
     for function in functions:
-        for call in await server.request(method, {"item": function}) or []:
+        for call in await server.ask_about(path, method, {"item": function}) or []:
             call_site_owner = call.get("from", function)
             calls.append(
                 Call(call[other_end], call_site_owner["uri"], call["fromRanges"])

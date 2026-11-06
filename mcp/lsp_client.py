@@ -14,7 +14,7 @@ from lsp_types import (
     ResponseError,
 )
 from open_documents import OpenDocuments
-from text_positions import lsp_position, to_uri
+from text_positions import lsp_position, read_text, to_uri
 
 QUIET_SECONDS_BEFORE_READY = 2.0
 MAX_STARTUP_SECONDS = 90.0
@@ -223,8 +223,13 @@ class LanguageServer:
         column: int,
         extra: dict[str, LSPAny] | None = None,
     ) -> LSPAny:
-        text = self.documents.open(path)
-        position = lsp_position(text, line, column)
+        position = lsp_position(read_text(path), line, column)
         params = {"textDocument": {"uri": to_uri(path)}, "position": position}
         params.update(extra or {})
+        return await self.ask_about(path, method, params)
+
+    async def ask_about(
+        self, path: pathlib.Path, method: str, params: dict[str, LSPAny]
+    ) -> LSPAny:
+        self.documents.open(path)
         return await self.request(method, params)
