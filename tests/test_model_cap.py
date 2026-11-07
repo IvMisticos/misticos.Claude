@@ -1,6 +1,12 @@
+import subprocess
+import sys
+from pathlib import Path
+
 import pytest
 from json_values import JsonValue
 from model_cap import outranks, parsed_model
+
+HOOKS = Path(__file__).resolve().parent.parent / "hooks"
 
 
 @pytest.mark.parametrize(
@@ -26,7 +32,20 @@ def test_outranks(requested: JsonValue, caller: JsonValue, expected: bool) -> No
     assert outranks(parsed_model(requested), parsed_model(caller)) is expected
 
 
-def test_family_follows_the_tier_order() -> None:
-    model = parsed_model("sol-opus")
-    assert model is not None
-    assert model.family == "opus"
+def family_under_hash_seed(model: str, seed: int) -> str:
+    script = (
+        f"from model_cap import parsed_model; print(parsed_model({model!r}).family)"
+    )
+    return subprocess.run(
+        [sys.executable, "-c", script],
+        cwd=HOOKS,
+        env={"PYTHONHASHSEED": str(seed)},
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+
+
+def test_family_follows_the_tier_order_under_any_hash_seed() -> None:
+    families = {family_under_hash_seed("sol-opus", seed) for seed in range(16)}
+    assert families == {"opus\n"}
