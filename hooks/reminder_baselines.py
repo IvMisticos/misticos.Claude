@@ -67,26 +67,36 @@ def context_shrank(baselines: Baselines, tokens: int) -> bool:
 
 
 def next_action(
-    baselines: Baselines | None, fire: str, tokens: int, allowed: frozenset[Action]
+    baselines: Baselines | None,
+    fire: str,
+    tokens: int,
+    *,
+    can_copy: bool,
+    can_point: bool,
 ) -> tuple[Action, Baselines]:
     if baselines is None or context_shrank(baselines, tokens):
         return Action.IDLE, Baselines(tokens, tokens, fire, Action.IDLE)
     copy_due = tokens - baselines.copied_at >= FULL_COPY_EVERY_TOKENS
-    if Action.COPY in allowed and copy_due:
+    if can_copy and copy_due:
         return Action.COPY, Baselines(tokens, tokens, fire, Action.COPY)
     pointer_due = tokens - baselines.pointed_at >= POINTER_EVERY_TOKENS
-    if Action.POINTER in allowed and pointer_due:
+    if can_point and pointer_due:
         pointed = Baselines(tokens, baselines.copied_at, fire, Action.POINTER)
         return Action.POINTER, pointed
     return Action.IDLE, copy.replace(baselines, fire=fire, action=Action.IDLE)
 
 
 def action_for_fire(
-    baselines: Baselines | None, fire: str, tokens: int, allowed: frozenset[Action]
+    baselines: Baselines | None,
+    fire: str,
+    tokens: int,
+    *,
+    can_copy: bool,
+    can_point: bool,
 ) -> tuple[Action, Baselines]:
     if baselines is not None and fire and baselines.fire == fire:
         return baselines.action, baselines
-    return next_action(baselines, fire, tokens, allowed)
+    return next_action(baselines, fire, tokens, can_copy=can_copy, can_point=can_point)
 
 
 def tokens_now(
@@ -102,13 +112,17 @@ def tokens_now(
 def claim_action(
     session_id: str,
     fire: str,
-    allowed: frozenset[Action],
     context: ContextTotal | ContextAdded,
+    *,
+    can_copy: bool,
+    can_point: bool,
 ) -> Action:
     with locked_session_file(BASELINE_DIR, session_id) as baseline_file:
         stored = parsed_record(Baselines, read_json(baseline_file))
         tokens = tokens_now(stored, fire, context)
-        action, baselines = action_for_fire(stored, fire, tokens, allowed)
+        action, baselines = action_for_fire(
+            stored, fire, tokens, can_copy=can_copy, can_point=can_point
+        )
         write_json(baseline_file, copy.replace(baselines, seen=tokens)._asdict())
         return action
 

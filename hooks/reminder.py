@@ -76,17 +76,6 @@ def measured_context(
     return None if tokens is None else ContextTotal(tokens)
 
 
-def allowed_actions(
-    event: HookEvent, fire: str, messages: Sequence[str]
-) -> frozenset[Action]:
-    allowed: set[Action] = set()
-    if len(messages) <= REMINDER_PARTS and (fire or len(messages) == 1):
-        allowed.add(Action.COPY)
-    if event != HookEvent.USER_PROMPT_SUBMIT:
-        allowed.add(Action.POINTER)
-    return frozenset(allowed)
-
-
 def growth_reminder(
     rules: Rules, event: HookEvent, payload: JsonObject, options: Options
 ) -> str | None:
@@ -100,8 +89,13 @@ def growth_reminder(
     context = measured_context(payload, options.harness.context_from)
     if context is None:
         return None
-    allowed = allowed_actions(event, fire, messages)
-    action = claim_action(session_id, fire, allowed, context)
+    action = claim_action(
+        session_id,
+        fire,
+        context,
+        can_copy=len(messages) <= REMINDER_PARTS and bool(fire or len(messages) == 1),
+        can_point=event != HookEvent.USER_PROMPT_SUBMIT,
+    )
     return message_for_part(action, options.part, messages, rules)
 
 
