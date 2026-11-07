@@ -8,8 +8,7 @@ from pull_request_writes import denial
 WRITES_ON_EVERY_PATH = [
     ["pr", "merge", "1"],
     ["api", "-X", "POST", "repos/o/r/pulls/1/reviews"],
-    ["api", "graphql", "-f", "query=mutation { resolveReviewThread }"],
-    ["api", "graphql", "--input", "-"],
+    ["api", "repos/o/r/pulls/1/comments", "--input", "-"],
 ]
 FAKE_GH_ECHOING_INPUT = """#!/usr/bin/env bash
 echo "ran $* with $(cat)"

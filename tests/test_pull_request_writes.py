@@ -1,22 +1,13 @@
 import pytest
-from gh_requests import GraphqlQueryFromFile, gh_request
-from pull_request_writes import (
-    UNCHECKED_QUERY_DENIAL,
-    denial,
-    mcp_tools_denial,
-    pull_request_write_tools,
-)
+from gh_arguments import gh_arguments
+from gh_requests import gh_request
+from pull_request_writes import denial, mcp_tools_denial, pull_request_write_tools
 
 
 def suggested_tools(*arguments: str) -> list[str]:
-    request = gh_request(arguments)
+    request = gh_request(gh_arguments(arguments))
     assert request is not None
-    assert not isinstance(request, GraphqlQueryFromFile)
     return pull_request_write_tools(request)
-
-
-def mutation(name: str) -> str:
-    return f"mutation {{ {name}(input: {{}}) {{ clientMutationId }} }}"
 
 
 @pytest.mark.parametrize(
@@ -47,10 +38,7 @@ def mutation(name: str) -> str:
         (["pr", "comment", "1", "--body-file", "x.md"], "add_issue_comment"),
         (["pr", "comment", "1", "-F", "x.md"], "add_issue_comment"),
         (["pr", "comment", "1"], "add_issue_comment"),
-        (
-            ["pr", "comment", "1", "--edit-last", "--create-if-none", "-b", "x"],
-            "add_issue_comment",
-        ),
+        (["pr", "comment", "1", "--edit-last", "-b", "x"], "update_issue_comment"),
     ],
 )
 def test_denies_pull_request_writes_from_the_cli(
@@ -80,11 +68,6 @@ def test_denies_pull_request_writes_from_the_cli(
             "repos/o/r/pulls/1/comments/2/replies",
             "add_reply_to_pull_request_comment",
         ),
-        (
-            "POST",
-            "repos/o/r/pulls/comments/2/reactions",
-            "add_reply_to_pull_request_comment",
-        ),
         ("POST", "repos/o/r/pulls/1/ccr/comments/2/resolve", "resolve_review_thread"),
         (
             "POST",
@@ -97,35 +80,6 @@ def test_denies_pull_request_writes_through_rest(
     method: str, endpoint: str, tool: str
 ) -> None:
     assert suggested_tools("api", "-X", method, endpoint) == [tool]
-
-
-@pytest.mark.parametrize(
-    ("name", "tool"),
-    [
-        ("createPullRequest", "create_pull_request"),
-        ("updatePullRequest", "update_pull_request"),
-        ("closePullRequest", "update_pull_request"),
-        ("reopenPullRequest", "update_pull_request"),
-        ("markPullRequestReadyForReview", "update_pull_request"),
-        ("convertPullRequestToDraft", "update_pull_request"),
-        ("requestReviews", "update_pull_request"),
-        ("requestReviewsByLogin", "update_pull_request"),
-        ("enablePullRequestAutoMerge", "enable_pr_auto_merge"),
-        ("disablePullRequestAutoMerge", "disable_pr_auto_merge"),
-        ("mergePullRequest", "merge_pull_request"),
-        ("updatePullRequestBranch", "update_pull_request_branch"),
-        ("addPullRequestReview", "pull_request_review_write"),
-        ("submitPullRequestReview", "pull_request_review_write"),
-        ("deletePullRequestReview", "pull_request_review_write"),
-        ("addPullRequestReviewThread", "add_comment_to_pending_review"),
-        ("addPullRequestReviewComment", "add_comment_to_pending_review"),
-        ("addPullRequestReviewThreadReply", "add_reply_to_pull_request_comment"),
-        ("resolveReviewThread", "resolve_review_thread"),
-        ("unresolveReviewThread", "unresolve_review_thread"),
-    ],
-)
-def test_denies_pull_request_writes_through_graphql(name: str, tool: str) -> None:
-    assert suggested_tools("api", "graphql", "-f", f"query={mutation(name)}") == [tool]
 
 
 @pytest.mark.parametrize(
@@ -196,43 +150,6 @@ def test_denies_pull_request_writes_through_graphql(name: str, tool: str) -> Non
         (["api", "-X=PUT", "repos/o/r/pulls/1/merge"], "merge_pull_request"),
         (["api", "-iX=PUT", "repos/o/r/pulls/1/merge"], "merge_pull_request"),
         (["api", "-i=t", "repos/o/r/pulls", "-f", "title=x"], "create_pull_request"),
-        (
-            ["api", "/graphql", "-f", f"query={mutation('createPullRequest')}"],
-            "create_pull_request",
-        ),
-        (
-            [
-                "api",
-                "https://api.github.com/graphql",
-                "-f",
-                f"query={mutation('mergePullRequest')}",
-            ],
-            "merge_pull_request",
-        ),
-        (
-            ["api", "graphql?x=1", "-f", f"query={mutation('mergePullRequest')}"],
-            "merge_pull_request",
-        ),
-        (
-            ["api", "graphql#x", "-f", f"query={mutation('mergePullRequest')}"],
-            "merge_pull_request",
-        ),
-        (
-            ["api", "/graphql/", "-f", f"query={mutation('mergePullRequest')}"],
-            "merge_pull_request",
-        ),
-        (
-            ["api", "graphql", "--raw-field", f"query={mutation('mergePullRequest')}"],
-            "merge_pull_request",
-        ),
-        (
-            ["api", "graphql", "-F", f"query={mutation('closePullRequest')}"],
-            "update_pull_request",
-        ),
-        (
-            ["api", "graphql", "-f", "query=mutation { m: mergePullRequest(x: 1) }"],
-            "merge_pull_request",
-        ),
     ],
 )
 def test_denies_pull_request_writes_however_gh_is_called(
@@ -241,28 +158,11 @@ def test_denies_pull_request_writes_however_gh_is_called(
     assert suggested_tools(*arguments) == [tool]
 
 
-REVIEW_COMMENT_REPLY = (
-    'query=mutation { addPullRequestReviewComment(input: {inReplyTo: "x"}) { id } }'
-)
-REVIEW_COMMENT_REPLY_IN_VARIABLES = (
-    "query=mutation($input: AddPullRequestReviewCommentInput!) "
-    "{ addPullRequestReviewComment(input: $input) { id } }"
-)
-
-
 @pytest.mark.parametrize(
     "arguments",
     [
         ["api", "repos/o/r/pulls/1/comments", "-F", "in_reply_to=5", "-f", "body=x"],
-        ["api", "graphql", "-f", REVIEW_COMMENT_REPLY],
-        [
-            "api",
-            "graphql",
-            "-f",
-            REVIEW_COMMENT_REPLY_IN_VARIABLES,
-            "-F",
-            "input[inReplyTo]=x",
-        ],
+        ["api", "repos/o/r/pulls/1/comments", "-f", "in_reply_to[x]=5"],
     ],
 )
 def test_names_the_reply_tool_for_a_review_comment_reply(arguments: list[str]) -> None:
@@ -277,35 +177,6 @@ def test_names_both_comment_tools_for_a_review_comment_body_it_cannot_see(
         "add_reply_to_pull_request_comment",
         "add_comment_to_pending_review",
     ]
-
-
-@pytest.mark.parametrize(
-    "arguments",
-    [
-        ["api", "graphql", "-F", "query=@query.graphql"],
-        ["api", "graphql", "-F=query=@query.graphql"],
-        ["api", "graphql", "--field", "query=@query.graphql"],
-        ["api", "graphql", "-F", "query=@/dev/stdin"],
-        ["api", "graphql", "-F", "query=@-"],
-        ["api", "graphql", "--input", "body.json"],
-        ["api", "graphql", "--input=body.json"],
-        ["api", "graphql", "--input", "-"],
-    ],
-)
-def test_denies_a_graphql_query_from_a_file_or_standard_input(
-    arguments: list[str],
-) -> None:
-    assert denial(arguments) == UNCHECKED_QUERY_DENIAL
-
-
-REBASE_BRANCH_UPDATE = (
-    "query=mutation { updatePullRequestBranch("
-    'input: {pullRequestId: "x", updateMethod: REBASE}) { clientMutationId } }'
-)
-BRANCH_UPDATE_IN_VARIABLES = (
-    "query=mutation($method: PullRequestBranchUpdateMethod) { updatePullRequestBranch("
-    'input: {pullRequestId: "x", updateMethod: $method}) { clientMutationId } }'
-)
 
 
 @pytest.mark.parametrize(
@@ -329,7 +200,6 @@ BRANCH_UPDATE_IN_VARIABLES = (
         ["pr", "lock", "1"],
         ["pr", "unlock", "1"],
         ["pr", "comment", "1", "--delete-last"],
-        ["pr", "comment", "1", "--edit-last", "--body", "x"],
         ["pr", "update-branch", "1", "--rebase"],
         ["pr", "create", "--help"],
         ["pr", "create", "-h"],
@@ -354,6 +224,8 @@ BRANCH_UPDATE_IN_VARIABLES = (
         ["api", "-X", "PUT", "repos/o/r/pulls/1/reviews/2/dismissals"],
         ["api", "-X", "DELETE", "repos/o/r/pulls/1/requested_reviewers"],
         ["api", "-X", "DELETE", "repos/o/r/pulls/comments/5/reactions/7"],
+        ["api", "repos/o/r/pulls/comments/2/reactions", "-f", "content=+1"],
+        ["api", "graphql", "-f", "query=mutation { mergePullRequest }"],
         ["api", "repos/o/r/issues/1/labels", "-f", "labels[]=x"],
         ["api", "-X", "PUT", "repos/o/r/issues/1/lock"],
         ["api", "repos/o/r/issues", "-f", "title=x"],
@@ -364,26 +236,6 @@ BRANCH_UPDATE_IN_VARIABLES = (
         ["api", "repos/o/r/issues/7/reactions", "-f", "content=+1"],
         ["api", "search/code?q=mergePullRequest"],
         ["api", "repos/o/r/issues/1/comments", "-f", "body=createPullRequest fails"],
-        ["api", "graphql", "-f", "query=query { viewer { login } }"],
-        ["api", "graphql", "-f", f"query={mutation('updatePullRequestReview')}"],
-        ["api", "graphql", "-f", f"query={mutation('updatePullRequestReviewComment')}"],
-        ["api", "graphql", "-f", f"query={mutation('deletePullRequestReviewComment')}"],
-        ["api", "graphql", "-f", f"query={mutation('dismissPullRequestReview')}"],
-        ["api", "graphql", "-f", f"query={mutation('addLabelsToLabelable')}"],
-        ["api", "graphql", "-f", f"query={mutation('addAssigneesToAssignable')}"],
-        ["api", "graphql", "-f", f"query={mutation('lockLockable')}"],
-        ["api", "graphql", "-f", f"query={mutation('enqueuePullRequest')}"],
-        ["api", "graphql", "-f", f"query={mutation('revertPullRequest')}"],
-        ["api", "graphql", "-f", REBASE_BRANCH_UPDATE],
-        ["api", "graphql", "-f", BRANCH_UPDATE_IN_VARIABLES, "-f", "method=REBASE"],
-        [
-            "api",
-            "graphql",
-            "-f",
-            "query=query($q: String!) { search(query: $q) { issueCount } }",
-            "-f",
-            "q=mergePullRequest",
-        ],
         ["issue", "create", "--title", "pr merge"],
         [],
         [
@@ -394,7 +246,6 @@ BRANCH_UPDATE_IN_VARIABLES = (
             "-f",
             "body=mergePullRequest",
         ],
-        ["api", "graphql", "-f", "query=@mutation.graphql"],
         ["api", "repos/o/r/issues", "-f", "body=see /pulls/1"],
         ["api", "-H", "Accept: x/pulls", "repos/o/r/issues", "-f", "title=x"],
     ],
@@ -418,9 +269,61 @@ def test_joins_several_tools_with_or() -> None:
     assert "If you lack first_tool or second_tool, ask" in message
 
 
-def test_asks_for_an_inline_graphql_query() -> None:
-    assert UNCHECKED_QUERY_DENIAL == (
-        "gh: pass the GraphQL query inline with -f query=..., not from a file"
-        " or standard input, so gh can check it for pull request writes."
-        " Run gh with ALLOW_GH_PULL_REQUEST_WRITE=1 only when the user asks."
-    )
+@pytest.mark.parametrize(
+    ("endpoint", "tool"),
+    [
+        ("repos/o/r//pulls/1/merge", "merge_pull_request"),
+        ("repos/o/r/./pulls/1/merge", "merge_pull_request"),
+        ("repos/o/r/pulls//1/merge", "merge_pull_request"),
+        ("repos/o/r/pull%73/1/merge", "merge_pull_request"),
+        ("repos/o/r/pulls%2F1%2Fmerge", "merge_pull_request"),
+        ("repos/o/r/issues/../pulls/1/merge", "merge_pull_request"),
+        ("repos//o/r/pulls/1/merge", "merge_pull_request"),
+        ("/repositories/123//pulls/1/./merge", "merge_pull_request"),
+        ("repos/o/r/pulls/1/update%2Dbranch", "update_pull_request_branch"),
+    ],
+)
+def test_denies_pull_request_writes_on_paths_that_name_the_same_route(
+    endpoint: str, tool: str
+) -> None:
+    assert suggested_tools("api", "-X", "PUT", endpoint) == [tool]
+
+
+@pytest.mark.parametrize(
+    ("arguments", "tool"),
+    [
+        (["pr", "merge", "1", "--subject", "-h"], "merge_pull_request"),
+        (["pr", "merge", "1", "-t", "--help"], "merge_pull_request"),
+        (["pr", "merge", "1", "--body", "--attach"], "merge_pull_request"),
+        (
+            ["api", "-X", "PUT", "repos/o/r/pulls/1/merge", "-f", "-h=1"],
+            "merge_pull_request",
+        ),
+        (["pr", "update-branch", "1", "--rebase=false"], "update_pull_request_branch"),
+        (["pr", "merge", "1", "--auto=false"], "merge_pull_request"),
+        (["pr", "merge", "1", "--auto", "--auto=0"], "merge_pull_request"),
+        (["pr", "comment", "1", "--delete-last=false", "-b", "x"], "add_issue_comment"),
+        (["pr", "merge", "-sd", "1"], "merge_pull_request"),
+    ],
+)
+def test_reads_flag_values_as_values(arguments: list[str], tool: str) -> None:
+    assert suggested_tools(*arguments) == [tool]
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    [
+        ["pr", "edit", "1", "--add-label", "-tx"],
+        ["pr", "edit", "1", "--add-label", "--title"],
+        ["pr", "update-branch", "1", "--rebase=true"],
+        ["pr", "merge", "1", "-h"],
+        ["pr", "merge", "1", "-sh"],
+    ],
+)
+def test_reads_flags_only_where_gh_reads_them(arguments: list[str]) -> None:
+    assert denial(arguments) is None
+
+
+def test_names_both_tools_when_the_last_comment_may_be_created() -> None:
+    arguments = ["pr", "comment", "1", "--edit-last", "--create-if-none", "-b", "x"]
+    assert suggested_tools(*arguments) == ["update_issue_comment", "add_issue_comment"]

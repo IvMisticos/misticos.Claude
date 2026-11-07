@@ -29,6 +29,9 @@ def test_call_without_target_or_repo_names_no_pull_request(call: GhPrCall) -> No
         ),
         ("gh -R o/r pr comment 7 -b x", GhPrCall("comment", "7", "o/r")),
         ("gh pr comment --body 3", GhPrCall("comment", None, None)),
+        ("gh pr merge --squash 12", GhPrCall("merge", "12", None)),
+        ("gh pr list -R o/r -L 50", GhPrCall("list", None, "o/r")),
+        ("gh pr comment 4 --body-file -", GhPrCall("comment", "4", None)),
     ],
 )
 def test_pr_target_is_the_word_after_the_subcommand(

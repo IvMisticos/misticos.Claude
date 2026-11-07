@@ -1,49 +1,34 @@
 import pytest
-from gh_requests import (
-    GhRequest,
-    GraphqlQueryFromFile,
-    GraphqlRequest,
-    PrCommand,
-    RestRequest,
-    gh_request,
-)
+from gh_requests import path_segments, repository_resource
 
 
 @pytest.mark.parametrize(
-    ("arguments", "request_record"),
+    ("endpoint", "segments"),
     [
-        (
-            ["-R", "o/r", "pr", "merge", "1"],
-            PrCommand("merge", ("-R", "o/r", "pr", "merge", "1")),
-        ),
-        (
-            ["api", "-iXpatch", "repos/o/r/pulls/1"],
-            RestRequest("PATCH", "pulls/1", frozenset(), reads_input=False),
-        ),
-        (
-            ["api", "repos/o/r/issues/1/labels?x=1", "-f", "labels[]=x"],
-            RestRequest("POST", "issues/1/labels", frozenset({"labels"}), False),
-        ),
-        (
-            ["api", "https://api.github.com/repositories/9/pulls/", "--input", "-"],
-            RestRequest("POST", "pulls", frozenset(), reads_input=True),
-        ),
-        (
-            ["api", "graphql", "-f", "query=q", "-F", "n=1"],
-            GraphqlRequest("q", ("query=q", "n=1")),
-        ),
-        (["api", "graphql", "-F", "query=@q.graphql"], GraphqlQueryFromFile()),
+        ("repos/o/r//pulls/./1/", ["repos", "o", "r", "pulls", "1"]),
+        ("/repos/o/r/pull%73?state=open#top", ["repos", "o", "r", "pulls"]),
+        ("repos/o/r/issues/../../x", ["repos", "o", "x"]),
+        ("../repos", ["repos"]),
+        ("", []),
     ],
 )
-def test_parses_the_request_gh_sends(
-    arguments: list[str], request_record: GhRequest
+def test_path_segments_name_the_route_the_server_sees(
+    endpoint: str, segments: list[str]
 ) -> None:
-    assert gh_request(arguments) == request_record
+    assert path_segments(endpoint) == segments
 
 
 @pytest.mark.parametrize(
-    "arguments",
-    [["pr"], ["issue", "create"], ["api", "user"], ["api"], ["--", "pr", "merge"]],
+    ("segments", "resource"),
+    [
+        (["repos", "o", "r", "pulls", "1"], ("pulls", "1")),
+        (["https:", "api.github.com", "repositories", "9", "pulls"], ("pulls",)),
+        (["repos", "o", "r"], None),
+        (["repositories", "x", "pulls"], None),
+        (["user", "repos"], None),
+    ],
 )
-def test_finds_no_request_it_checks(arguments: list[str]) -> None:
-    assert gh_request(arguments) is None
+def test_repository_resource_follows_the_repository(
+    segments: list[str], resource: tuple[str, ...] | None
+) -> None:
+    assert repository_resource(segments) == resource
