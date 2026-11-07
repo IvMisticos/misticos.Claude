@@ -18,6 +18,7 @@ from hook_io import (
     read_payload,
     run_hook,
     session_id_of,
+    transcript_path_of,
     write_context,
 )
 from json_values import JsonObject
@@ -76,8 +77,8 @@ def measured_context(
 ) -> ContextTotal | ContextAdded | None:
     if source == ContextSource.PAYLOAD:
         return ContextAdded(payload_tokens(payload))
-    transcript_path = payload.get("transcript_path")
-    if not (isinstance(transcript_path, str) and transcript_path):
+    transcript_path = transcript_path_of(payload)
+    if transcript_path is None:
         return None
     tokens = context_tokens(transcript_path, source)
     return None if tokens is None else ContextTotal(tokens)
