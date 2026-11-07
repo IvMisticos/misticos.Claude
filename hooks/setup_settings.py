@@ -114,9 +114,6 @@ def read_json(path: Path) -> JsonObject:
     return value
 
 
-JSON_KIND_NAMES = {dict: "object", list: "list"}
-
-
 def setting[Kind: (dict, list)](
     settings: JsonObject, key: str, kind: type[Kind]
 ) -> Kind:
@@ -124,7 +121,8 @@ def setting[Kind: (dict, list)](
     if value is None:
         return kind()
     if not isinstance(value, kind):
-        raise TypeError(f"Claude setting {key} is not a JSON {JSON_KIND_NAMES[kind]}")
+        json_name = "object" if kind is dict else "list"
+        raise TypeError(f"Claude setting {key} is not a JSON {json_name}")
     return value
 
 
