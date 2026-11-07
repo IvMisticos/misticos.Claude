@@ -52,24 +52,16 @@ class Options(NamedTuple):
     harness: Harness
 
 
-def is_prompt_event(payload: JsonObject) -> bool:
-    return hook_event_of(payload) == HookEvent.USER_PROMPT_SUBMIT
-
-
 def message_for_part(
-    action: Action,
-    part: int,
-    messages: Sequence[str],
-    rules: Rules,
-    payload: JsonObject,
+    action: Action, part: int, messages: Sequence[str], rules: Rules
 ) -> str | None:
-    if action == Action.POINTER:
-        if is_prompt_event(payload):
+    match action:
+        case Action.POINTER:
+            return pointer_reminder(rules) if part == 1 else None
+        case Action.COPY:
+            return messages[part - 1] if part <= len(messages) else None
+        case Action.IDLE:
             return None
-        return pointer_reminder(rules) if part == 1 else None
-    if action != Action.COPY or not 1 <= part <= len(messages):
-        return None
-    return messages[part - 1]
 
 
 def measured_context(
@@ -84,6 +76,17 @@ def measured_context(
     return None if tokens is None else ContextTotal(tokens)
 
 
+def allowed_actions(
+    payload: JsonObject, fire: str, messages: Sequence[str]
+) -> frozenset[Action]:
+    allowed: set[Action] = set()
+    if len(messages) <= REMINDER_PARTS and (fire or len(messages) == 1):
+        allowed.add(Action.COPY)
+    if hook_event_of(payload) != HookEvent.USER_PROMPT_SUBMIT:
+        allowed.add(Action.POINTER)
+    return frozenset(allowed)
+
+
 def growth_reminder(rules: Rules, payload: JsonObject, options: Options) -> str | None:
     messages = full_copy_messages(rules, GROWN_PREAMBLE)
     session_id = session_id_of(payload)
@@ -95,9 +98,9 @@ def growth_reminder(rules: Rules, payload: JsonObject, options: Options) -> str 
     context = measured_context(payload, options.harness.context_from)
     if context is None:
         return None
-    can_copy = len(messages) <= REMINDER_PARTS and bool(fire or len(messages) == 1)
-    action = claim_action(session_id, fire, can_copy, context)
-    return message_for_part(action, options.part, messages, rules, payload)
+    allowed = allowed_actions(payload, fire, messages)
+    action = claim_action(session_id, fire, allowed, context)
+    return message_for_part(action, options.part, messages, rules)
 
 
 def is_subagent_start(payload: JsonObject) -> bool:
@@ -121,7 +124,7 @@ def session_start_reminder(
     )
     if len(messages) > REMINDER_PARTS:
         return pointer_reminder(rules) if options.part == 1 else None
-    return message_for_part(Action.COPY, options.part, messages, rules, payload)
+    return message_for_part(Action.COPY, options.part, messages, rules)
 
 
 def reminder_for(payload: JsonObject, options: Options) -> str | None:
