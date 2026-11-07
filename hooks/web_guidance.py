@@ -3,7 +3,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from json_values import dict_or_empty, json_object
+from json_values import dict_or_empty, json_object_in
 from plugin_paths import DATA_ROOT
 
 WEB_GUIDANCE_NAME = "modern-web-guidance"
@@ -15,10 +15,7 @@ WEB_GUIDANCE_OFFERED = PLUGIN_DATA / "web-guidance-offered"
 
 
 def web_guidance_plugin_is_installed() -> bool:
-    try:
-        installed = json_object(INSTALLED_PLUGINS.read_text()) or {}
-    except OSError:
-        return False
+    installed = json_object_in(INSTALLED_PLUGINS)
     return WEB_GUIDANCE_PLUGIN in dict_or_empty(installed.get("plugins"))
 
 
