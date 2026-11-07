@@ -14,16 +14,22 @@ import subprocess
 import sys
 import time
 from collections.abc import Generator, Sequence
+from dataclasses import dataclass
 from io import TextIOWrapper
 from pathlib import Path
 from types import FrameType
-from typing import NamedTuple, NoReturn
+from typing import Literal, NamedTuple, NoReturn
 
 from core_pinning import CAN_PIN_CORES, pinned, plan_cores, restore_abandoned_pinning
 from queued_commands import queues
 
 HELD_VARIABLE = "HARNESS_QUEUE_HELD"
-LOCK_DIR = Path("/tmp") / f"misticos-queue-{os.getuid()}"
+LOCK_DIR_VARIABLE = "HARNESS_QUEUE_LOCK_DIR"
+LOCK_DIR = Path(
+    os.environ.get(LOCK_DIR_VARIABLE) or f"/tmp/misticos-queue-{os.getuid()}"
+)
+NO_PINNING_VARIABLE = "HARNESS_QUEUE_NO_PINNING"
+PINS_CORES = CAN_PIN_CORES and not os.environ.get(NO_PINNING_VARIABLE)
 MACHINE_LOCK = LOCK_DIR / "machine.lock"
 TURNSTILE_LOCK = LOCK_DIR / "turnstile.lock"
 BENCHMARK_LOCK = LOCK_DIR / "benchmark.lock"
@@ -104,24 +110,69 @@ def build_slot() -> Generator[None]:
         yield
 
 
+def signal_exit_status(signal_number: int) -> int:
+    return 128 + signal_number
+
+
 def exit_status(returncode: int) -> int:
-    return 128 - returncode if returncode < 0 else returncode
+    return signal_exit_status(-returncode) if returncode < 0 else returncode
 
 
-def run_held(command: Sequence[str]) -> int:
-    environment = {**os.environ, HELD_VARIABLE: "1"}
-    child = subprocess.Popen(command, env=environment)
+@dataclass
+class StartingChild:
+    pending_signal: int | None = None
 
-    def forward_to_child(signal_number: int, _frame: FrameType | None) -> None:
-        child.send_signal(signal_number)
 
-    for stop_signal in STOP_SIGNALS:
-        signal.signal(stop_signal, forward_to_child)
-    return exit_status(child.wait())
+type HeldRunnerState = (
+    Literal["waiting", "cleaning up"] | StartingChild | subprocess.Popen[bytes]
+)
+
+
+class HeldRunner:
+    def __init__(self) -> None:
+        self.received_stop_signal: int | None = None
+        self.state: HeldRunnerState = "waiting"
+
+    def handle_stop_signal(self, signal_number: int, _frame: FrameType | None) -> None:
+        self.received_stop_signal = signal_number
+        match self.state:
+            case subprocess.Popen() as child:
+                child.send_signal(signal_number)
+            case StartingChild() as starting:
+                starting.pending_signal = signal_number
+            case "waiting":
+                self.begin_cleanup()
+                sys.exit(signal_exit_status(signal_number))
+            case "cleaning up":
+                pass
+
+    def begin_cleanup(self) -> None:
+        self.state = "cleaning up"
+
+    def start(self, command: Sequence[str]) -> subprocess.Popen[bytes]:
+        environment = {**os.environ, HELD_VARIABLE: "1"}
+        starting = StartingChild()
+        self.state = starting
+        try:
+            child = subprocess.Popen(command, env=environment)
+        except BaseException:
+            self.state = "waiting"
+            raise
+        self.state = child
+        if starting.pending_signal:
+            child.send_signal(starting.pending_signal)
+        return child
+
+    def run(self, command: Sequence[str]) -> int:
+        child = self.start(command)
+        try:
+            return exit_status(child.wait())
+        finally:
+            self.state = "waiting"
 
 
 def restore_pinning_of_killed_benchmark() -> None:
-    if not CAN_PIN_CORES:
+    if not PINS_CORES:
         return
     benchmark = try_lock(BENCHMARK_LOCK, fcntl.LOCK_EX)
     if benchmark is None:
@@ -130,11 +181,11 @@ def restore_pinning_of_killed_benchmark() -> None:
         restore_abandoned_pinning(PINNING_STATE)
 
 
-def run_build(command: Sequence[str]) -> int:
+def run_build(command: Sequence[str], runner: HeldRunner) -> int:
     restore_pinning_of_killed_benchmark()
     alone_message = "waiting for a benchmark that runs alone"
     with build_slot(), machine_locked(fcntl.LOCK_SH, alone_message):
-        return run_held(command)
+        return runner.run(command)
 
 
 class ToolRun(NamedTuple):
@@ -155,39 +206,46 @@ def exec_unqueued(command: list[str]) -> NoReturn:
     os.execv(command[0], command)
 
 
-def run_tool(tool: ToolRun) -> int:
+def run_tool(tool: ToolRun, runner: HeldRunner) -> int:
     command = [*tool.command, *tool.arguments]
     if not queues(tool.name, tool.arguments):
         exec_unqueued(command)
-    return run_build(command)
+    return run_build(command, runner)
 
 
-def run_repeatedly(command: Sequence[str], runs: int) -> int:
+def run_repeatedly(command: Sequence[str], runs: int, runner: HeldRunner) -> int:
     for _ in range(runs):
-        status = run_held(command)
+        status = runner.run(command)
+        if runner.received_stop_signal:
+            return signal_exit_status(runner.received_stop_signal)
         if status != 0:
             return status
     return 0
 
 
-def run_benchmark(command: Sequence[str], cores: int, alone: bool, runs: int) -> int:
+def run_benchmark(
+    command: Sequence[str], cores: int, alone: bool, runs: int, runner: HeldRunner
+) -> int:
     with contextlib.ExitStack() as held:
         held.enter_context(
             locked(BENCHMARK_LOCK, fcntl.LOCK_EX, "waiting for the running benchmark")
         )
         plan = None
-        if CAN_PIN_CORES:
+        if PINS_CORES:
             restore_abandoned_pinning(PINNING_STATE)
             plan = plan_cores(cores, alone)
         elif not alone:
-            notice("this system cannot pin cores, so the benchmark runs alone")
+            notice("the queue cannot pin cores here, so the benchmark runs alone")
         if alone or plan is None:
             held.enter_context(
                 machine_locked(fcntl.LOCK_EX, "waiting for builds to finish")
             )
         if plan:
             held.enter_context(pinned(plan, PINNING_STATE))
-        return run_repeatedly(command, runs)
+        try:
+            return run_repeatedly(command, runs, runner)
+        finally:
+            runner.begin_cleanup()
 
 
 def positive_count(text: str) -> int:
@@ -197,7 +255,7 @@ def positive_count(text: str) -> int:
     return count
 
 
-def parse_bench_arguments() -> argparse.Namespace:
+def parse_bench_arguments(argv: Sequence[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(prog="queue")
     modes = parser.add_subparsers(dest="mode", required=True)
     bench = modes.add_parser("bench")
@@ -205,7 +263,7 @@ def parse_bench_arguments() -> argparse.Namespace:
     bench.add_argument("--runs", type=positive_count, default=1)
     bench.add_argument("--alone", action="store_true")
     bench.add_argument("command", nargs=argparse.REMAINDER)
-    arguments = parser.parse_args()
+    arguments = parser.parse_args(argv)
     if arguments.command[:1] == ["--"]:
         arguments.command = arguments.command[1:]
     if not arguments.command:
@@ -213,18 +271,15 @@ def parse_bench_arguments() -> argparse.Namespace:
     return arguments
 
 
-def exit_on_signal(signal_number: int, _frame: FrameType | None) -> NoReturn:
-    sys.exit(128 + signal_number)
-
-
 def main() -> int:
+    runner = HeldRunner()
     for stop_signal in STOP_SIGNALS:
-        signal.signal(stop_signal, exit_on_signal)
+        signal.signal(stop_signal, runner.handle_stop_signal)
     if sys.argv[1:2] == ["tool"]:
-        return run_tool(parse_tool_run(sys.argv[2:]))
-    arguments = parse_bench_arguments()
+        return run_tool(parse_tool_run(sys.argv[2:]), runner)
+    arguments = parse_bench_arguments(sys.argv[1:])
     return run_benchmark(
-        arguments.command, arguments.cores, arguments.alone, arguments.runs
+        arguments.command, arguments.cores, arguments.alone, arguments.runs, runner
     )
 
 
