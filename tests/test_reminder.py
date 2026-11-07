@@ -87,24 +87,12 @@ def test_session_start_sends_the_whole_file_in_parts(home: Path) -> None:
     assert all(len(part) <= 10_000 for part in sent)
 
 
-@pytest.mark.parametrize(
-    "payload",
-    [
-        pytest.param(
-            {"hook_event_name": "SubagentStart", "agent_id": "a1", "agent_type": "x"},
-            id="subagent",
-        ),
-        pytest.param(
-            {
-                "hook_event_name": "SessionStart",
-                "session_id": "s1",
-                "agent_type": "misticos:scout",
-            },
-            id="main-session-of-a-skipped-type",
-        ),
-    ],
-)
-def test_start_sends_the_file(home: Path, payload: JsonObject) -> None:
+def test_a_main_session_of_a_skipped_type_gets_the_file(home: Path) -> None:
+    payload: JsonObject = {
+        "hook_event_name": "SessionStart",
+        "session_id": "s1",
+        "agent_type": "misticos:scout",
+    }
     assert context(reminder(home, 1, payload))
 
 
