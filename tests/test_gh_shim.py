@@ -1,7 +1,7 @@
 import subprocess
 
 import pytest
-from conftest import FAKE_GH, ShimRun, ShimRunner
+from conftest import FAKE_GH, FakeBin, ShimRun, ShimRunner, run_shim
 from pull_request_writes import denial
 
 WRITES_ON_EVERY_PATH = [
@@ -80,3 +80,8 @@ def test_runs_pull_request_writes_when_the_session_is_not_remote(
 ) -> None:
     result = run_gh_elsewhere("pr", "merge", "1", CLAUDE_CODE_REMOTE="false")
     assert_ran(result, ["pr", "merge", "1"])
+
+
+def test_runs_gh_without_home(fake_bin: FakeBin) -> None:
+    environment = {"PATH": f"{fake_bin('gh', FAKE_GH)}:/usr/bin:/bin"}
+    assert_ran(run_shim("gh", environment, "--version"), ["--version"])

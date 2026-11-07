@@ -1,5 +1,7 @@
-mise_shims="${MISE_DATA_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/mise}/shims"
-tool_search_path="$PATH:$HOME/.local/bin:$mise_shims"
+. "$(dirname "${BASH_SOURCE[0]}")/real_tool.sh"
+
+mise_shims="${MISE_DATA_DIR:-${XDG_DATA_HOME:-${HOME-}/.local/share}/mise}/shims"
+tool_search_path="$PATH:${HOME-}/.local/bin:$mise_shims"
 
 is_mise_shim_dir() {
   [ "${1%/}" = "$mise_shims" ]
@@ -23,19 +25,8 @@ run_without_plugin_shims() {
   tool_command=("$env" "PATH=$plugin_free_path" "$@")
 }
 
-mise_tool_providing() {
-  case $1 in
-    bun | bunx) echo bun ;;
-    cargo) echo rust ;;
-    dotnet) echo dotnet ;;
-    uv | uvx) echo uv ;;
-    *) return 1 ;;
-  esac
-}
-
 run_through_mise() {
-  local name=$1 provider mise
-  provider=$(mise_tool_providing "$name") || return 1
+  local provider=$1 name=$2 mise
   mise=$(REAL_TOOL_PATH=$tool_search_path real_tool mise 2>/dev/null) || return 1
   run_without_plugin_shims "$mise" --quiet x "$provider" -- "$name"
 }
@@ -45,7 +36,7 @@ find_uv() {
   uv_search_path=$(path_without is_mise_shim_dir "$tool_search_path")
   if uv=$(REAL_TOOL_PATH=$uv_search_path real_tool uv 2>/dev/null); then
     run_without_plugin_shims "$uv"
-  elif ! run_through_mise uv; then
+  elif ! run_through_mise uv uv; then
     REAL_TOOL_PATH=$uv_search_path real_tool uv
   fi
   uv_command=("${tool_command[@]}")

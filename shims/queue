@@ -7,11 +7,27 @@ bin_dir=$(cd "$(dirname "$0")" && pwd -P)
 . "$bin_dir/lib/hook_python.sh"
 REAL_TOOL_PATH=$tool_search_path
 
+mise_tool_providing() {
+  case $1 in
+    bun | bunx) echo bun ;;
+    cargo) echo rust ;;
+    dotnet) echo dotnet ;;
+    uv | uvx) echo uv ;;
+    *) return 1 ;;
+  esac
+}
+
+run_tool_through_mise() {
+  local name=$1 provider
+  provider=$(mise_tool_providing "$name") || return 1
+  run_through_mise "$provider" "$name"
+}
+
 find_tool_command() {
   local name=$1 tool
   if tool=$(real_tool "$name" 2>/dev/null); then
     tool_command=("$tool")
-  elif ! run_through_mise "$name"; then
+  elif ! run_tool_through_mise "$name"; then
     real_tool "$name"
   fi
 }
