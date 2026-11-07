@@ -3,7 +3,7 @@ from collections.abc import Iterable, Iterator
 from pathlib import Path
 from typing import NamedTuple
 
-from model_cap import config_folders
+from config_folders import config_folders
 from plugin_paths import PLUGIN_ROOT
 
 FRONTMATTER = re.compile(r"---\s*\n([\s\S]*?)---\s*\n?")

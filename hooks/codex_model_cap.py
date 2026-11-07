@@ -12,6 +12,7 @@ from collections.abc import Iterable, Iterator
 from pathlib import Path
 from typing import NamedTuple
 
+from config_folders import config_folders
 from hook_io import (
     PreToolUseDecision,
     allowed_with,
@@ -20,7 +21,7 @@ from hook_io import (
     run_pre_tool_use,
 )
 from json_values import JsonObject, dict_or_empty, text_or_none
-from model_cap import Model, config_folders, outranks, parsed_model
+from model_cap import Model, outranks, parsed_model
 
 DEFAULT_ROLE = "default"
 

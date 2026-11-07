@@ -1,6 +1,4 @@
 import re
-from collections.abc import Iterator
-from pathlib import Path
 from typing import NamedTuple
 
 from json_values import JsonValue
@@ -58,15 +56,3 @@ def outranks(requested: Model | None, caller: Model | None) -> bool:
     if requested.family != caller.family:
         return requested.rank > caller.rank
     return requested.version > caller.version
-
-
-def project_folders(cwd: Path) -> Iterator[Path]:
-    for folder in (cwd, *cwd.parents):
-        yield folder
-        if (folder / ".git").exists():
-            return
-
-
-def config_folders(cwd: Path, project_subfolder: Path, user_folder: Path) -> list[Path]:
-    in_projects = (folder / project_subfolder for folder in project_folders(cwd))
-    return [*(folder for folder in in_projects if folder.is_dir()), user_folder]
