@@ -10,16 +10,22 @@ HOOKS = Path(__file__).resolve().parent.parent / "hooks"
 
 
 @pytest.mark.parametrize(
-    ("hook", "malformed_payload"),
+    ("hook", "payload"),
     [
-        pytest.param("claude_model_cap.py", {"tool_name": "Agent", "agent_id": "a1"}),
-        pytest.param("codex_model_cap.py", {"tool_input": "spawn"}),
+        pytest.param(
+            "claude_model_cap.py",
+            {"tool_name": "Agent", "tool_input": "explore"},
+            id="claude",
+        ),
+        pytest.param("codex_model_cap.py", {"tool_input": "spawn"}, id="codex"),
     ],
 )
-def test_crash_exits_quietly(hook: str, malformed_payload: JsonObject) -> None:
+def test_tool_input_that_is_not_an_object_is_left_alone(
+    hook: str, payload: JsonObject
+) -> None:
     result = subprocess.run(
         [sys.executable, HOOKS / hook],
-        input=json.dumps(malformed_payload),
+        input=json.dumps(payload),
         capture_output=True,
         text=True,
         check=False,

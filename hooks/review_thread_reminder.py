@@ -11,13 +11,16 @@ from typing import NamedTuple
 
 from harnesses import harness_parser
 from hook_io import (
+    HookEvent,
+    absolute_path_at,
     agent_session_key,
-    event_name_of,
+    hook_event_of,
     read_payload,
     run_hook,
+    transcript_path_of,
     write_block,
 )
-from json_values import JsonObject, JsonValue
+from json_values import JsonObject
 from plugin_paths import DATA_ROOT
 from pull_requests import PullRequest, last_activity_by_pull_request
 from review_threads import (
@@ -31,7 +34,6 @@ from session_state import locked_session_file, read_record, write_record
 from transcript import TranscriptPart, positioned_entries, transcript_part_from
 
 STATE_DIR = DATA_ROOT / "review-threads"
-SUBAGENT_STOP = "subagentstop"
 
 
 class Memory(NamedTuple):
@@ -55,10 +57,10 @@ def ended_without_completing(payload: JsonObject) -> bool:
     return payload.get("status", "completed") != "completed"
 
 
-def own_transcript(payload: JsonObject) -> JsonValue:
-    if event_name_of(payload).lower() == SUBAGENT_STOP:
-        return payload.get("agent_transcript_path")
-    return payload.get("transcript_path")
+def own_transcript(payload: JsonObject) -> str | None:
+    if hook_event_of(payload) == HookEvent.SUBAGENT_STOP:
+        return absolute_path_at(payload, "agent_transcript_path")
+    return transcript_path_of(payload)
 
 
 def remembered(key: str) -> Memory:
@@ -190,7 +192,7 @@ def review_reminder(payload: JsonObject) -> str | None:
         return None
     key = agent_session_key(payload)
     transcript_path = own_transcript(payload)
-    if not (key and isinstance(transcript_path, str) and gh_installed()):
+    if not (key and transcript_path and gh_installed()):
         return None
     memory = remembered(key)
     part = transcript_part_from(transcript_path, memory.scanned)

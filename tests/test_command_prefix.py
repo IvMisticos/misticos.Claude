@@ -99,6 +99,14 @@ def test_leaves_other_input_alone(
     assert hook_output(hook_environment, tool_input) is None
 
 
+@pytest.mark.parametrize("tool_input", [{}, {"command": ["ls"]}, "ls"])
+def test_allows_other_input_unchanged_in_cursor(
+    hook_environment: dict[str, str], tool_input: JsonValue
+) -> None:
+    output = hook_output(hook_environment, tool_input, "--harness", "cursor")
+    assert output == {"permission": "allow"}
+
+
 def test_puts_the_shims_first_on_the_path(run_rewritten: RunRewritten) -> None:
     result = run_rewritten("command -v gh git")
     assert result.stdout == f"{SHIMS}/gh\n{SHIMS}/git\n"

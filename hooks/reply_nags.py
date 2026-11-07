@@ -12,11 +12,14 @@ from typing import NamedTuple
 
 from harnesses import ReplyHistory, harness_parser
 from hook_io import (
+    HookEvent,
     event_name_of,
+    hook_event_of,
     is_subagent,
     read_payload,
     run_hook,
     session_id_of,
+    transcript_path_of,
     write_context,
 )
 from json_values import JsonObject, JsonValue, dict_or_empty
@@ -52,16 +55,20 @@ REPEATED_UPDATES = (
     "their decision."
 )
 REPLY_TEXT_FIELD_BY_EVENT = {
-    "stop": "last_assistant_message",
-    "afteragentresponse": "text",
+    HookEvent.STOP: "last_assistant_message",
+    HookEvent.AFTER_AGENT_RESPONSE: "text",
 }
-PROMPT_EVENTS = frozenset({"userpromptsubmit", "beforesubmitprompt"})
+PROMPT_EVENTS = frozenset(
+    {HookEvent.USER_PROMPT_SUBMIT, HookEvent.BEFORE_SUBMIT_PROMPT}
+)
 WAKE_PROMPT_STARTS = (
     "<task-notification>",
     "<agent-message",
     "Another Claude session sent a message",
 )
-NAG_EVENTS = frozenset({"userpromptsubmit", "posttoolbatch", "posttooluse"})
+NAG_EVENTS = frozenset(
+    {HookEvent.USER_PROMPT_SUBMIT, HookEvent.POST_TOOL_BATCH, HookEvent.POST_TOOL_USE}
+)
 
 
 class NagMemory(NamedTuple):
@@ -157,11 +164,12 @@ def due_nags(
 
 
 def nags_from_transcript(
-    event: str, payload: JsonObject, state: NagState
+    event: HookEvent, payload: JsonObject, state: NagState
 ) -> tuple[list[str], NagState]:
     if event not in NAG_EVENTS:
         return [], state
-    history = transcript_history(payload.get("transcript_path"))
+    transcript_path = transcript_path_of(payload)
+    history = transcript_history(transcript_path) if transcript_path else []
     nags, memory = due_nags(history, state.memory)
     if event in PROMPT_EVENTS and not is_wake_prompt(payload.get("prompt")):
         memory = copy.replace(memory, submitted_prompt=submitted_prompt_id(payload))
@@ -180,7 +188,7 @@ def is_wake_prompt(prompt: JsonValue) -> bool:
 
 
 def nags_from_events(
-    event: str, payload: JsonObject, state: NagState
+    event: HookEvent, payload: JsonObject, state: NagState
 ) -> tuple[list[str], NagState]:
     log = state.log
     reply_field = REPLY_TEXT_FIELD_BY_EVENT.get(event)
@@ -201,7 +209,7 @@ def nags_from_events(
 def main() -> None:
     options = harness_parser().parse_args()
     payload = read_payload()
-    event = event_name_of(payload)
+    event = hook_event_of(payload)
     session_id = session_id_of(payload)
     if not (event and session_id) or is_subagent(payload):
         return
@@ -212,10 +220,11 @@ def main() -> None:
     )
     with locked_session_file(STATE_DIR, session_id) as state_file:
         state = parsed_state(read_json(state_file))
-        nags, state = nags_for(event.lower(), payload, state)
+        nags, state = nags_for(event, payload, state)
         write_json(state_file, state.to_json())
     if nags:
-        write_context(event, " ".join(nags), options.harness.output_shape)
+        event_name = event_name_of(payload)
+        write_context(event_name, " ".join(nags), options.harness.output_shape)
 
 
 if __name__ == "__main__":

@@ -17,6 +17,7 @@ from conftest import (
     text_at,
     write_json_lines,
 )
+from hook_io import HookEvent
 from json_values import JsonObject, JsonValue
 
 AGENT_SCRATCH = Path(__file__).resolve().parent.parent / "hooks" / "agent_scratch.py"
@@ -204,20 +205,22 @@ def test_agent_reminded_about_review_threads_keeps_its_folder(
 
 
 @pytest.mark.parametrize(
-    "payload",
+    ("event", "payload"),
     [
-        {"hook_event_name": "Stop", "background_tasks": []},
-        {"hook_event_name": "SessionEnd", "reason": "other"},
+        (HookEvent.STOP, {"background_tasks": []}),
+        (HookEvent.SESSION_END, {"reason": "other"}),
     ],
 )
 def test_slow_delete_spares_folders_new_subagents_create_meanwhile(
-    scratchpad: Path, monkeypatch: pytest.MonkeyPatch, payload: JsonObject
+    scratchpad: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    event: HookEvent,
+    payload: JsonObject,
 ) -> None:
     def delete_slowly(folder: Path) -> None:
         (scratchpad / "agents" / "a3").mkdir(parents=True)
         shutil.rmtree(folder)
 
     monkeypatch.setattr(agent_scratch, "delete_in_background", delete_slowly)
-    handle = agent_scratch.HANDLERS[text_at(payload, "hook_event_name")]
-    handle({**payload, "scratchpad_dir": str(scratchpad)})
+    agent_scratch.HANDLERS[event]({**payload, "scratchpad_dir": str(scratchpad)})
     assert folders_and_agent_folders(scratchpad) == ["agents", "agents/a3", "notes.md"]

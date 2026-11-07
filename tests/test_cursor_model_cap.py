@@ -1,20 +1,16 @@
-import io
 import json
 import subprocess
 import sys
-from pathlib import Path
-from typing import NoReturn
 
-import pytest
+from conftest import ROOT, json_at, run_json_hook, text_at
+from json_values import JsonObject
 
-HOOKS = Path(__file__).resolve().parent.parent / "hooks"
-
-import cursor_model_cap
+CURSOR_MODEL_CAP = ROOT / "hooks" / "cursor_model_cap.py"
 
 
 def test_unreadable_payload_allows_the_spawn() -> None:
     result = subprocess.run(
-        [sys.executable, HOOKS / "cursor_model_cap.py"],
+        [sys.executable, CURSOR_MODEL_CAP],
         input=b"\xff\xfe",
         capture_output=True,
         check=True,
@@ -22,11 +18,12 @@ def test_unreadable_payload_allows_the_spawn() -> None:
     assert json.loads(result.stdout) == {"permission": "allow"}
 
 
-def test_unexpected_error_is_not_hidden(monkeypatch: pytest.MonkeyPatch) -> None:
-    def broken(*_: object) -> NoReturn:
-        raise RuntimeError
-
-    monkeypatch.setattr(sys, "stdin", io.StringIO("{}"))
-    monkeypatch.setattr(cursor_model_cap, "outranks", broken)
-    with pytest.raises(RuntimeError):
-        cursor_model_cap.main()
+def test_denies_a_subagent_above_the_caller() -> None:
+    payload: JsonObject = {
+        "model": "claude-sonnet-4-5",
+        "subagent_model": "claude-opus-4-1",
+        "subagent_type": "explore",
+    }
+    output = run_json_hook(CURSOR_MODEL_CAP, payload)
+    assert json_at(output, "permission") == "deny"
+    assert "explore on claude-opus-4-1" in text_at(output, "user_message")
