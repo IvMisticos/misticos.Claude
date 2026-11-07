@@ -23,6 +23,7 @@ REMINDER = ROOT / "hooks" / "reminder.py"
 RULES = ROOT / "INSTRUCTIONS.md"
 CLAUDE_ARGUMENTS = ["--harness", "claude"]
 CURSOR_ARGUMENTS = ["--harness", "cursor"]
+CODEX_ARGUMENTS = ["--harness", "codex"]
 
 
 def reminder(
@@ -179,6 +180,43 @@ def test_a_prompt_leaves_the_pointer_to_the_next_tool_batch(
     transcript_at(tmp_path, 60_000)
     later = all_parts(home, tool_batch(transcript, "p2", "u2"))
     assert later == [None] * REMINDER_PARTS
+
+
+def codex_transcript_at(tmp_path: Path, tokens: int) -> Path:
+    transcript = tmp_path / "rollout.jsonl"
+    transcript.write_text("x" * tokens * CHARS_PER_TOKEN_ESTIMATE)
+    return transcript
+
+
+def codex_prompt(transcript: Path, turn_id: str) -> JsonObject:
+    return {
+        "hook_event_name": "UserPromptSubmit",
+        "session_id": "x1",
+        "turn_id": turn_id,
+        "transcript_path": str(transcript),
+    }
+
+
+def codex_tool_use(transcript: Path, turn_id: str, tool_use_id: str) -> JsonObject:
+    return {
+        **codex_prompt(transcript, turn_id),
+        "hook_event_name": "PostToolUse",
+        "tool_use_id": tool_use_id,
+    }
+
+
+def test_a_codex_prompt_leaves_the_pointer_to_the_next_tool_use(
+    home: Path, tmp_path: Path
+) -> None:
+    transcript = codex_transcript_at(tmp_path, 10_000)
+    first = all_parts(home, codex_prompt(transcript, "t1"), CODEX_ARGUMENTS)
+    assert first == [None] * REMINDER_PARTS
+    codex_transcript_at(tmp_path, 40_000)
+    second = all_parts(home, codex_prompt(transcript, "t2"), CODEX_ARGUMENTS)
+    assert second == [None] * REMINDER_PARTS
+    codex_transcript_at(tmp_path, 45_000)
+    pointer = all_parts(home, codex_tool_use(transcript, "t2", "u1"), CODEX_ARGUMENTS)
+    assert pointer[0] and pointer[1:] == [None] * (REMINDER_PARTS - 1)
 
 
 def test_subagent_growth_gets_nothing(home: Path, tmp_path: Path) -> None:
