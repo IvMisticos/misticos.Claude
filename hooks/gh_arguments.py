@@ -3,6 +3,7 @@ from typing import NamedTuple
 
 OPTIONS_END = "--"
 PR_COMMAND = "pr"
+API_COMMAND = "api"
 CREATE_SUBCOMMANDS = frozenset({"create", "new"})
 FALSE_WORDS = frozenset({"0", "f", "F", "false", "FALSE", "False"})
 
@@ -70,7 +71,7 @@ CREATE_FLAGS = (
     switch("web", "w"),
 )
 COMMAND_FLAGS: dict[tuple[str, ...], tuple[Flag, ...]] = {
-    ("api",): (
+    (API_COMMAND,): (
         switch("allow-escape-sequences"),
         valued("cache"),
         valued("field", "F"),
@@ -178,6 +179,11 @@ class GhArguments(NamedTuple):
             option.value
             for option in self.options
             if option.name == name and isinstance(option.value, str)
+        ]
+
+    def option_values(self) -> list[str]:
+        return [
+            option.value for option in self.options if isinstance(option.value, str)
         ]
 
     def last_value(self, name: str) -> str | None:

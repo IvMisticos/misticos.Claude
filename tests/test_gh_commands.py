@@ -1,6 +1,10 @@
 import pytest
 from gh_commands import GhPrCall, gh_api_words, gh_argument_lists, gh_pr_call
-from pull_requests import pull_request_of_gh_pr_call
+from pull_requests import (
+    PullRequest,
+    pull_request_of_gh_pr_call,
+    pull_requests_in_gh_call,
+)
 
 
 def test_missing_target_and_repo_are_none() -> None:
@@ -41,9 +45,18 @@ def test_pr_target_is_the_word_after_the_subcommand(
     assert gh_pr_call(arguments) == call
 
 
-def test_api_words_follow_api() -> None:
-    [arguments] = gh_argument_lists("gh api repos/o/r/pulls/3/comments")
-    assert gh_api_words(arguments) == ["repos/o/r/pulls/3/comments"]
+@pytest.mark.parametrize(
+    ("command", "words"),
+    [
+        ("gh api repos/o/r/pulls/3/comments", ["repos/o/r/pulls/3/comments"]),
+        ("gh --jq .url api repos/o/r/pulls/5", ["repos/o/r/pulls/5", ".url"]),
+        ("gh api -X GET repos/o/r/pulls/5 -q .x", ["repos/o/r/pulls/5", "GET", ".x"]),
+        ("gh pr view 5", []),
+    ],
+)
+def test_api_words_are_the_words_gh_api_reads(command: str, words: list[str]) -> None:
+    [arguments] = gh_argument_lists(command)
+    assert gh_api_words(arguments) == words
 
 
 @pytest.mark.parametrize(
@@ -104,3 +117,8 @@ def test_file_descriptors_are_not_arguments(
 def test_quoted_operators_stay_inside_the_gh_call(body: str) -> None:
     command = f"gh pr comment 1 --body {body} -R o/r"
     assert gh_argument_lists(command)[0][-2:] == ["-R", "o/r"]
+
+
+def test_finds_the_pull_request_an_api_call_names_after_gh_flags() -> None:
+    arguments = ["--jq", ".url", "api", "repos/o/r/pulls/5"]
+    assert pull_requests_in_gh_call(arguments) == [PullRequest("o", "r", 5)]

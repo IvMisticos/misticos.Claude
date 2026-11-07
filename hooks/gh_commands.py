@@ -3,7 +3,7 @@ import shlex
 from collections.abc import Sequence
 from typing import NamedTuple
 
-from gh_arguments import CREATE_SUBCOMMANDS, PR_COMMAND, gh_arguments
+from gh_arguments import API_COMMAND, CREATE_SUBCOMMANDS, PR_COMMAND, gh_arguments
 from json_values import JsonValue
 
 COMMAND_SEPARATORS = "();<>|&\n"
@@ -81,7 +81,8 @@ def gh_pr_call(arguments: Sequence[str]) -> GhPrCall | None:
     return GhPrCall(parsed.command[1], target, parsed.last_value("repo") or None)
 
 
-def gh_api_words(arguments: list[str]) -> list[str]:
-    if arguments[:1] != ["api"]:
+def gh_api_words(arguments: Sequence[str]) -> list[str]:
+    parsed = gh_arguments(arguments)
+    if parsed.command != (API_COMMAND,):
         return []
-    return arguments[1:]
+    return [*parsed.positionals, *parsed.option_values()]

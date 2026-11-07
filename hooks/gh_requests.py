@@ -3,9 +3,8 @@ from collections.abc import Sequence
 from typing import NamedTuple
 from urllib.parse import unquote
 
-from gh_arguments import PR_COMMAND, GhArguments
+from gh_arguments import API_COMMAND, PR_COMMAND, GhArguments
 
-API_COMMAND = ("api",)
 FIELD_FLAGS = ("raw-field", "field")
 ENDPOINT_SUFFIX = re.compile(r"[?#].*", re.DOTALL)
 SKIPPED_SEGMENTS = frozenset({"", "."})
@@ -73,7 +72,7 @@ def rest_request(api: GhArguments) -> RestRequest | None:
 
 def gh_request(arguments: GhArguments) -> GhRequest | None:
     command = arguments.command
-    if command == API_COMMAND:
+    if command == (API_COMMAND,):
         return rest_request(arguments)
     if len(command) == 2 and command[0] == PR_COMMAND:
         return PrCommand(command[1], arguments.given_flags())
