@@ -106,12 +106,12 @@ def is_subagent_start(payload: JsonObject) -> bool:
 def session_start_reminder(
     rules: Rules, payload: JsonObject, options: Options
 ) -> str | None:
-    is_subagent = is_subagent_start(payload)
+    for_subagent = is_subagent_start(payload)
     session_id = session_id_of(payload)
-    if options.part == 1 and session_id and not is_subagent:
+    if options.part == 1 and session_id and not for_subagent:
         forget_baseline(session_id)
     sections = (
-        rule_sections_for(payload.get("agent_type")) if is_subagent else ALL_SECTIONS
+        rule_sections_for(payload.get("agent_type")) if for_subagent else ALL_SECTIONS
     )
     if not sections:
         return None
