@@ -7,7 +7,7 @@
 
 import glob
 import os
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import NamedTuple
 
@@ -112,10 +112,12 @@ def subagent_model(transcript_path: str | None, agent_id: str) -> Model | None:
 
 
 def caller_model(
-    transcript_path: str | None, agent_id: str | None, main: Model | None
+    transcript_path: str | None,
+    agent_id: str | None,
+    main: Callable[[], Model | None],
 ) -> Model | None:
     if agent_id is None:
-        return main
+        return main()
     return subagent_model(transcript_path, agent_id)
 
 
@@ -183,11 +185,14 @@ def cap_decision(payload: JsonObject) -> PreToolUseDecision | None:
     tool_input = dict_or_empty(payload.get("tool_input"))
     transcript_path = transcript_path_of(payload)
     agent_id = text_or_none(payload.get("agent_id"))
-    main = main_model(transcript_path)
-    caller = caller_model(transcript_path, agent_id, main)
     if payload.get("tool_name") in AGENT_TOOLS:
         config = subagent_config(Path(cwd_of(payload)), Path.home(), os.environ)
+        caller = caller_model(
+            transcript_path, agent_id, lambda: main_model(transcript_path)
+        )
         return agent_decision(tool_input, caller, config)
+    main = main_model(transcript_path)
+    caller = caller_model(transcript_path, agent_id, lambda: main)
     return session_decision(tool_input, main, caller)
 
 
