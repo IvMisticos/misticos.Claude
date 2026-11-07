@@ -8,6 +8,7 @@ from gh_requests import GhRequest, PrCommand, RestRequest, gh_request
 ANY_SEGMENT = "*"
 WRITE_METHODS = frozenset({"POST", "PUT", "PATCH"})
 DELETE_METHOD = frozenset({"DELETE"})
+WEB_FLAG = "web"
 UNCHECKED_FLAGS = frozenset({"help", "attach"})
 
 
@@ -62,7 +63,12 @@ class PullRequestWrite(NamedTuple):
 
 
 PULL_REQUEST_WRITES = (
-    PullRequestWrite("create_pull_request", PrCommandForm(CREATE_SUBCOMMANDS)),
+    PullRequestWrite(
+        "create_pull_request",
+        PrCommandForm(
+            CREATE_SUBCOMMANDS, absent_flags=frozenset({"dry-run", WEB_FLAG})
+        ),
+    ),
     PullRequestWrite("create_pull_request", RestForm(WRITE_METHODS, "pulls")),
     PullRequestWrite(
         "update_pull_request",
@@ -143,16 +149,26 @@ PULL_REQUEST_WRITES = (
     ),
     PullRequestWrite(
         "update_issue_comment",
-        PrCommandForm(frozenset({"comment"}), any_flag=frozenset({"create-if-none"})),
+        PrCommandForm(
+            frozenset({"comment"}),
+            any_flag=frozenset({"create-if-none"}),
+            absent_flags=frozenset({WEB_FLAG}),
+        ),
         alternative_tool="add_issue_comment",
     ),
     PullRequestWrite(
         "update_issue_comment",
-        PrCommandForm(frozenset({"comment"}), any_flag=frozenset({"edit-last"})),
+        PrCommandForm(
+            frozenset({"comment"}),
+            any_flag=frozenset({"edit-last"}),
+            absent_flags=frozenset({WEB_FLAG}),
+        ),
     ),
     PullRequestWrite(
         "add_issue_comment",
-        PrCommandForm(frozenset({"comment"}), absent_flags=frozenset({"delete-last"})),
+        PrCommandForm(
+            frozenset({"comment"}), absent_flags=frozenset({"delete-last", WEB_FLAG})
+        ),
     ),
 )
 
