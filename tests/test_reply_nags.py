@@ -10,10 +10,11 @@ from conftest import (
 )
 from json_values import JsonObject, JsonValue
 from prose import prose_length
-from reply_history import EventLog, Prompt, Reply, transcript_history
+from reply_history import Prompt, Reply, transcript_history
 
 ROOT = Path(__file__).resolve().parent.parent
 REPLY_NAGS = ROOT / "hooks" / "reply_nags.py"
+STATE_DIR = Path(".claude", "hooks", "data", "misticos.Claude", "reply-nags")
 LONG = "word " * 250
 SHORT = "done"
 WAKE_PROMPTS = [
@@ -40,12 +41,6 @@ WAKE_PROMPTS = [
 )
 def test_counts_prose_outside_code_and_links(text: str, length: int) -> None:
     assert prose_length(text) == length
-
-
-def test_log_starts_at_the_reviewed_prompt() -> None:
-    log = EventLog().with_reply(SHORT).with_prompt().with_reply(SHORT)
-    log = log.with_prompt().starting_at("1")
-    assert [type(item) for item in log.history] == [Prompt, Reply, Prompt]
 
 
 def run_hook(home: Path, payload: JsonObject, *arguments: str) -> JsonValue:
@@ -411,3 +406,16 @@ def test_cursor_nags_about_repeated_updates_after_a_tool(home: Path) -> None:
     cursor(home, "afterAgentResponse", text=SHORT)
     cursor(home, "afterAgentResponse", text=SHORT)
     assert "2 messages in a row" in nag_text(cursor(home, "postToolUse"))
+
+
+def test_cursor_state_stays_bounded_over_many_turns(home: Path) -> None:
+    state_file = home / STATE_DIR / "c1"
+
+    def state_size_after(turns: int) -> int:
+        for _ in range(turns):
+            cursor(home, "beforeSubmitPrompt", prompt="go")
+            cursor(home, "afterAgentResponse", text=SHORT)
+        return state_file.stat().st_size
+
+    size_after_5_turns = state_size_after(5)
+    assert state_size_after(20) < 2 * size_after_5_turns
