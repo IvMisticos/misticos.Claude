@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = ">=3.13"
 resolution-markers = [
     "python_full_version >= '3.14'",
@@ -329,6 +329,7 @@ source = { virtual = "." }
 [package.dev-dependencies]
 dev = [
     { name = "mcp" },
+    { name = "pydantic" },
     { name = "pytest" },
     { name = "ruff" },
     { name = "tomli-w" },
@@ -340,6 +341,7 @@ dev = [
 [package.metadata.requires-dev]
 dev = [
     { name = "mcp", specifier = ">=2" },
+    { name = "pydantic", specifier = ">=2.14.1" },
     { name = "pytest" },
     { name = "ruff", specifier = ">=0.17.0" },
     { name = "tomli-w" },

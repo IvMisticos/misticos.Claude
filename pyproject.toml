@@ -18,6 +18,7 @@ include = ["hooks", "mcp", "tests"]
 [dependency-groups]
 dev = [
     "mcp>=2",
+    "pydantic>=2.14.1",
     "pytest",
     "ruff>=0.17.0",
     "tomli-w",

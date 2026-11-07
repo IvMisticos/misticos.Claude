@@ -1,7 +1,7 @@
 #!/usr/bin/env -S uv run --script
 # /// script
 # requires-python = ">=3.13"
-# dependencies = ["mcp>=2"]
+# dependencies = ["mcp>=2", "pydantic>=2.14.1"]
 # [tool.ty.environment]
 # root = ["."]
 # python = "../.venv"
