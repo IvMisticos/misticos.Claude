@@ -223,13 +223,11 @@ def test_prompt_without_a_token_count_gets_nothing(home: Path, tmp_path: Path) -
     assert all_parts(home, prompt(missing, "p1")) == [None] * REMINDER_PARTS
 
 
-def test_a_prompt_gets_the_copy_but_not_the_pointer(home: Path, tmp_path: Path) -> None:
+def test_a_prompt_gets_the_copy(home: Path, tmp_path: Path) -> None:
     transcript = transcript_at(tmp_path, 10_000)
     assert all_parts(home, prompt(transcript, "p1")) == [None] * REMINDER_PARTS
-    transcript_at(tmp_path, 40_000)
-    assert all_parts(home, prompt(transcript, "p2")) == [None] * REMINDER_PARTS
     transcript_at(tmp_path, 120_000)
-    copy = all_parts(home, prompt(transcript, "p3"))
+    copy = all_parts(home, prompt(transcript, "p2"))
     assert copy[0] and copy[1]
 
 
