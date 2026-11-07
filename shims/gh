@@ -13,7 +13,7 @@ gh=$(real_tool gh)
 
 if guards_pull_request_writes; then
   . "$shim_dir/lib/hook_python.sh"
-  find_hook_python
+  python=$(hook_python)
   "$python" "$shim_dir/../hooks/pull_request_writes.py" "$@"
 fi
 
