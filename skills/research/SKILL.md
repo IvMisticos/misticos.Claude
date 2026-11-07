@@ -35,9 +35,9 @@ Run `scout.js` from this skill's folder with the Workflow tool, through `scriptP
 - `avoid`: a list of sources to avoid,
 - `angles`: a list of `{ name, question, known }`, where `known` lists the URLs an earlier run of the angle already found.
 
-The script returns `findingsByAngle`, `limitedAngles`, and `failedAngles`.
+The script returns `findingsByAngle`, `leftAngles`, and `failedAngles`.
 
-All agents in a turn share one limit on web searches, and it resets each turn. The script stops starting scouts after the first one reaches it. A limited angle is also in `findingsByAngle`, with what it found before it stopped. If any angle is limited, save the notes, tell the user which angles are left, ask them to reply so you can continue, and end your turn. In the next turn, run the limited angles with the URLs from their notes as `known`, and add the new findings to those notes. Go on to step 4 only when no angle is limited.
+All agents in a turn share one limit on web searches, and it resets each turn. The script stops starting scouts after the first one reaches it. An angle is left when it reached the limit or never started. A left angle that started is also in `findingsByAngle`, with what it found before it stopped, and may have no findings. `leftAngles` holds each left angle with `known` set to its earlier URLs plus the URLs found in this run. If any angle is left, save the notes, tell the user which angles are left, ask them to reply so you can continue, and end your turn. In the next turn, pass `leftAngles` as `angles` without changes, and add the new findings to the notes. Go on to step 4 only when no angle is left.
 
 Run a failed angle once more. If it fails again, drop it, and name it in the report's open questions. Never write a note without findings.
 
