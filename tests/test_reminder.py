@@ -178,6 +178,21 @@ def test_growth_sends_a_pointer_then_a_full_copy(home: Path, tmp_path: Path) -> 
     assert len(copy[0]) > len(pointer[0])
 
 
+def test_a_prompt_leaves_the_pointer_to_the_next_tool_batch(
+    home: Path, tmp_path: Path
+) -> None:
+    transcript = transcript_at(tmp_path, 10_000)
+    assert all_parts(home, prompt(transcript, "p1")) == [None] * REMINDER_PARTS
+    transcript_at(tmp_path, 40_000)
+    assert all_parts(home, prompt(transcript, "p2")) == [None] * REMINDER_PARTS
+    transcript_at(tmp_path, 45_000)
+    pointer = all_parts(home, tool_batch(transcript, "p2-batch1"))
+    assert pointer[0] and pointer[1:] == [None] * (REMINDER_PARTS - 1)
+    transcript_at(tmp_path, 60_000)
+    later = all_parts(home, tool_batch(transcript, "p2-batch2"))
+    assert later == [None] * REMINDER_PARTS
+
+
 def test_subagent_growth_gets_nothing(home: Path, tmp_path: Path) -> None:
     transcript = transcript_at(tmp_path, 500_000)
     payload: JsonObject = {**prompt(transcript, "p1"), "agent_id": "a1"}
