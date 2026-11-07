@@ -14,6 +14,7 @@ from conftest import (
 from json_values import JsonObject, JsonValue
 from reminder import REMINDER_PARTS
 from rule_sections import RuleSection
+from transcript import CHARS_PER_TOKEN_ESTIMATE
 
 from agents import AGENTS, Agent
 
@@ -21,6 +22,7 @@ ROOT = Path(__file__).resolve().parent.parent
 REMINDER = ROOT / "hooks" / "reminder.py"
 RULES = ROOT / "INSTRUCTIONS.md"
 CLAUDE_ARGUMENTS = ["--harness", "claude"]
+CURSOR_ARGUMENTS = ["--harness", "cursor"]
 HOOK_CONFIGS = ("claude.json", "codex.json", "cursor.json")
 REMINDER_ARGUMENTS = re.compile(r'" reminder\.py (.*?)(?: --harness \w+)?$')
 
@@ -183,10 +185,33 @@ def test_subagent_growth_gets_nothing(home: Path, tmp_path: Path) -> None:
 
 
 def test_cursor_shape(home: Path) -> None:
-    cursor = ["--harness", "cursor"]
     payload: JsonObject = {"hook_event_name": "sessionStart", "session_id": "c1"}
-    output = reminder(home, 1, payload, cursor)
+    output = reminder(home, 1, payload, CURSOR_ARGUMENTS)
     assert json_at(output, "additional_context")
+
+
+def cursor_tool_use(tool_use_id: str, tokens: int) -> JsonObject:
+    return {
+        "hook_event_name": "postToolUse",
+        "conversation_id": "c1",
+        "tool_use_id": tool_use_id,
+        "tool_output": "x" * tokens * CHARS_PER_TOKEN_ESTIMATE,
+    }
+
+
+def cursor_parts(home: Path, payload: JsonObject) -> list[JsonValue]:
+    return [
+        reminder(home, part, payload, CURSOR_ARGUMENTS)
+        for part in range(1, REMINDER_PARTS + 1)
+    ]
+
+
+def test_cursor_counts_each_tool_output_once(home: Path) -> None:
+    assert cursor_parts(home, cursor_tool_use("t1", 10_000)) == [None] * REMINDER_PARTS
+    assert cursor_parts(home, cursor_tool_use("t2", 20_000)) == [None] * REMINDER_PARTS
+    pointer = cursor_parts(home, cursor_tool_use("t3", 10_000))
+    assert json_at(pointer[0], "additional_context")
+    assert pointer[1:] == [None] * (REMINDER_PARTS - 1)
 
 
 def test_session_start_with_a_non_text_session_id_still_sends_the_rules(

@@ -22,6 +22,8 @@ from json_values import JsonObject
 from plugin_paths import PLUGIN_ROOT
 from reminder_baselines import (
     Action,
+    ContextAdded,
+    ContextTotal,
     claim_action,
     fire_id,
     forget_baseline,
@@ -67,6 +69,18 @@ def message_for_part(
     return messages[part - 1]
 
 
+def measured_context(
+    payload: JsonObject, source: ContextSource
+) -> ContextTotal | ContextAdded | None:
+    if source == ContextSource.PAYLOAD:
+        return ContextAdded(payload_tokens(payload))
+    transcript_path = payload.get("transcript_path")
+    if not (isinstance(transcript_path, str) and transcript_path):
+        return None
+    tokens = context_tokens(transcript_path, source)
+    return None if tokens is None else ContextTotal(tokens)
+
+
 def growth_reminder(rules: Rules, payload: JsonObject, options: Options) -> str | None:
     messages = full_copy_messages(rules, GROWN_PREAMBLE)
     session_id = session_id_of(payload)
@@ -75,18 +89,11 @@ def growth_reminder(rules: Rules, payload: JsonObject, options: Options) -> str 
     fire = fire_id(event_name_of(payload), payload)
     if not fire and options.part > 1:
         return None
+    context = measured_context(payload, options.harness.context_from)
+    if context is None:
+        return None
     can_copy = len(messages) <= REMINDER_PARTS and bool(fire or len(messages) == 1)
-    if options.harness.context_from == ContextSource.PAYLOAD:
-        added = payload_tokens(payload)
-        action = claim_action(session_id, fire, can_copy, added_tokens=added)
-        return message_for_part(action, options.part, messages, rules, payload)
-    transcript_path = payload.get("transcript_path")
-    if not (isinstance(transcript_path, str) and transcript_path):
-        return None
-    tokens = context_tokens(transcript_path, options.harness.context_from)
-    if tokens is None:
-        return None
-    action = claim_action(session_id, fire, can_copy, tokens)
+    action = claim_action(session_id, fire, can_copy, context)
     return message_for_part(action, options.part, messages, rules, payload)
 
 
