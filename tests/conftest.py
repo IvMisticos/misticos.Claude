@@ -176,14 +176,18 @@ def text_at(value: JsonValue, *keys: str) -> str:
     return text
 
 
-def claude_hook_commands(event: str, script: str) -> list[str]:
-    hooks = json.loads((ROOT / "hooks" / "claude.json").read_text())["hooks"]
-    return [
-        hook["command"]
-        for group in hooks[event]
-        for hook in group["hooks"]
-        if script in hook["command"]
-    ]
+def hook_commands(config: str, script: str) -> dict[str, list[str]]:
+    hooks = json.loads((ROOT / "hooks" / config).read_text())["hooks"]
+    commands = {
+        event: [
+            hook["command"]
+            for entry in entries
+            for hook in entry.get("hooks", [entry])
+            if script in hook["command"].split()
+        ]
+        for event, entries in hooks.items()
+    }
+    return {event: found for event, found in commands.items() if found}
 
 
 def plugin_hook_command(script: str) -> str:

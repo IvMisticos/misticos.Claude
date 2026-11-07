@@ -1,5 +1,3 @@
-import json
-import re
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -7,7 +5,9 @@ import pytest
 from conftest import (
     append_json_lines,
     home_environment,
+    hook_commands,
     json_at,
+    plugin_hook_command,
     run_json_hook,
     text_at,
 )
@@ -23,8 +23,6 @@ REMINDER = ROOT / "hooks" / "reminder.py"
 RULES = ROOT / "INSTRUCTIONS.md"
 CLAUDE_ARGUMENTS = ["--harness", "claude"]
 CURSOR_ARGUMENTS = ["--harness", "cursor"]
-HOOK_CONFIGS = ("claude.json", "codex.json", "cursor.json")
-REMINDER_ARGUMENTS = re.compile(r'" reminder\.py (.*?)(?: --harness \w+)?$')
 
 
 def reminder(
@@ -233,23 +231,23 @@ def test_a_prompt_gets_the_copy_but_not_the_pointer(home: Path, tmp_path: Path) 
     assert copy[0] and copy[1]
 
 
-def hook_commands(config: str) -> dict[str, list[str]]:
-    hooks = json.loads((ROOT / "hooks" / config).read_text())["hooks"]
-    return {
-        event: [
-            hook["command"] for entry in entries for hook in entry.get("hooks", [entry])
-        ]
-        for event, entries in hooks.items()
-    }
-
-
-@pytest.mark.parametrize("config", HOOK_CONFIGS)
-def test_every_reminder_event_runs_each_part_once(config: str) -> None:
-    expected = [str(part) for part in range(1, REMINDER_PARTS + 1)]
-    for event, commands in hook_commands(config).items():
-        parts = [
-            match[1]
-            for command in commands
-            if (match := REMINDER_ARGUMENTS.search(command))
-        ]
-        assert parts in ([], expected), event
+@pytest.mark.parametrize(
+    ("config", "run", "harness"),
+    [
+        ("claude.json", plugin_hook_command("reminder.py"), ""),
+        ("codex.json", plugin_hook_command("reminder.py"), " --harness codex"),
+        (
+            "cursor.json",
+            '"${CURSOR_PLUGIN_ROOT}/hooks/run.sh" reminder.py',
+            " --harness cursor",
+        ),
+    ],
+    ids=("claude", "codex", "cursor"),
+)
+def test_every_reminder_event_runs_each_part_once(
+    config: str, run: str, harness: str
+) -> None:
+    expected = [f"{run} {part}{harness}" for part in range(1, REMINDER_PARTS + 1)]
+    runs = hook_commands(config, "reminder.py")
+    assert runs
+    assert runs == dict.fromkeys(runs, expected)

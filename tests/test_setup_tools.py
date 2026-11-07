@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Protocol
 
 import pytest
-from conftest import ROOT, FakeBin, claude_hook_commands, plugin_hook_command
+from conftest import ROOT, FakeBin, hook_commands, plugin_hook_command
 from json_values import JsonObject
 
 HOOKS = ROOT / "hooks"
@@ -128,7 +128,7 @@ def mise_calls_in_projects(calls: list[str]) -> list[str]:
 
 
 def test_tools_hook_runs_every_session() -> None:
-    assert claude_hook_commands("SessionStart", "setup_tools.py") == [
+    assert hook_commands("claude.json", "setup_tools.py")["SessionStart"] == [
         plugin_hook_command("setup_tools.py")
     ]
 
@@ -391,7 +391,8 @@ def test_cloud_session_keeps_an_installed_mise(set_up_tools: SetUpTools) -> None
 
 
 def test_directory_added_hook_runs_on_every_add() -> None:
-    assert claude_hook_commands("DirectoryAdded", "added_directory_tools.py") == [
+    commands = hook_commands("claude.json", "added_directory_tools.py")
+    assert commands["DirectoryAdded"] == [
         plugin_hook_command("added_directory_tools.py")
     ]
 

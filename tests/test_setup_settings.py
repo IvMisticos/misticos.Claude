@@ -10,7 +10,7 @@ import setup_settings
 from conftest import (
     ROOT,
     FakeBin,
-    claude_hook_commands,
+    hook_commands,
     json_at,
     plugin_hook_command,
     without_session_variables,
@@ -161,7 +161,7 @@ def test_malformed_settings_fail_the_hook_once_and_stay_untouched(
 
 
 def test_settings_hook_runs_every_session() -> None:
-    assert claude_hook_commands("SessionStart", "setup_settings.py") == [
+    assert hook_commands("claude.json", "setup_settings.py")["SessionStart"] == [
         plugin_hook_command("setup_settings.py")
     ]
 
