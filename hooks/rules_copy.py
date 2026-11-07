@@ -44,8 +44,7 @@ class Rules(NamedTuple):
 
 
 def rules_at(path: str, model_names: dict[str, str]) -> Rules:
-    expanded = os.path.expanduser(path)
-    return Rules(expanded, os.path.basename(expanded), model_names)
+    return Rules(path, os.path.basename(path), model_names)
 
 
 def with_model_names(text: str, model_names: dict[str, str]) -> str:
