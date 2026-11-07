@@ -14,7 +14,7 @@ from lsp_types import (
     ResponseError,
 )
 from open_documents import Document, OpenDocuments
-from text_positions import lsp_position, to_uri
+from text_positions import lsp_position
 
 QUIET_SECONDS_BEFORE_READY = 2.0
 MAX_STARTUP_SECONDS = 90.0
@@ -82,9 +82,9 @@ class LanguageServer:
             "initialize",
             {
                 "processId": os.getpid(),
-                "rootUri": to_uri(self.root),
+                "rootUri": self.root.as_uri(),
                 "workspaceFolders": [
-                    {"uri": to_uri(self.root), "name": self.root.name}
+                    {"uri": self.root.as_uri(), "name": self.root.name}
                 ],
                 "capabilities": {
                     "window": {"workDoneProgress": True},
@@ -224,7 +224,7 @@ class LanguageServer:
         extra: dict[str, LSPAny] | None = None,
     ) -> LSPAny:
         position = lsp_position(document.text, line, column)
-        params = {"textDocument": {"uri": to_uri(document.path)}, "position": position}
+        params = {"textDocument": {"uri": document.path.as_uri()}, "position": position}
         params.update(extra or {})
         return await self.ask_about(document, method, params)
 

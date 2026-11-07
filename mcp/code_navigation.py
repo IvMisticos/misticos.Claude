@@ -25,7 +25,6 @@ from result_formatting import (
     workspace_symbols_text,
 )
 from server_registry import server_for, stop_all_servers
-from text_positions import to_uri
 from workspace_edits import apply_workspace_edit
 
 type ServerFor = Callable[[Path], Awaitable[LanguageServer]]
@@ -47,7 +46,7 @@ def resolved(file: str) -> Path:
 async def about_document(
     method: str, document: Document, server: LanguageServer
 ) -> LSPAny:
-    params = {"textDocument": {"uri": to_uri(document.path)}}
+    params = {"textDocument": {"uri": document.path.as_uri()}}
     return await server.ask_about(document, method, params)
 
 

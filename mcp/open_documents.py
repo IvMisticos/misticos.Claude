@@ -3,7 +3,6 @@ from pathlib import Path
 from typing import NamedTuple
 
 from lsp_types import LSPAny
-from text_positions import to_uri
 
 FIRST_VERSION = 1
 
@@ -32,7 +31,7 @@ class OpenDocuments:
         self.opened: dict[str, OpenedDocument] = {}
 
     def open(self, document: Document) -> None:
-        uri = to_uri(document.path)
+        uri = document.path.as_uri()
         opened = self.opened.get(uri)
         if opened is None:
             language_id = self.language_ids[document.path.suffix]
