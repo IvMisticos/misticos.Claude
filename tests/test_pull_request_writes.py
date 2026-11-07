@@ -114,6 +114,7 @@ def test_denies_pull_request_writes_through_rest(
         (["-Ro/r", "pr", "merge", "1"], "merge_pull_request"),
         (["pr", "--body", "x", "merge", "1"], "merge_pull_request"),
         (["pr", "", "merge", "1"], "merge_pull_request"),
+        (["pr", "-", "merge", "1"], "merge_pull_request"),
         (["pr", "create", "--web=false"], "create_pull_request"),
         (["pr", "edit", "1", "--title=x"], "update_pull_request"),
         (["pr", "edit", "1", "-tx"], "update_pull_request"),

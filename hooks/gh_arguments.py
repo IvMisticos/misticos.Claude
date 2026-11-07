@@ -5,6 +5,7 @@ OPTIONS_END = "--"
 PR_COMMAND = "pr"
 API_COMMAND = "api"
 CREATE_SUBCOMMANDS = frozenset({"create", "new"})
+SKIPPED_COMMAND_WORDS = frozenset({"", "-"})
 FALSE_WORDS = frozenset({"0", "f", "F", "false", "FALSE", "False"})
 
 
@@ -256,7 +257,7 @@ def command_positions(words: Sequence[str]) -> list[Positional]:
     for parsed in parsed_words(words, UNLISTED_COMMAND_FLAGS):
         if isinstance(parsed, OptionsEnd):
             break
-        if not isinstance(parsed, Positional) or not parsed.word:
+        if not isinstance(parsed, Positional) or parsed.word in SKIPPED_COMMAND_WORDS:
             continue
         found.append(parsed)
         if found[0].word != PR_COMMAND or len(found) == 2:
