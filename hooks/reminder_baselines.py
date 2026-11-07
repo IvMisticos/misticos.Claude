@@ -33,6 +33,14 @@ class Baselines(NamedTuple):
     seen: int = 0
 
 
+class ContextTotal(NamedTuple):
+    tokens: int
+
+
+class ContextAdded(NamedTuple):
+    tokens: int
+
+
 def fire_id(event: str, payload: JsonObject) -> str:
     calls = payload.get("tool_calls")
     calls = calls if isinstance(calls, list) else []
@@ -79,19 +87,25 @@ def action_for_fire(
     return next_action(baselines, fire, tokens, can_copy)
 
 
+def tokens_now(
+    stored: Baselines | None, fire: str, context: ContextTotal | ContextAdded
+) -> int:
+    if isinstance(context, ContextTotal) or stored is None:
+        return context.tokens
+    if fire and stored.fire == fire:
+        return stored.seen
+    return stored.seen + context.tokens
+
+
 def claim_action(
     session_id: str,
     fire: str,
     can_copy: bool,
-    tokens: int | None = None,
-    added_tokens: int = 0,
+    context: ContextTotal | ContextAdded,
 ) -> Action:
     with locked_session_file(BASELINE_DIR, session_id) as baseline_file:
         stored = parsed_record(Baselines, read_json(baseline_file))
-        if tokens is None:
-            already_this_fire = stored is not None and fire and stored.fire == fire
-            seen = stored.seen if stored else 0
-            tokens = seen if already_this_fire else seen + added_tokens
+        tokens = tokens_now(stored, fire, context)
         action, baselines = action_for_fire(stored, fire, tokens, can_copy)
         write_json(baseline_file, copy.replace(baselines, seen=tokens)._asdict())
         return action
