@@ -74,8 +74,12 @@ def prompt(transcript: Path, prompt_id: str) -> JsonObject:
     }
 
 
-def tool_batch(transcript: Path, prompt_id: str) -> JsonObject:
-    return {**prompt(transcript, prompt_id), "hook_event_name": "PostToolBatch"}
+def tool_batch(transcript: Path, prompt_id: str, tool_use_id: str) -> JsonObject:
+    return {
+        **prompt(transcript, prompt_id),
+        "hook_event_name": "PostToolBatch",
+        "tool_calls": [{"tool_use_id": tool_use_id}],
+    }
 
 
 def rule_headings() -> list[str]:
@@ -152,12 +156,12 @@ def test_growth_sends_a_pointer_then_a_full_copy(home: Path, tmp_path: Path) -> 
     transcript = transcript_at(tmp_path, 10_000)
     assert all_parts(home, prompt(transcript, "p1")) == [None] * REMINDER_PARTS
     transcript_at(tmp_path, 40_000)
-    pointer = all_parts(home, tool_batch(transcript, "p2"))
+    pointer = all_parts(home, tool_batch(transcript, "p1", "u1"))
     assert pointer[0] and pointer[1:] == [None] * (REMINDER_PARTS - 1)
     transcript_at(tmp_path, 45_000)
-    assert all_parts(home, prompt(transcript, "p3")) == [None] * REMINDER_PARTS
+    assert all_parts(home, prompt(transcript, "p2")) == [None] * REMINDER_PARTS
     transcript_at(tmp_path, 120_000)
-    copy = all_parts(home, prompt(transcript, "p4"))
+    copy = all_parts(home, prompt(transcript, "p3"))
     assert copy[0] and copy[1]
     assert len(copy[0]) > len(pointer[0])
 
@@ -170,10 +174,10 @@ def test_a_prompt_leaves_the_pointer_to_the_next_tool_batch(
     transcript_at(tmp_path, 40_000)
     assert all_parts(home, prompt(transcript, "p2")) == [None] * REMINDER_PARTS
     transcript_at(tmp_path, 45_000)
-    pointer = all_parts(home, tool_batch(transcript, "p2-batch1"))
+    pointer = all_parts(home, tool_batch(transcript, "p2", "u1"))
     assert pointer[0] and pointer[1:] == [None] * (REMINDER_PARTS - 1)
     transcript_at(tmp_path, 60_000)
-    later = all_parts(home, tool_batch(transcript, "p2-batch2"))
+    later = all_parts(home, tool_batch(transcript, "p2", "u2"))
     assert later == [None] * REMINDER_PARTS
 
 
