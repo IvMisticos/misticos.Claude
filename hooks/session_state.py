@@ -5,10 +5,11 @@ import os
 import re
 import sys
 import time
+import types
 import typing
 from collections.abc import Callable, Generator
 from enum import Enum
-from typing import Protocol, TextIO
+from typing import Protocol, TextIO, TypeIs
 
 from json_values import JsonValue
 
@@ -75,8 +76,25 @@ def write_json(state_file: TextIO, value: object) -> None:
     json.dump(value, state_file)
 
 
+def is_record_type(field_type: object) -> TypeIs[type[Record]]:
+    return (
+        isinstance(field_type, type)
+        and issubclass(field_type, tuple)
+        and hasattr(field_type, "_fields")
+    )
+
+
+def parsed_union_member(members: tuple[object, ...], stored: JsonValue) -> object:
+    for member in members:
+        with contextlib.suppress(ValueError):
+            return parsed_field(member, stored)
+    raise ValueError(f"stored {stored!r} is none of {members}")
+
+
 def parsed_field(field_type: object, stored: JsonValue) -> object:
     match typing.get_origin(field_type), typing.get_args(field_type):
+        case (types.UnionType, members):
+            return parsed_union_member(members, stored)
         case (builtins.dict, (key_type, value_type)) if isinstance(stored, dict):
             return {
                 parsed_field(key_type, key): parsed_field(value_type, value)
@@ -90,6 +108,10 @@ def parsed_field(field_type: object, stored: JsonValue) -> object:
             field_type, Enum
         ):
             return field_type(stored)
+        case (None, ()) if is_record_type(field_type) and isinstance(stored, list):
+            field_types = typing.get_type_hints(field_type).values()
+            fields = zip(field_types, stored, strict=True)
+            return field_type(*(parsed_field(type_, value) for type_, value in fields))
         case (None, ()) if type(stored) is field_type:
             return stored
     raise ValueError(f"stored {stored!r} is not a {field_type}")
