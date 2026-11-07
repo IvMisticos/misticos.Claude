@@ -76,14 +76,15 @@ def tool_batch(transcript: Path, prompt_id: str) -> JsonObject:
     return {**prompt(transcript, prompt_id), "hook_event_name": "PostToolBatch"}
 
 
+def rule_headings() -> list[str]:
+    return [line for line in RULES.read_text().splitlines() if line.startswith("# ")]
+
+
 def test_session_start_sends_the_whole_file_in_parts(home: Path) -> None:
     parts = all_parts(home, {"hook_event_name": "SessionStart", "session_id": "s1"})
     sent = [part for part in parts if part]
-    headings = [
-        line for line in RULES.read_text().splitlines() if line.startswith("# ")
-    ]
     assert len(sent) > 1
-    assert all(heading in "".join(sent) for heading in headings)
+    assert all(heading in "".join(sent) for heading in rule_headings())
     assert all(len(part) <= 10_000 for part in sent)
 
 
@@ -94,10 +95,6 @@ def test_a_main_session_of_a_skipped_type_gets_the_file(home: Path) -> None:
         "agent_type": "misticos:scout",
     }
     assert context(reminder(home, 1, payload))
-
-
-def rule_headings() -> list[str]:
-    return [line for line in RULES.read_text().splitlines() if line.startswith("# ")]
 
 
 def subagent_rules(home: Path, agent_type: str) -> str:
@@ -117,10 +114,7 @@ def test_agents_get_only_their_sections(home: Path, agent: Agent) -> None:
 
 
 def test_rule_sections_match_headings() -> None:
-    headings = [
-        line for line in RULES.read_text().splitlines() if line.startswith("# ")
-    ]
-    assert [f"# {section}" for section in RuleSection] == headings
+    assert [f"# {section}" for section in RuleSection] == rule_headings()
 
 
 def test_agents_name_real_agent_files() -> None:
