@@ -110,9 +110,11 @@ def subagent_model(transcript_path: str | None, agent_id: str) -> Model | None:
     return latest_model(own_transcript, include_sidechains=True)
 
 
-def caller_model(transcript_path: str | None, agent_id: str | None) -> Model | None:
+def caller_model(
+    transcript_path: str | None, agent_id: str | None, main: Model | None
+) -> Model | None:
     if agent_id is None:
-        return main_model(transcript_path)
+        return main
     return subagent_model(transcript_path, agent_id)
 
 
@@ -153,7 +155,7 @@ def agent_model_decision(
     if call.requested_model and claude_alias(pinned) is None:
         return requested_model_decision(call, caller)
     setting = definition or config.default_model or INHERIT
-    wanted = pinned or setting_model(setting, caller)
+    wanted = setting_model(setting, caller)
     return wanted_model_decision(call.tool_input, wanted, caller)
 
 
@@ -180,12 +182,11 @@ def cap_decision(payload: JsonObject) -> PreToolUseDecision | None:
     tool_input = dict_or_empty(payload.get("tool_input"))
     transcript_path = transcript_path_of(payload)
     agent_id = text_or_none(payload.get("agent_id"))
+    main = main_model(transcript_path)
+    caller = caller_model(transcript_path, agent_id, main)
     if payload.get("tool_name") in AGENT_TOOLS:
         config = subagent_config(Path(cwd_of(payload)), Path.home(), os.environ)
-        caller = caller_model(transcript_path, agent_id)
         return agent_decision(tool_input, caller, config)
-    main = main_model(transcript_path)
-    caller = main if agent_id is None else subagent_model(transcript_path, agent_id)
     return session_decision(tool_input, main, caller)
 
 
