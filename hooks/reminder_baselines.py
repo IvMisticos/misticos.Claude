@@ -33,6 +33,14 @@ class Baselines(NamedTuple):
     seen: int = 0
 
 
+class ContextTotal(NamedTuple):
+    tokens: int
+
+
+class ContextAdded(NamedTuple):
+    tokens: int
+
+
 def fire_id(event: str, payload: JsonObject) -> str:
     calls = payload.get("tool_calls")
     calls = calls if isinstance(calls, list) else []
@@ -59,40 +67,62 @@ def context_shrank(baselines: Baselines, tokens: int) -> bool:
 
 
 def next_action(
-    baselines: Baselines | None, fire: str, tokens: int, can_copy: bool
+    baselines: Baselines | None,
+    fire: str,
+    tokens: int,
+    *,
+    can_copy: bool,
+    can_point: bool,
 ) -> tuple[Action, Baselines]:
     if baselines is None or context_shrank(baselines, tokens):
         return Action.IDLE, Baselines(tokens, tokens, fire, Action.IDLE)
-    if can_copy and tokens - baselines.copied_at >= FULL_COPY_EVERY_TOKENS:
+    copy_due = tokens - baselines.copied_at >= FULL_COPY_EVERY_TOKENS
+    if can_copy and copy_due:
         return Action.COPY, Baselines(tokens, tokens, fire, Action.COPY)
-    if tokens - baselines.pointed_at >= POINTER_EVERY_TOKENS:
+    pointer_due = tokens - baselines.pointed_at >= POINTER_EVERY_TOKENS
+    if can_point and pointer_due:
         pointed = Baselines(tokens, baselines.copied_at, fire, Action.POINTER)
         return Action.POINTER, pointed
     return Action.IDLE, copy.replace(baselines, fire=fire, action=Action.IDLE)
 
 
 def action_for_fire(
-    baselines: Baselines | None, fire: str, tokens: int, can_copy: bool
+    baselines: Baselines | None,
+    fire: str,
+    tokens: int,
+    *,
+    can_copy: bool,
+    can_point: bool,
 ) -> tuple[Action, Baselines]:
     if baselines is not None and fire and baselines.fire == fire:
         return baselines.action, baselines
-    return next_action(baselines, fire, tokens, can_copy)
+    return next_action(baselines, fire, tokens, can_copy=can_copy, can_point=can_point)
+
+
+def tokens_now(
+    stored: Baselines | None, fire: str, context: ContextTotal | ContextAdded
+) -> int:
+    if isinstance(context, ContextTotal) or stored is None:
+        return context.tokens
+    if fire and stored.fire == fire:
+        return stored.seen
+    return stored.seen + context.tokens
 
 
 def claim_action(
     session_id: str,
     fire: str,
+    context: ContextTotal | ContextAdded,
+    *,
     can_copy: bool,
-    tokens: int | None = None,
-    added_tokens: int = 0,
+    can_point: bool,
 ) -> Action:
     with locked_session_file(BASELINE_DIR, session_id) as baseline_file:
         stored = parsed_record(Baselines, read_json(baseline_file))
-        if tokens is None:
-            already_this_fire = stored is not None and fire and stored.fire == fire
-            seen = stored.seen if stored else 0
-            tokens = seen if already_this_fire else seen + added_tokens
-        action, baselines = action_for_fire(stored, fire, tokens, can_copy)
+        tokens = tokens_now(stored, fire, context)
+        action, baselines = action_for_fire(
+            stored, fire, tokens, can_copy=can_copy, can_point=can_point
+        )
         write_json(baseline_file, copy.replace(baselines, seen=tokens)._asdict())
         return action
 
