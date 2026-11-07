@@ -1,10 +1,9 @@
-import copy
 import json
 from pathlib import Path
 
 import pytest
 from claude_agents import AgentFolder
-from claude_model_cap import SubagentConfig, agent_decision, cap_decision
+from claude_model_cap import agent_decision, cap_decision
 from json_values import JsonObject, JsonValue
 from model_cap import parsed_model
 
@@ -19,8 +18,8 @@ SESSION_CALL: JsonObject = {
 }
 
 
-@pytest.fixture
-def isolated_environment(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.fixture(autouse=True)
+def isolated_agent_lookup(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     (tmp_path / ".git").mkdir()
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
     monkeypatch.delenv("CLAUDE_CODE_SUBAGENT_MODEL", raising=False)
@@ -32,29 +31,18 @@ def write_definition(folder: Path, name: str, model: str) -> None:
 
 
 @pytest.fixture
-def project_agents(tmp_path: Path) -> Path:
-    folder = tmp_path / "project"
+def agents(tmp_path: Path) -> AgentFolder:
+    folder = tmp_path / "agents"
     folder.mkdir()
-    return folder
-
-
-@pytest.fixture
-def config(tmp_path: Path, project_agents: Path) -> SubagentConfig:
-    plugin_agents = tmp_path / "plugin"
-    plugin_agents.mkdir()
     for name, model in PLUGIN_PINS.items():
-        write_definition(plugin_agents, name, model)
-    folders = [
-        AgentFolder(project_agents, "**/*.md"),
-        AgentFolder(plugin_agents, "*.md", "misticos:"),
-    ]
-    return SubagentConfig(folders, default_model=None, model_forced=False)
+        write_definition(folder, name, model)
+    return AgentFolder(folder, "*.md", "misticos:")
 
 
 def decided_model(
-    tool_input: JsonObject, caller: str | None, config: SubagentConfig
+    tool_input: JsonObject, caller: str | None, agents: AgentFolder
 ) -> JsonValue:
-    decision = agent_decision(tool_input, parsed_model(caller), config)
+    decision = agent_decision(tool_input, [agents], parsed_model(caller))
     return decision["updatedInput"]["model"] if decision else None
 
 
@@ -73,57 +61,53 @@ def decided_model(
     ],
 )
 def test_decides_the_agent_model(
-    config: SubagentConfig,
+    agents: AgentFolder,
     tool_input: JsonObject,
     caller: str | None,
     decided: str | None,
 ) -> None:
-    assert decided_model(tool_input, caller, config) == decided
+    assert decided_model(tool_input, caller, agents) == decided
 
 
 def test_requested_model_is_capped_when_the_definition_has_no_tier(
-    config: SubagentConfig, project_agents: Path
+    agents: AgentFolder,
 ) -> None:
-    write_definition(project_agents, "x", "Inherit")
-    worker: JsonObject = {"subagent_type": "x", "model": "opus", "prompt": "build"}
-    assert decided_model(worker, "claude-sonnet-5-5", config) == "sonnet"
+    write_definition(agents.path, "x", "Inherit")
+    worker: JsonObject = {"subagent_type": "misticos:x", "model": "opus"}
+    assert decided_model(worker, "claude-sonnet-5-5", agents) == "sonnet"
 
 
-@pytest.mark.parametrize(
-    ("default_model", "caller", "decided"),
-    [
-        pytest.param("haiku", "claude-opus-5-5", "haiku", id="below-the-caller"),
-        pytest.param("opus", "claude-sonnet-5-5", "sonnet", id="capped"),
-    ],
-)
 def test_default_subagent_model_applies_to_unpinned_agents(
-    config: SubagentConfig, default_model: str, caller: str, decided: str
+    agents: AgentFolder, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    with_default = copy.replace(config, default_model=default_model)
-    assert decided_model(WORKER, caller, with_default) == decided
+    monkeypatch.setenv("CLAUDE_CODE_SUBAGENT_MODEL", "haiku")
+    assert decided_model(WORKER, "claude-opus-5-5", agents) == "haiku"
 
 
-def test_forced_model_above_the_caller_is_denied(config: SubagentConfig) -> None:
-    forced = copy.replace(config, default_model="opus", model_forced=True)
-    decision = agent_decision(SCOUT, parsed_model("claude-sonnet-5-5"), forced)
-    assert decision is not None
-    assert decision["permissionDecision"] == "deny"
-    assert decision["permissionDecisionReason"] == (
-        "With CLAUDE_CODE_SUBAGENT_MODEL_FORCE set, every subagent runs on opus, "
-        "above your claude-sonnet-5-5. Do the work yourself."
-    )
+def test_forced_model_above_the_caller_is_denied(
+    agents: AgentFolder, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("CLAUDE_CODE_SUBAGENT_MODEL", "opus")
+    monkeypatch.setenv("CLAUDE_CODE_SUBAGENT_MODEL_FORCE", "1")
+    decision = agent_decision(SCOUT, [agents], parsed_model("claude-sonnet-5-5"))
+    assert decision == {
+        "permissionDecision": "deny",
+        "permissionDecisionReason": (
+            "With CLAUDE_CODE_SUBAGENT_MODEL_FORCE set, every subagent runs on "
+            "opus, above your claude-sonnet-5-5. Do the work yourself."
+        ),
+    }
 
 
 @pytest.mark.parametrize("tool_input", [SCOUT, WORKER], ids=["pinned", "unpinned"])
 def test_requested_effort_is_dropped(
-    config: SubagentConfig, tool_input: JsonObject
+    agents: AgentFolder, tool_input: JsonObject
 ) -> None:
-    decision = agent_decision({**tool_input, "effort": "max"}, None, config)
+    decision = agent_decision({**tool_input, "effort": "max"}, [agents], None)
     assert decision is not None
     assert "effort" not in decision["updatedInput"]
 
 
-@pytest.mark.usefixtures("isolated_environment")
 @pytest.mark.parametrize(
     "transcript_field",
     [pytest.param({}, id="missing"), pytest.param({"transcript_path": 5}, id="number")],

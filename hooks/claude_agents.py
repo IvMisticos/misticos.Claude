@@ -16,11 +16,6 @@ class AgentFolder(NamedTuple):
     name_prefix: str = ""
 
 
-class AgentDefinition(NamedTuple):
-    name: str
-    model: str | None
-
-
 PLUGIN_AGENTS = AgentFolder(PLUGIN_ROOT / "agents", "*.md", f"{PLUGIN_NAME}:")
 
 
@@ -45,24 +40,26 @@ def frontmatter_fields(text: str) -> dict[str, str]:
     return fields
 
 
-def agent_folders(cwd: Path, home: Path) -> list[AgentFolder]:
+def agent_folders(cwd: Path) -> list[AgentFolder]:
     agents = Path(".claude", "agents")
-    folders = config_folders(cwd, agents, home / agents)
+    folders = config_folders(cwd, agents, Path.home() / agents)
     return [*(AgentFolder(folder, "**/*.md") for folder in folders), PLUGIN_AGENTS]
 
 
-def agent_definitions(folders: Iterable[AgentFolder]) -> Iterator[AgentDefinition]:
+def agent_definitions(
+    folders: Iterable[AgentFolder],
+) -> Iterator[tuple[str, dict[str, str]]]:
     for folder in folders:
         for path in sorted(folder.path.glob(folder.pattern)):
             fields = frontmatter_fields(definition_text(path))
-            name = folder.name_prefix + fields.get("name", "")
-            yield AgentDefinition(name, fields.get("model"))
+            yield folder.name_prefix + fields.get("name", ""), fields
 
 
-def definition_model(subagent_type: str, folders: Iterable[AgentFolder]) -> str | None:
-    models = (
-        definition.model
-        for definition in agent_definitions(folders)
-        if definition.name == subagent_type
-    )
-    return next(models, None)
+def definition_model(
+    subagent_type: str | None, folders: Iterable[AgentFolder]
+) -> str | None:
+    if not subagent_type:
+        return None
+    definitions = agent_definitions(folders)
+    named = (fields for name, fields in definitions if name == subagent_type)
+    return next(named, {}).get("model")
