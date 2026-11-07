@@ -1,3 +1,5 @@
+import json
+import re
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -10,6 +12,7 @@ from conftest import (
     text_at,
 )
 from json_values import JsonObject, JsonValue
+from reminder import REMINDER_PARTS
 from rule_sections import RuleSection
 
 from agents import AGENTS, Agent
@@ -18,7 +21,8 @@ ROOT = Path(__file__).resolve().parent.parent
 REMINDER = ROOT / "hooks" / "reminder.py"
 RULES = ROOT / "INSTRUCTIONS.md"
 CLAUDE_ARGUMENTS = ["--harness", "claude"]
-PARTS = 4
+HOOK_CONFIGS = ("claude.json", "codex.json", "cursor.json")
+REMINDER_ARGUMENTS = re.compile(r'" reminder\.py (.*?)(?: --harness \w+)?$')
 
 
 def reminder(
@@ -28,7 +32,7 @@ def reminder(
     arguments: Sequence[str] = CLAUDE_ARGUMENTS,
 ) -> JsonValue:
     return run_json_hook(
-        REMINDER, payload, str(part), str(PARTS), *arguments, env=home_environment(home)
+        REMINDER, payload, str(part), *arguments, env=home_environment(home)
     )
 
 
@@ -43,7 +47,7 @@ def all_parts(
 ) -> list[str | None]:
     return [
         context(reminder(home, part, payload, arguments))
-        for part in range(1, PARTS + 1)
+        for part in range(1, REMINDER_PARTS + 1)
     ]
 
 
@@ -155,17 +159,17 @@ def test_agents_without_sections_get_nothing(
     home: Path, agent: Agent, ids: JsonObject
 ) -> None:
     payload = {"hook_event_name": "SubagentStart", "agent_type": agent.name, **ids}
-    assert all_parts(home, payload) == [None] * PARTS
+    assert all_parts(home, payload) == [None] * REMINDER_PARTS
 
 
 def test_growth_sends_a_pointer_then_a_full_copy(home: Path, tmp_path: Path) -> None:
     transcript = transcript_at(tmp_path, 10_000)
-    assert all_parts(home, prompt(transcript, "p1")) == [None] * PARTS
+    assert all_parts(home, prompt(transcript, "p1")) == [None] * REMINDER_PARTS
     transcript_at(tmp_path, 40_000)
     pointer = all_parts(home, tool_batch(transcript, "p2"))
-    assert pointer[0] and pointer[1:] == [None] * (PARTS - 1)
+    assert pointer[0] and pointer[1:] == [None] * (REMINDER_PARTS - 1)
     transcript_at(tmp_path, 45_000)
-    assert all_parts(home, prompt(transcript, "p3")) == [None] * PARTS
+    assert all_parts(home, prompt(transcript, "p3")) == [None] * REMINDER_PARTS
     transcript_at(tmp_path, 120_000)
     copy = all_parts(home, prompt(transcript, "p4"))
     assert copy[0] and copy[1]
@@ -175,7 +179,7 @@ def test_growth_sends_a_pointer_then_a_full_copy(home: Path, tmp_path: Path) -> 
 def test_subagent_growth_gets_nothing(home: Path, tmp_path: Path) -> None:
     transcript = transcript_at(tmp_path, 500_000)
     payload: JsonObject = {**prompt(transcript, "p1"), "agent_id": "a1"}
-    assert all_parts(home, payload) == [None] * PARTS
+    assert all_parts(home, payload) == [None] * REMINDER_PARTS
 
 
 def test_cursor_shape(home: Path) -> None:
@@ -194,14 +198,36 @@ def test_session_start_with_a_non_text_session_id_still_sends_the_rules(
 
 def test_prompt_without_a_token_count_gets_nothing(home: Path, tmp_path: Path) -> None:
     missing = tmp_path / "missing.jsonl"
-    assert all_parts(home, prompt(missing, "p1")) == [None] * PARTS
+    assert all_parts(home, prompt(missing, "p1")) == [None] * REMINDER_PARTS
 
 
 def test_a_prompt_gets_the_copy_but_not_the_pointer(home: Path, tmp_path: Path) -> None:
     transcript = transcript_at(tmp_path, 10_000)
-    assert all_parts(home, prompt(transcript, "p1")) == [None] * PARTS
+    assert all_parts(home, prompt(transcript, "p1")) == [None] * REMINDER_PARTS
     transcript_at(tmp_path, 40_000)
-    assert all_parts(home, prompt(transcript, "p2")) == [None] * PARTS
+    assert all_parts(home, prompt(transcript, "p2")) == [None] * REMINDER_PARTS
     transcript_at(tmp_path, 120_000)
     copy = all_parts(home, prompt(transcript, "p3"))
     assert copy[0] and copy[1]
+
+
+def hook_commands(config: str) -> dict[str, list[str]]:
+    hooks = json.loads((ROOT / "hooks" / config).read_text())["hooks"]
+    return {
+        event: [
+            hook["command"] for entry in entries for hook in entry.get("hooks", [entry])
+        ]
+        for event, entries in hooks.items()
+    }
+
+
+@pytest.mark.parametrize("config", HOOK_CONFIGS)
+def test_every_reminder_event_runs_each_part_once(config: str) -> None:
+    expected = [str(part) for part in range(1, REMINDER_PARTS + 1)]
+    for event, commands in hook_commands(config).items():
+        parts = [
+            match[1]
+            for command in commands
+            if (match := REMINDER_ARGUMENTS.search(command))
+        ]
+        assert parts in ([], expected), event

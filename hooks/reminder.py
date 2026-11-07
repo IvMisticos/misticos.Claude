@@ -5,11 +5,11 @@
 # root = ["."]
 # ///
 
-import argparse
 import sys
 from collections.abc import Sequence
+from typing import NamedTuple
 
-from harnesses import ContextSource, harness_parser
+from harnesses import ContextSource, Harness, harness_parser
 from hook_io import (
     event_name_of,
     is_subagent,
@@ -39,6 +39,12 @@ from transcript import context_tokens, payload_tokens
 from agents import ALL_SECTIONS, rule_sections_for
 
 RULES_PATH = str(PLUGIN_ROOT / "INSTRUCTIONS.md")
+REMINDER_PARTS = 4
+
+
+class Options(NamedTuple):
+    part: int
+    harness: Harness
 
 
 def is_prompt_event(payload: JsonObject) -> bool:
@@ -61,9 +67,7 @@ def message_for_part(
     return messages[part - 1]
 
 
-def growth_reminder(
-    rules: Rules, payload: JsonObject, options: argparse.Namespace
-) -> str | None:
+def growth_reminder(rules: Rules, payload: JsonObject, options: Options) -> str | None:
     messages = full_copy_messages(rules, GROWN_PREAMBLE)
     session_id = session_id_of(payload)
     if not (messages and session_id):
@@ -71,7 +75,7 @@ def growth_reminder(
     fire = fire_id(event_name_of(payload), payload)
     if not fire and options.part > 1:
         return None
-    can_copy = len(messages) <= options.entries and bool(fire or len(messages) == 1)
+    can_copy = len(messages) <= REMINDER_PARTS and bool(fire or len(messages) == 1)
     if options.harness.context_from == ContextSource.PAYLOAD:
         added = payload_tokens(payload)
         action = claim_action(session_id, fire, can_copy, added_tokens=added)
@@ -91,7 +95,7 @@ def is_subagent_start(payload: JsonObject) -> bool:
 
 
 def session_start_reminder(
-    rules: Rules, payload: JsonObject, options: argparse.Namespace
+    rules: Rules, payload: JsonObject, options: Options
 ) -> str | None:
     is_subagent = is_subagent_start(payload)
     session_id = session_id_of(payload)
@@ -105,14 +109,12 @@ def session_start_reminder(
     messages = full_copy_messages(
         rules, SESSION_START_PREAMBLE, ALL_SECTIONS - sections
     )
-    if len(messages) > options.entries:
+    if len(messages) > REMINDER_PARTS:
         return pointer_reminder(rules) if options.part == 1 else None
     return message_for_part(Action.COPY, options.part, messages, rules, payload)
 
 
-def reminder_for(
-    event: str, payload: JsonObject, options: argparse.Namespace
-) -> str | None:
+def reminder_for(event: str, payload: JsonObject, options: Options) -> str | None:
     rules = rules_at(RULES_PATH, options.harness.model_names)
     if event.lower() in ("sessionstart", "subagentstart"):
         return session_start_reminder(rules, payload, options)
@@ -121,14 +123,11 @@ def reminder_for(
     return growth_reminder(rules, payload, options)
 
 
-def parsed_options(argv: Sequence[str]) -> argparse.Namespace:
+def parsed_options(argv: Sequence[str]) -> Options:
     parser = harness_parser()
-    parser.add_argument("part", type=int, nargs="?", default=1)
-    parser.add_argument("entries", type=int, nargs="?")
-    options = parser.parse_args(argv)
-    if options.entries is None:
-        options.entries = options.part
-    return options
+    parser.add_argument("part", type=int, choices=range(1, REMINDER_PARTS + 1))
+    arguments = parser.parse_args(argv)
+    return Options(arguments.part, arguments.harness)
 
 
 def main() -> None:
