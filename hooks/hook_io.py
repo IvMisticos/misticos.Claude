@@ -11,6 +11,7 @@ from json_values import JsonObject, json_object
 
 
 class HookEvent(StrEnum):
+    SESSION_START = "sessionstart"
     USER_PROMPT_SUBMIT = "userpromptsubmit"
     BEFORE_SUBMIT_PROMPT = "beforesubmitprompt"
     POST_TOOL_USE = "posttooluse"
