@@ -7,10 +7,10 @@ from claude_model_cap import agent_decision, cap_decision
 from json_values import JsonObject, JsonValue
 from model_cap import parsed_model
 
-PLUGIN_PINS = {"scout": "haiku", "engineer": "opus", "coder": "sonnet"}
-SCOUT: JsonObject = {"subagent_type": "misticos:scout", "prompt": "find"}
-ENGINEER: JsonObject = {"subagent_type": "misticos:engineer", "prompt": "build"}
-CODER: JsonObject = {"subagent_type": "misticos:coder", "prompt": "build"}
+HAIKU_AGENT: JsonObject = {"subagent_type": "haiku-agent", "prompt": "find"}
+OPUS_AGENT: JsonObject = {"subagent_type": "opus-agent", "prompt": "build"}
+SONNET_AGENT: JsonObject = {"subagent_type": "sonnet-agent", "prompt": "build"}
+SHIPPED_SCOUT: JsonObject = {"subagent_type": "misticos:scout", "prompt": "find"}
 WORKER: JsonObject = {"subagent_type": "general-purpose", "prompt": "find"}
 SESSION_CALL: JsonObject = {
     "tool_name": "mcp__claude-code-remote__create_session",
@@ -34,9 +34,9 @@ def write_definition(folder: Path, name: str, model: str) -> None:
 def agents(tmp_path: Path) -> AgentFolder:
     folder = tmp_path / "agents"
     folder.mkdir()
-    for name, model in PLUGIN_PINS.items():
-        write_definition(folder, name, model)
-    return AgentFolder(folder, "*.md", "misticos:")
+    for model in ("haiku", "sonnet", "opus"):
+        write_definition(folder, f"{model}-agent", model)
+    return AgentFolder(folder, "*.md")
 
 
 def decided_model(
@@ -49,15 +49,17 @@ def decided_model(
 @pytest.mark.parametrize(
     ("tool_input", "caller", "decided"),
     [
-        pytest.param(SCOUT, "claude-opus-5-5", "haiku", id="pinned-model"),
+        pytest.param(HAIKU_AGENT, "claude-opus-5-5", "haiku", id="pinned-model"),
         pytest.param(
-            {**SCOUT, "model": "opus"}, "claude-opus-5-5", "haiku", id="pin-wins"
+            {**HAIKU_AGENT, "model": "opus"}, "claude-opus-5-5", "haiku", id="pin-wins"
         ),
-        pytest.param(ENGINEER, "claude-sonnet-5-5", "sonnet", id="pin-capped"),
+        pytest.param(OPUS_AGENT, "claude-sonnet-5-5", "sonnet", id="pin-capped"),
         pytest.param(
             {**WORKER, "model": "haiku"}, "claude-opus-5-5", None, id="unpinned"
         ),
-        pytest.param({**CODER, "model": "opus"}, None, "sonnet", id="unknown-caller"),
+        pytest.param(
+            {**SONNET_AGENT, "model": "opus"}, None, "sonnet", id="unknown-caller"
+        ),
     ],
 )
 def test_decides_the_agent_model(
@@ -73,7 +75,7 @@ def test_requested_model_is_capped_when_the_definition_has_no_tier(
     agents: AgentFolder,
 ) -> None:
     write_definition(agents.path, "x", "Inherit")
-    worker: JsonObject = {"subagent_type": "misticos:x", "model": "opus"}
+    worker: JsonObject = {"subagent_type": "x", "model": "opus", "prompt": "build"}
     assert decided_model(worker, "claude-sonnet-5-5", agents) == "sonnet"
 
 
@@ -89,7 +91,7 @@ def test_forced_model_above_the_caller_is_denied(
 ) -> None:
     monkeypatch.setenv("CLAUDE_CODE_SUBAGENT_MODEL", "opus")
     monkeypatch.setenv("CLAUDE_CODE_SUBAGENT_MODEL_FORCE", "1")
-    decision = agent_decision(SCOUT, [agents], parsed_model("claude-sonnet-5-5"))
+    decision = agent_decision(HAIKU_AGENT, [agents], parsed_model("claude-sonnet-5-5"))
     assert decision == {
         "permissionDecision": "deny",
         "permissionDecisionReason": (
@@ -99,7 +101,9 @@ def test_forced_model_above_the_caller_is_denied(
     }
 
 
-@pytest.mark.parametrize("tool_input", [SCOUT, WORKER], ids=["pinned", "unpinned"])
+@pytest.mark.parametrize(
+    "tool_input", [HAIKU_AGENT, WORKER], ids=["pinned", "unpinned"]
+)
 def test_requested_effort_is_dropped(
     agents: AgentFolder, tool_input: JsonObject
 ) -> None:
@@ -112,12 +116,12 @@ def test_requested_effort_is_dropped(
     "transcript_field",
     [pytest.param({}, id="missing"), pytest.param({"transcript_path": 5}, id="number")],
 )
-def test_subagent_without_a_transcript_path_gets_the_pinned_model(
+def test_subagent_without_a_transcript_path_gets_the_shipped_scout_pin(
     tmp_path: Path, transcript_field: JsonObject
 ) -> None:
     payload: JsonObject = {
         "tool_name": "Agent",
-        "tool_input": SCOUT,
+        "tool_input": SHIPPED_SCOUT,
         "agent_id": "a1",
         "cwd": str(tmp_path),
         **transcript_field,
@@ -125,6 +129,19 @@ def test_subagent_without_a_transcript_path_gets_the_pinned_model(
     decision = cap_decision(payload)
     assert decision is not None
     assert decision["updatedInput"]["model"] == "haiku"
+
+
+def test_finds_a_project_agent_in_a_subfolder(tmp_path: Path) -> None:
+    agents = tmp_path / ".claude" / "agents" / "team"
+    agents.mkdir(parents=True)
+    write_definition(agents, "x", "haiku")
+    tool_input: JsonObject = {"subagent_type": "x"}
+    payload: JsonObject = {
+        "tool_name": "Agent",
+        "tool_input": tool_input,
+        "cwd": str(tmp_path),
+    }
+    assert cap_decision(payload) == {"updatedInput": {**tool_input, "model": "haiku"}}
 
 
 def test_reads_the_transcript_only_at_an_absolute_path(
