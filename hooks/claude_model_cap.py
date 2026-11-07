@@ -62,8 +62,14 @@ def caller_model(transcript_path: str | None, agent_id: str | None) -> Model | N
     return latest_model(own_transcript, include_sidechains=True)
 
 
-def wanted_agent_model(definition: str | None, caller: Model | None) -> Model | None:
-    model = definition or os.environ.get(SUBAGENT_MODEL_VARIABLE) or INHERIT
+def wanted_agent_model(
+    definition: str | None, pinned: Model | None, caller: Model | None
+) -> Model | None:
+    if definition == INHERIT:
+        return caller
+    if definition:
+        return pinned
+    model = os.environ.get(SUBAGENT_MODEL_VARIABLE) or INHERIT
     return caller if model == INHERIT else parsed_model(model)
 
 
@@ -78,17 +84,16 @@ def forced_decision(caller: Model | None) -> PreToolUseDecision | None:
 
 
 def requested_model_decision(
-    tool_input: JsonObject, caller: Model | None
+    tool_input: JsonObject, requested: Model | None, caller: Model | None
 ) -> PreToolUseDecision | None:
-    if not outranks(parsed_model(tool_input.get("model")), caller):
+    if not outranks(requested, caller):
         return None
     return with_model(tool_input, claude_alias(caller))
 
 
-def definition_model_decision(
-    tool_input: JsonObject, definition: str | None, caller: Model | None
+def wanted_model_decision(
+    tool_input: JsonObject, wanted_model: Model | None, caller: Model | None
 ) -> PreToolUseDecision | None:
-    wanted_model = wanted_agent_model(definition, caller)
     if claude_alias(wanted_model) is None:
         return None
     capped_model = caller if outranks(wanted_model, caller) else wanted_model
@@ -103,10 +108,12 @@ def agent_model_decision(
         return forced_decision(caller)
     subagent_type = text_or_none(tool_input.get("subagent_type"))
     definition = definition_model(subagent_type, folders)
+    pinned = parsed_model(definition)
     requested = text_or_none(tool_input.get("model"))
-    if requested and claude_alias(parsed_model(definition)) is None:
-        return requested_model_decision(tool_input, caller)
-    return definition_model_decision(tool_input, definition, caller)
+    if requested and claude_alias(pinned) is None:
+        return requested_model_decision(tool_input, parsed_model(requested), caller)
+    wanted = wanted_agent_model(definition, pinned, caller)
+    return wanted_model_decision(tool_input, wanted, caller)
 
 
 def without_effort(tool_input: JsonObject) -> JsonObject:
