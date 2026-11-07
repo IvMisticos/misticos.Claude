@@ -16,15 +16,21 @@ TIERS = (
     Tier("opus", ("opus", "opusplan", "sol")),
     Tier("fable", ("fable", "best", "astra")),
 )
+FAMILY_RANKS = {
+    family: rank for rank, tier in enumerate(TIERS) for family in tier.families
+}
 
 DATE_DIGITS = 8
 
 
 class Model(NamedTuple):
     name: str
-    rank: int
     family: str
     version: tuple[int, ...]
+
+    @property
+    def rank(self) -> int:
+        return FAMILY_RANKS[self.family]
 
 
 def version(name: str) -> tuple[int, ...]:
@@ -37,13 +43,8 @@ def parsed_model(value: JsonValue) -> Model | None:
     if not isinstance(value, str):
         return None
     words = set(re.split(r"[^a-z]+", value.lower()))
-    models = (
-        Model(value, rank, family, version(value))
-        for rank, tier in enumerate(TIERS)
-        for family in tier.families
-        if family in words
-    )
-    return next(models, None)
+    family = next((family for family in FAMILY_RANKS if family in words), None)
+    return Model(value, family, version(value)) if family else None
 
 
 def claude_alias(model: Model | None) -> str | None:
