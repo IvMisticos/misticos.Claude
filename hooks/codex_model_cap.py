@@ -132,7 +132,7 @@ def role_decision(
         return None
     return denied(
         f"The {role_name} role runs on {fixed_model}, above your {caller.name}. "
-        "Spawn with a role at or below your model, or do the work yourself."
+        "Spawn with a role at or below your model."
     )
 
 

@@ -93,8 +93,8 @@ def test_forced_model_above_the_caller_is_denied(
     assert decision == {
         "permissionDecision": "deny",
         "permissionDecisionReason": (
-            "With CLAUDE_CODE_SUBAGENT_MODEL_FORCE set, every subagent runs on "
-            "opus, above your claude-sonnet-5-5. Do the work yourself."
+            "CLAUDE_CODE_SUBAGENT_MODEL_FORCE runs every subagent on opus, "
+            "above your claude-sonnet-5-5. Do the work yourself."
         ),
     }
 

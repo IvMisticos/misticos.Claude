@@ -30,7 +30,7 @@ def test_role_above_the_caller_is_denied(codex: Path) -> None:
     assert denied["permissionDecision"] == "deny"
     assert denied["permissionDecisionReason"] == (
         f"The worker role runs on gpt-5-astra, above your {CALLER}. "
-        "Spawn with a role at or below your model, or do the work yourself."
+        "Spawn with a role at or below your model."
     )
 
 

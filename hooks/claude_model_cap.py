@@ -72,7 +72,7 @@ def forced_decision(caller: Model | None) -> PreToolUseDecision | None:
     if caller is None or not outranks(parsed_model(forced_model), caller):
         return None
     return denied(
-        f"With CLAUDE_CODE_SUBAGENT_MODEL_FORCE set, every subagent runs on "
+        f"CLAUDE_CODE_SUBAGENT_MODEL_FORCE runs every subagent on "
         f"{forced_model}, above your {caller.name}. Do the work yourself."
     )
 
