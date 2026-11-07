@@ -108,6 +108,10 @@ def test_forced_model_above_the_caller_is_denied(config: SubagentConfig) -> None
     decision = agent_decision(SCOUT, parsed_model("claude-sonnet-5-5"), forced)
     assert decision is not None
     assert decision["permissionDecision"] == "deny"
+    assert decision["permissionDecisionReason"] == (
+        "With CLAUDE_CODE_SUBAGENT_MODEL_FORCE set, every subagent runs on opus, "
+        "above your claude-sonnet-5-5. Do the work yourself."
+    )
 
 
 @pytest.mark.parametrize("tool_input", [SCOUT, WORKER], ids=["pinned", "unpinned"])

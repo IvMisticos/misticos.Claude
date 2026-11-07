@@ -29,6 +29,7 @@ from model_cap import (
 )
 
 DEFAULT_ROLE = "default"
+ROLE_REMEDY = "Spawn with a role at or below your model, or do the work yourself."
 
 
 class RoleFile(NamedTuple):
@@ -142,7 +143,7 @@ def role_decision(
     if not spawn.role_applies:
         return None
     fixed_model = parsed_model(role_model(spawn.role, layers))
-    reason = denial_reason(f"The {spawn.role} role", fixed_model, caller)
+    reason = denial_reason(f"The {spawn.role} role", ROLE_REMEDY, fixed_model, caller)
     return denied(reason) if reason else None
 
 

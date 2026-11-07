@@ -51,12 +51,20 @@ def claude_alias(model: Model | None) -> str | None:
     return TIERS[model.rank].claude_alias if model else None
 
 
-def outranks(requested: Model | None, caller: Model | None) -> bool:
+def over_cap(
+    requested: Model | None, caller: Model | None
+) -> tuple[Model, Model] | None:
     if requested is None or caller is None:
-        return False
+        return None
     if requested.family != caller.family:
-        return requested.rank > caller.rank
-    return requested.version > caller.version
+        higher = requested.rank > caller.rank
+    else:
+        higher = requested.version > caller.version
+    return (requested, caller) if higher else None
+
+
+def outranks(requested: Model | None, caller: Model | None) -> bool:
+    return over_cap(requested, caller) is not None
 
 
 def full_name(model: Model) -> str:
@@ -69,20 +77,20 @@ def capped_input(
     caller: Model | None,
     name_of: Callable[[Model], str | None] = full_name,
 ) -> JsonObject | None:
-    if caller is None or not outranks(requested, caller):
+    pair = over_cap(requested, caller)
+    if pair is None:
         return None
-    return {**tool_input, "model": name_of(caller)}
+    return {**tool_input, "model": name_of(pair[1])}
 
 
 def denial_reason(
-    subject: str, model: Model | None, caller: Model | None
+    subject: str, remedy: str, model: Model | None, caller: Model | None
 ) -> str | None:
-    if model is None or caller is None or not outranks(model, caller):
+    pair = over_cap(model, caller)
+    if pair is None:
         return None
-    return (
-        f"{subject} runs on {model.name}, above your {caller.name}. "
-        "Do the work yourself, or use a subagent at or below your model."
-    )
+    capped, limit = pair
+    return f"{subject} runs on {capped.name}, above your {limit.name}. {remedy}"
 
 
 def project_folders(cwd: Path) -> Iterator[Path]:

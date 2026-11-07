@@ -36,6 +36,7 @@ AGENT_TOOLS = ("Agent", "Task")
 SUBAGENT_MODEL_VARIABLE = "CLAUDE_CODE_SUBAGENT_MODEL"
 FORCE_VARIABLE = "CLAUDE_CODE_SUBAGENT_MODEL_FORCE"
 FORCED_SUBAGENTS = f"With {FORCE_VARIABLE} set, every subagent"
+FORCED_REMEDY = "Do the work yourself."
 
 
 class SubagentConfig(NamedTuple):
@@ -144,7 +145,7 @@ def agent_model_decision(
 ) -> PreToolUseDecision | None:
     if config.model_forced:
         forced = parsed_model(config.default_model)
-        reason = denial_reason(FORCED_SUBAGENTS, forced, caller)
+        reason = denial_reason(FORCED_SUBAGENTS, FORCED_REMEDY, forced, caller)
         return denied(reason) if reason else None
     definition = (
         definition_model(call.subagent_type, config.agent_folders)
