@@ -20,28 +20,14 @@ from hook_io import (
     run_pre_tool_use,
 )
 from json_values import JsonObject, dict_or_empty, text_or_none
-from model_cap import (
-    Model,
-    capped_input,
-    config_folders,
-    denial_reason,
-    parsed_model,
-)
+from model_cap import Model, config_folders, outranks, parsed_model
 
 DEFAULT_ROLE = "default"
-ROLE_REMEDY = "Spawn with a role at or below your model, or do the work yourself."
 
 
 class RoleFile(NamedTuple):
     name: str | None
     model: str | None
-
-
-class Spawn(NamedTuple):
-    tool_input: JsonObject
-    role: str
-    role_applies: bool
-    requested_model: str | None
 
 
 class CodexLayer(NamedTuple):
@@ -119,45 +105,50 @@ def default_subagent_model(layers: Iterable[CodexLayer]) -> str | None:
     return next(filter(None, models), None)
 
 
-def role_applies(tool_input: JsonObject, named_role: str) -> bool:
-    is_v2 = "task_name" in tool_input
+def forks_full_history(spawn: JsonObject, is_v2: bool) -> bool:
     if not is_v2:
-        return tool_input.get("fork_context") is not True
-    fork_turns = str(tool_input.get("fork_turns") or "").strip().lower()
-    return bool(named_role) or fork_turns not in ("", "all")
+        return spawn.get("fork_context") is True
+    fork_turns = str(spawn.get("fork_turns") or "").strip().lower()
+    return fork_turns in ("", "all")
 
 
-def parsed_spawn(tool_input: JsonObject) -> Spawn:
-    named_role = str(tool_input.get("agent_type") or "").strip()
-    return Spawn(
-        tool_input,
-        named_role or DEFAULT_ROLE,
-        role_applies(tool_input, named_role),
-        text_or_none(tool_input.get("model")),
-    )
+def applies_role(spawn: JsonObject, named_role: str) -> bool:
+    is_v2 = "task_name" in spawn
+    if not forks_full_history(spawn, is_v2):
+        return True
+    return is_v2 and bool(named_role)
 
 
 def role_decision(
-    spawn: Spawn, layers: list[CodexLayer], caller: Model | None
+    spawn: JsonObject, layers: list[CodexLayer], caller: Model
 ) -> PreToolUseDecision | None:
-    if not spawn.role_applies:
+    named_role = str(spawn.get("agent_type") or "").strip()
+    role_name = named_role or DEFAULT_ROLE
+    fixed_model = (
+        role_model(role_name, layers) if applies_role(spawn, named_role) else None
+    )
+    if not outranks(parsed_model(fixed_model), caller):
         return None
-    fixed_model = parsed_model(role_model(spawn.role, layers))
-    reason = denial_reason(f"The {spawn.role} role", ROLE_REMEDY, fixed_model, caller)
-    return denied(reason) if reason else None
+    return denied(
+        f"The {role_name} role runs on {fixed_model}, above your {caller.name}. "
+        "Spawn with a role at or below your model, or do the work yourself."
+    )
 
 
 def request_decision(
-    spawn: Spawn, layers: list[CodexLayer], caller: Model | None
+    spawn: JsonObject, layers: list[CodexLayer], caller: Model
 ) -> PreToolUseDecision | None:
-    requested_name = spawn.requested_model or default_subagent_model(layers)
-    capped = capped_input(spawn.tool_input, parsed_model(requested_name), caller)
-    return allowed_with(capped) if capped else None
+    requested = text_or_none(spawn.get("model")) or default_subagent_model(layers)
+    if not outranks(parsed_model(requested), caller):
+        return None
+    return allowed_with({**spawn, "model": caller.name})
 
 
 def cap_decision(payload: JsonObject) -> PreToolUseDecision | None:
     caller = parsed_model(payload.get("model"))
-    spawn = parsed_spawn(dict_or_empty(payload.get("tool_input")))
+    if caller is None:
+        return None
+    spawn = dict_or_empty(payload.get("tool_input"))
     layers = codex_layers(cwd_of(payload))
     return role_decision(spawn, layers, caller) or request_decision(
         spawn, layers, caller
