@@ -6,6 +6,8 @@ from gh_arguments import CREATE_SUBCOMMANDS, gh_arguments
 from gh_requests import GhRequest, PrCommand, RestRequest, gh_request
 
 ANY_SEGMENT = "*"
+WRITE_METHODS = frozenset({"POST", "PUT", "PATCH"})
+DELETE_METHOD = frozenset({"DELETE"})
 UNCHECKED_FLAGS = frozenset({"help", "attach"})
 
 
@@ -35,13 +37,13 @@ class PrCommandForm(NamedTuple):
 
 
 class RestForm(NamedTuple):
-    method: str
+    methods: frozenset[str]
     resource: str
     field: str | None = None
     reads_input: bool = False
 
     def matches(self, request: GhRequest) -> bool:
-        if not isinstance(request, RestRequest) or request.method != self.method:
+        if not isinstance(request, RestRequest) or request.method not in self.methods:
             return False
         if not resource_matches(self.resource, request.resource):
             return False
@@ -61,7 +63,7 @@ class PullRequestWrite(NamedTuple):
 
 PULL_REQUEST_WRITES = (
     PullRequestWrite("create_pull_request", PrCommandForm(CREATE_SUBCOMMANDS)),
-    PullRequestWrite("create_pull_request", RestForm("POST", "pulls")),
+    PullRequestWrite("create_pull_request", RestForm(WRITE_METHODS, "pulls")),
     PullRequestWrite(
         "update_pull_request",
         PrCommandForm(
@@ -72,66 +74,72 @@ PULL_REQUEST_WRITES = (
     PullRequestWrite(
         "update_pull_request", PrCommandForm(frozenset({"ready", "close", "reopen"}))
     ),
-    PullRequestWrite("update_pull_request", RestForm("PATCH", "pulls/*")),
+    PullRequestWrite("update_pull_request", RestForm(WRITE_METHODS, "pulls/*")),
     PullRequestWrite(
-        "update_pull_request", RestForm("POST", "pulls/*/requested_reviewers")
+        "update_pull_request", RestForm(WRITE_METHODS, "pulls/*/requested_reviewers")
     ),
     PullRequestWrite(
-        "update_pull_request", RestForm("POST", "pulls/*/ccr/ready_for_review")
+        "update_pull_request", RestForm(WRITE_METHODS, "pulls/*/ccr/ready_for_review")
     ),
     PullRequestWrite(
-        "update_pull_request", RestForm("POST", "pulls/*/ccr/convert_to_draft")
+        "update_pull_request", RestForm(WRITE_METHODS, "pulls/*/ccr/convert_to_draft")
     ),
     PullRequestWrite(
         "enable_pr_auto_merge",
         PrCommandForm(frozenset({"merge"}), any_flag=frozenset({"auto"})),
     ),
-    PullRequestWrite("enable_pr_auto_merge", RestForm("PUT", "pulls/*/ccr/auto_merge")),
+    PullRequestWrite(
+        "enable_pr_auto_merge", RestForm(WRITE_METHODS, "pulls/*/ccr/auto_merge")
+    ),
     PullRequestWrite(
         "disable_pr_auto_merge",
         PrCommandForm(frozenset({"merge"}), any_flag=frozenset({"disable-auto"})),
     ),
     PullRequestWrite(
-        "disable_pr_auto_merge", RestForm("DELETE", "pulls/*/ccr/auto_merge")
+        "disable_pr_auto_merge", RestForm(DELETE_METHOD, "pulls/*/ccr/auto_merge")
     ),
     PullRequestWrite("merge_pull_request", PrCommandForm(frozenset({"merge"}))),
-    PullRequestWrite("merge_pull_request", RestForm("PUT", "pulls/*/merge")),
+    PullRequestWrite("merge_pull_request", RestForm(WRITE_METHODS, "pulls/*/merge")),
     PullRequestWrite(
         "update_pull_request_branch",
         PrCommandForm(frozenset({"update-branch"}), absent_flags=frozenset({"rebase"})),
     ),
     PullRequestWrite(
-        "update_pull_request_branch", RestForm("PUT", "pulls/*/update-branch")
+        "update_pull_request_branch", RestForm(WRITE_METHODS, "pulls/*/update-branch")
     ),
     PullRequestWrite("pull_request_review_write", PrCommandForm(frozenset({"review"}))),
-    PullRequestWrite("pull_request_review_write", RestForm("POST", "pulls/*/reviews")),
     PullRequestWrite(
-        "pull_request_review_write", RestForm("POST", "pulls/*/reviews/*/events")
+        "pull_request_review_write", RestForm(WRITE_METHODS, "pulls/*/reviews")
     ),
     PullRequestWrite(
-        "pull_request_review_write", RestForm("DELETE", "pulls/*/reviews/*")
+        "pull_request_review_write", RestForm(WRITE_METHODS, "pulls/*/reviews/*/events")
+    ),
+    PullRequestWrite(
+        "pull_request_review_write", RestForm(DELETE_METHOD, "pulls/*/reviews/*")
     ),
     PullRequestWrite(
         "add_reply_to_pull_request_comment",
-        RestForm("POST", "pulls/*/comments", field="in_reply_to"),
+        RestForm(WRITE_METHODS, "pulls/*/comments", field="in_reply_to"),
     ),
     PullRequestWrite(
         "add_reply_to_pull_request_comment",
-        RestForm("POST", "pulls/*/comments", reads_input=True),
+        RestForm(WRITE_METHODS, "pulls/*/comments", reads_input=True),
         alternative_tool="add_comment_to_pending_review",
     ),
     PullRequestWrite(
         "add_reply_to_pull_request_comment",
-        RestForm("POST", "pulls/*/comments/*/replies"),
+        RestForm(WRITE_METHODS, "pulls/*/comments/*/replies"),
     ),
     PullRequestWrite(
-        "add_comment_to_pending_review", RestForm("POST", "pulls/*/comments")
+        "add_comment_to_pending_review", RestForm(WRITE_METHODS, "pulls/*/comments")
     ),
     PullRequestWrite(
-        "resolve_review_thread", RestForm("POST", "pulls/*/ccr/comments/*/resolve")
+        "resolve_review_thread",
+        RestForm(WRITE_METHODS, "pulls/*/ccr/comments/*/resolve"),
     ),
     PullRequestWrite(
-        "unresolve_review_thread", RestForm("POST", "pulls/*/ccr/comments/*/unresolve")
+        "unresolve_review_thread",
+        RestForm(WRITE_METHODS, "pulls/*/ccr/comments/*/unresolve"),
     ),
     PullRequestWrite(
         "update_issue_comment",

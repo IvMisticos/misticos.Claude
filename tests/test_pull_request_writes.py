@@ -327,3 +327,39 @@ def test_reads_flags_only_where_gh_reads_them(arguments: list[str]) -> None:
 def test_names_both_tools_when_the_last_comment_may_be_created() -> None:
     arguments = ["pr", "comment", "1", "--edit-last", "--create-if-none", "-b", "x"]
     assert suggested_tools(*arguments) == ["update_issue_comment", "add_issue_comment"]
+
+
+@pytest.mark.parametrize("method", ["POST", "PUT", "PATCH", "patch"])
+@pytest.mark.parametrize(
+    ("endpoint", "tool"),
+    [
+        ("repos/o/r/pulls/1", "update_pull_request"),
+        ("repos/o/r/pulls/1/merge", "merge_pull_request"),
+        ("repos/o/r/pulls/1/update-branch", "update_pull_request_branch"),
+        ("repos/o/r/pulls/1/ccr/auto_merge", "enable_pr_auto_merge"),
+        ("repos/o/r/pulls/1/requested_reviewers", "update_pull_request"),
+        ("repos/o/r/pulls/1/reviews", "pull_request_review_write"),
+    ],
+)
+def test_denies_every_write_method_on_a_write_route(
+    method: str, endpoint: str, tool: str
+) -> None:
+    assert suggested_tools("api", "-X", method, endpoint) == [tool]
+
+
+@pytest.mark.parametrize(
+    ("arguments", "tool"),
+    [
+        (["api", "repos/o/r/pulls/1", "-f", "state=closed"], "update_pull_request"),
+        (
+            ["api", "repos/o/r/pulls/1/merge", "-F", "merge_method=squash"],
+            "merge_pull_request",
+        ),
+        (
+            ["api", "repos/o/r/pulls/1/update-branch", "--input", "-"],
+            "update_pull_request_branch",
+        ),
+    ],
+)
+def test_denies_writes_that_post_by_default(arguments: list[str], tool: str) -> None:
+    assert suggested_tools(*arguments) == [tool]
