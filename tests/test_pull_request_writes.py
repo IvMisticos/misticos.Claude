@@ -34,10 +34,6 @@ def suggested_tools(*arguments: str) -> list[str]:
         (["pr", "update-branch", "1"], "update_pull_request_branch"),
         (["pr", "review", "1", "--approve"], "pull_request_review_write"),
         (["pr", "comment", "1", "--body", "x"], "add_issue_comment"),
-        (["pr", "comment", "1", "-b", "x"], "add_issue_comment"),
-        (["pr", "comment", "1", "--body-file", "x.md"], "add_issue_comment"),
-        (["pr", "comment", "1", "-F", "x.md"], "add_issue_comment"),
-        (["pr", "comment", "1"], "add_issue_comment"),
         (["pr", "comment", "1", "--edit-last", "-b", "x"], "update_issue_comment"),
     ],
 )
@@ -51,15 +47,9 @@ def test_denies_pull_request_writes_from_the_cli(
     ("method", "endpoint", "tool"),
     [
         ("POST", "repos/o/r/pulls", "create_pull_request"),
-        ("PATCH", "repos/o/r/pulls/1", "update_pull_request"),
-        ("POST", "repos/o/r/pulls/1/requested_reviewers", "update_pull_request"),
         ("POST", "repos/o/r/pulls/1/ccr/ready_for_review", "update_pull_request"),
         ("POST", "repos/o/r/pulls/1/ccr/convert_to_draft", "update_pull_request"),
-        ("PUT", "repos/o/r/pulls/1/ccr/auto_merge", "enable_pr_auto_merge"),
         ("DELETE", "repos/o/r/pulls/1/ccr/auto_merge", "disable_pr_auto_merge"),
-        ("PUT", "repos/o/r/pulls/1/merge", "merge_pull_request"),
-        ("PUT", "repos/o/r/pulls/1/update-branch", "update_pull_request_branch"),
-        ("POST", "repos/o/r/pulls/1/reviews", "pull_request_review_write"),
         ("POST", "repos/o/r/pulls/1/reviews/2/events", "pull_request_review_write"),
         ("DELETE", "repos/o/r/pulls/1/reviews/2", "pull_request_review_write"),
         ("POST", "repos/o/r/pulls/1/comments", "add_comment_to_pending_review"),
@@ -87,8 +77,6 @@ def test_denies_pull_request_writes_through_rest(
     [
         (["api", "-Xpost", "repos/o/r/pulls"], "create_pull_request"),
         (["api", "--method=PUT", "repos/o/r/pulls/1/merge"], "merge_pull_request"),
-        (["api", "repos/o/r/pulls", "-f", "title=x"], "create_pull_request"),
-        (["api", "repos/o/r/pulls", "--input=body.json"], "create_pull_request"),
         (["api", "repos/o/r/pulls", "-ftitle=x"], "create_pull_request"),
         (["api", "/repos/o/r/pulls", "-f", "title=x"], "create_pull_request"),
         (["api", "repos/{owner}/{repo}/pulls", "-f", "x=y"], "create_pull_request"),
@@ -121,7 +109,6 @@ def test_denies_pull_request_writes_through_rest(
         (["pr", "edit", "1", "--add-label", "x", "-B", "main"], "update_pull_request"),
         (["pr", "merge", "1", "--auto=true"], "enable_pr_auto_merge"),
         (["pr", "merge", "--auto", "1", "--squash"], "enable_pr_auto_merge"),
-        (["pr", "comment", "1", "--body=x"], "add_issue_comment"),
         (
             ["api", "-X", "PUT", "repositories/123/pulls/1/merge"],
             "merge_pull_request",

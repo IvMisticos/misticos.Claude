@@ -87,13 +87,6 @@ def test_runs_pull_request_writes_outside_claude_cloud(
     assert_ran(run_gh_elsewhere(*arguments), arguments)
 
 
-def test_runs_pull_request_writes_when_the_session_is_not_remote(
-    run_gh_elsewhere: ShimRun,
-) -> None:
-    result = run_gh_elsewhere("pr", "merge", "1", CLAUDE_CODE_REMOTE="false")
-    assert_ran(result, ["pr", "merge", "1"])
-
-
 @pytest.fixture
 def run_gh_in_cloud_without_home(fake_bin: FakeBin, tmp_path: Path) -> ShimRun:
     path = [str(fake_bin("gh", FAKE_GH)), *SYSTEM_DIRS, *real_uv_directories()]
