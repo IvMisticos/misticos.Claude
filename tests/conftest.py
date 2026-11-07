@@ -29,7 +29,10 @@ type FakeBin = Callable[[str, str], Path]
 
 class ShimRun(Protocol):
     def __call__(
-        self, *arguments: str, **extra_environment: str
+        self,
+        *arguments: str,
+        standard_input: str | None = None,
+        **extra_environment: str,
     ) -> subprocess.CompletedProcess[str]: ...
 
 
@@ -123,11 +126,15 @@ def shim_environment(home: Path, *path_dirs: Path | str) -> dict[str, str]:
 
 
 def run_shim(
-    name: str, environment: Mapping[str, str], *arguments: str
+    name: str,
+    environment: Mapping[str, str],
+    *arguments: str,
+    standard_input: str | None = None,
 ) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [SHIMS / name, *arguments],
         env=environment,
+        input=standard_input,
         capture_output=True,
         text=True,
         check=False,
@@ -137,9 +144,16 @@ def run_shim(
 
 def shim_run_for(name: str, environment: Mapping[str, str]) -> ShimRun:
     def run(
-        *arguments: str, **extra_environment: str
+        *arguments: str,
+        standard_input: str | None = None,
+        **extra_environment: str,
     ) -> subprocess.CompletedProcess[str]:
-        return run_shim(name, {**environment, **extra_environment}, *arguments)
+        return run_shim(
+            name,
+            {**environment, **extra_environment},
+            *arguments,
+            standard_input=standard_input,
+        )
 
     return run
 
