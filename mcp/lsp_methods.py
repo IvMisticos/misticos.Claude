@@ -7,7 +7,6 @@ from lsp_types import (
     DocumentSymbol,
     FullDocumentDiagnosticReport,
     Hover,
-    InitializeResult,
     Location,
     LocationLink,
     WorkspaceEdit,
@@ -22,7 +21,7 @@ class Method[Result]:
     result: TypeAdapter[Result]
 
 
-INITIALIZE = Method("initialize", TypeAdapter(InitializeResult))
+INITIALIZE = Method("initialize", TypeAdapter(object))
 DEFINITION = Method(
     "textDocument/definition",
     TypeAdapter(Location | list[Location] | list[LocationLink] | None),

@@ -1,5 +1,7 @@
 from typing import Any, NotRequired, TypedDict
 
+from pydantic import with_config
+
 type LSPAny = Any
 
 
@@ -15,7 +17,7 @@ class Range(TypedDict):
 
 class Location(TypedDict):
     uri: str
-    range: Range
+    range: NotRequired[Range]
 
 
 class LocationLink(TypedDict):
@@ -35,7 +37,7 @@ class LanguageString(TypedDict):
 
 
 type MarkedString = str | LanguageString
-type HoverContents = MarkedString | MarkupContent | list[MarkedString]
+type HoverContents = MarkedString | MarkupContent | list[MarkedString | MarkupContent]
 
 
 class Hover(TypedDict):
@@ -61,29 +63,22 @@ class DocumentSymbol(TypedDict):
     children: NotRequired[list["DocumentSymbol"]]
 
 
-class SymbolLocation(TypedDict):
-    uri: str
-    range: NotRequired[Range]
-
-
 class WorkspaceSymbol(TypedDict):
     name: str
     kind: int
-    location: SymbolLocation
+    location: Location
 
 
 type Symbol = DocumentSymbol | WorkspaceSymbol
 
 
+@with_config(extra="allow")
 class CallHierarchyItem(TypedDict):
     name: str
     kind: int
-    tags: NotRequired[list[int]]
-    detail: NotRequired[str]
     uri: str
     range: Range
     selectionRange: Range
-    data: NotRequired[LSPAny]
 
 
 CallHierarchyIncomingCall = TypedDict(
@@ -118,10 +113,6 @@ class ResourceOperation(TypedDict):
 class WorkspaceEdit(TypedDict, total=False):
     changes: dict[str, list[TextEdit]]
     documentChanges: list[TextDocumentEdit | ResourceOperation]
-
-
-class InitializeResult(TypedDict):
-    capabilities: dict[str, LSPAny]
 
 
 class FileEvent(TypedDict):

@@ -25,7 +25,7 @@ def location_line(location: Location | LocationLink) -> str:
     if is_location_link(location):
         target = location["targetSelectionRange"]["start"]
         return place(from_uri(location["targetUri"]), target)
-    return place(from_uri(location["uri"]), location["range"]["start"])
+    return range_place(from_uri(location["uri"]), location.get("range"))
 
 
 def is_location_link(location: Location | LocationLink) -> TypeIs[LocationLink]:
@@ -131,6 +131,12 @@ def function_line(function: CallHierarchyItem) -> str:
     return f"{function['name']} ({symbol_kind(function['kind'])}) {definition}"
 
 
+def range_place(path: Path, range_: Range | None) -> str:
+    if range_ is None:
+        return str(path)
+    return place(path, range_["start"])
+
+
 def place(path: Path, position: Position) -> str:
     return f"{path}:{position_text(path, position)}"
 
@@ -172,11 +178,7 @@ def workspace_symbols_text(symbols: Sequence[WorkspaceSymbol] | None) -> str:
 
 def workspace_symbol_place(symbol: WorkspaceSymbol) -> str:
     location = symbol["location"]
-    path = from_uri(location["uri"])
-    range_ = location.get("range")
-    if range_ is None:
-        return str(path)
-    return place(path, range_["start"])
+    return range_place(from_uri(location["uri"]), location.get("range"))
 
 
 def symbol_line(symbol: Symbol, indent: int, symbol_place: str) -> str:
