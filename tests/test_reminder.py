@@ -37,9 +37,13 @@ def reminder(
 
 
 def context(output: JsonValue) -> str | None:
-    return (
-        text_at(output, "hookSpecificOutput", "additionalContext") if output else None
-    )
+    match output:
+        case None:
+            return None
+        case {"additional_context": str(cursor_context)}:
+            return cursor_context
+        case _:
+            return text_at(output, "hookSpecificOutput", "additionalContext")
 
 
 def all_parts(
@@ -194,19 +198,13 @@ def cursor_tool_use(tool_use_id: str, tokens: int) -> JsonObject:
     }
 
 
-def cursor_parts(home: Path, payload: JsonObject) -> list[JsonValue]:
-    return [
-        reminder(home, part, payload, CURSOR_ARGUMENTS)
-        for part in range(1, REMINDER_PARTS + 1)
-    ]
-
-
 def test_cursor_counts_each_tool_output_once(home: Path) -> None:
-    assert cursor_parts(home, cursor_tool_use("t1", 10_000)) == [None] * REMINDER_PARTS
-    assert cursor_parts(home, cursor_tool_use("t2", 20_000)) == [None] * REMINDER_PARTS
-    pointer = cursor_parts(home, cursor_tool_use("t3", 10_000))
-    assert json_at(pointer[0], "additional_context")
-    assert pointer[1:] == [None] * (REMINDER_PARTS - 1)
+    first = all_parts(home, cursor_tool_use("t1", 10_000), CURSOR_ARGUMENTS)
+    assert first == [None] * REMINDER_PARTS
+    second = all_parts(home, cursor_tool_use("t2", 20_000), CURSOR_ARGUMENTS)
+    assert second == [None] * REMINDER_PARTS
+    pointer = all_parts(home, cursor_tool_use("t3", 10_000), CURSOR_ARGUMENTS)
+    assert pointer[0] and pointer[1:] == [None] * (REMINDER_PARTS - 1)
 
 
 def test_session_start_with_a_non_text_session_id_still_sends_the_rules(
