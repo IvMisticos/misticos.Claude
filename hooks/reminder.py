@@ -11,7 +11,9 @@ from typing import NamedTuple
 
 from harnesses import ContextSource, Harness, harness_parser
 from hook_io import (
+    HookEvent,
     event_name_of,
+    hook_event_of,
     is_subagent,
     read_payload,
     run_hook,
@@ -50,7 +52,7 @@ class Options(NamedTuple):
 
 
 def is_prompt_event(payload: JsonObject) -> bool:
-    return event_name_of(payload).lower() == "userpromptsubmit"
+    return hook_event_of(payload) == HookEvent.USER_PROMPT_SUBMIT
 
 
 def message_for_part(
@@ -98,7 +100,7 @@ def growth_reminder(rules: Rules, payload: JsonObject, options: Options) -> str 
 
 
 def is_subagent_start(payload: JsonObject) -> bool:
-    return is_subagent(payload) or event_name_of(payload).lower() == "subagentstart"
+    return is_subagent(payload) or hook_event_of(payload) == HookEvent.SUBAGENT_START
 
 
 def session_start_reminder(
@@ -121,9 +123,9 @@ def session_start_reminder(
     return message_for_part(Action.COPY, options.part, messages, rules, payload)
 
 
-def reminder_for(event: str, payload: JsonObject, options: Options) -> str | None:
+def reminder_for(payload: JsonObject, options: Options) -> str | None:
     rules = rules_at(RULES_PATH, options.harness.model_names)
-    if event.lower() in ("sessionstart", "subagentstart"):
+    if hook_event_of(payload) in (HookEvent.SESSION_START, HookEvent.SUBAGENT_START):
         return session_start_reminder(rules, payload, options)
     if is_subagent(payload):
         return None
@@ -143,7 +145,7 @@ def main() -> None:
     event = event_name_of(payload)
     if not event:
         return
-    reminder = reminder_for(event, payload, options)
+    reminder = reminder_for(payload, options)
     if reminder:
         write_context(event, reminder, options.harness.output_shape)
 
