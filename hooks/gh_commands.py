@@ -1,6 +1,7 @@
 import re
 import shlex
 from collections.abc import Iterable, Sequence
+from itertools import takewhile
 from typing import NamedTuple
 
 from json_values import JsonValue
@@ -11,6 +12,7 @@ LINE_CONTINUATION = "\\\n"
 REDIRECTED_FILE_DESCRIPTOR = re.compile(r"(?<!\S)\d+(?=[<>])")
 REPO_FLAGS = frozenset({"-R", "--repo"})
 CREATE_SUBCOMMANDS = frozenset({"create", "new"})
+OPTIONS_END = "--"
 
 
 class GhPrCall(NamedTuple):
@@ -107,3 +109,32 @@ def gh_api_words(arguments: list[str]) -> list[str]:
     if arguments[:1] != ["api"]:
         return []
     return arguments[1:]
+
+
+def takes_a_value(flag: str) -> bool:
+    long_without_value = flag.startswith("--") and "=" not in flag
+    return long_without_value or (len(flag) == 2 and flag.startswith("-"))
+
+
+def gh_command_words(arguments: Iterable[str]) -> list[str]:
+    command_words: list[str] = []
+    words = iter(arguments)
+    for word in words:
+        if word == OPTIONS_END or len(command_words) == 2:
+            break
+        if takes_a_value(word):
+            next(words, None)
+        elif word and not word.startswith("-"):
+            command_words.append(word)
+    return command_words
+
+
+def names_flag(word: str, flag: str) -> bool:
+    if flag.startswith("--"):
+        return word == flag or word.startswith(f"{flag}=")
+    return word.startswith(flag)
+
+
+def has_flag(arguments: Iterable[str], flag: str) -> bool:
+    options = takewhile(lambda word: word != OPTIONS_END, arguments)
+    return any(names_flag(word, flag) for word in options)
