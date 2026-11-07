@@ -27,6 +27,24 @@ def test_records_the_shell_identity_as_the_harness_identity(tmp_path: Path) -> N
     assert recorded.stdout == "|shell@example.com||\n"
 
 
+def test_exports_the_python_that_ran_the_hook(tmp_path: Path) -> None:
+    env_file = tmp_path / "session.sh"
+    environment = without_session_variables(os.environ)
+    subprocess.run(
+        [sys.executable, SESSION_ENVIRONMENT],
+        env={**environment, "CLAUDE_ENV_FILE": str(env_file)},
+        check=True,
+    )
+    exported = subprocess.run(
+        ["bash", "-c", f"source {env_file}; echo $HARNESS_HOOK_PYTHON"],
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert exported.stdout == f"{Path(sys.executable).resolve()}\n"
+
+
 def test_mise_shims_follow_the_plugin_shims_after_every_source(tmp_path: Path) -> None:
     home = tmp_path / "home"
     mise_shims = home / ".local" / "share" / "mise" / "shims"

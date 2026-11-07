@@ -8,6 +8,7 @@ case :$PATH: in
 esac
 export PATH="$1:$PATH"
 export HARNESS_PROJECT_DIR="$2"
+[ -z "${3-}" ] || export HARNESS_HOOK_PYTHON="$3"
 if [ -z "${harness_git_identity_recorded-}" ]; then
   harness_git_identity_recorded=1
   HARNESS_GIT_IDENTITY=$(git_identity_from_environment)

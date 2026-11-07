@@ -1,4 +1,5 @@
 import subprocess
+import sys
 
 import pytest
 from conftest import FAKE_GH, FakeBin, ShimRun, ShimRunner, run_shim
@@ -85,3 +86,15 @@ def test_runs_pull_request_writes_when_the_session_is_not_remote(
 def test_runs_gh_without_home(fake_bin: FakeBin) -> None:
     environment = {"PATH": f"{fake_bin('gh', FAKE_GH)}:/usr/bin:/bin"}
     assert_ran(run_shim("gh", environment, "--version"), ["--version"])
+
+
+def test_checks_with_the_python_the_session_found(fake_bin: FakeBin) -> None:
+    fake_bin("uv", "#!/usr/bin/env bash\nexit 3\n")
+    environment = {
+        "PATH": f"{fake_bin('gh', FAKE_GH)}:/usr/bin:/bin",
+        "CLAUDE_CODE_REMOTE": "true",
+        "HARNESS_HOOK_PYTHON": sys.executable,
+    }
+    result = run_shim("gh", environment, "pr", "merge", "1")
+    assert result.returncode == 1
+    assert result.stderr == f"{denial(['pr', 'merge', '1'])}\n"

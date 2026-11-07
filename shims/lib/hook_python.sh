@@ -51,6 +51,8 @@ find_python() {
 }
 
 find_hook_python() {
+  python=${HARNESS_HOOK_PYTHON-}
+  [ ! -x "$python" ] || return 0
   find_uv
   if ! python=$(find_python 2>/dev/null); then
     run_uv_outside_projects python install --no-bin 3.13 >&2
