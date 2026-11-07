@@ -4,7 +4,6 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "mcp"))
 
 from lsp_types import Position, TextEdit
-from text_positions import to_uri
 from workspace_edits import apply_workspace_edit
 
 START: Position = {"line": 0, "character": 0}
@@ -14,7 +13,7 @@ INSERT_AT_START: TextEdit = {"range": {"start": START, "end": START}, "newText":
 def test_document_changes_win_over_changes(tmp_path: Path) -> None:
     source = tmp_path / "source.py"
     source.write_text("abc")
-    uri = to_uri(source)
+    uri = source.as_uri()
     apply_workspace_edit(
         {
             "changes": {uri: [INSERT_AT_START]},
@@ -29,7 +28,7 @@ def test_document_changes_win_over_changes(tmp_path: Path) -> None:
 def test_changes_apply_without_document_changes(tmp_path: Path) -> None:
     source = tmp_path / "source.py"
     source.write_text("abc")
-    apply_workspace_edit({"changes": {to_uri(source): [INSERT_AT_START]}})
+    apply_workspace_edit({"changes": {source.as_uri(): [INSERT_AT_START]}})
     assert source.read_text() == "Xabc"
 
 
@@ -39,5 +38,5 @@ def test_inserts_at_one_position_keep_their_order(tmp_path: Path) -> None:
     inserts: list[TextEdit] = [
         {"range": {"start": START, "end": START}, "newText": text} for text in "AB"
     ]
-    apply_workspace_edit({"changes": {to_uri(source): inserts}})
+    apply_workspace_edit({"changes": {source.as_uri(): inserts}})
     assert source.read_text() == "ABabc"

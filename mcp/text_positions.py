@@ -3,15 +3,10 @@ import os
 import re
 from pathlib import Path
 from urllib.parse import unquote, urlparse
-from urllib.request import pathname2url
 
 from lsp_types import Position
 
 LINE_BREAK = re.compile(r"\r\n|\r|\n")
-
-
-def to_uri(path: str | os.PathLike[str]) -> str:
-    return "file://" + pathname2url(str(path))
 
 
 def from_uri(uri: str) -> Path:

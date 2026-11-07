@@ -4,7 +4,9 @@ import os
 import pathlib
 import subprocess
 import sys
+from collections.abc import Mapping
 
+from lsp_methods import INITIALIZE, Method
 from lsp_types import (
     FileEvent,
     LSPAny,
@@ -14,7 +16,8 @@ from lsp_types import (
     ResponseError,
 )
 from open_documents import Document, OpenDocuments
-from text_positions import lsp_position, to_uri
+from pydantic import ValidationError
+from text_positions import lsp_position
 
 QUIET_SECONDS_BEFORE_READY = 2.0
 MAX_STARTUP_SECONDS = 90.0
@@ -22,7 +25,19 @@ REQUEST_TIMEOUT_SECONDS = 60.0
 METHOD_NOT_FOUND = -32601
 
 
-class LanguageServerExited(RuntimeError):
+class LanguageServerError(Exception):
+    pass
+
+
+class LanguageServerExited(LanguageServerError):
+    pass
+
+
+class ErrorReply(LanguageServerError):
+    pass
+
+
+class MalformedReply(LanguageServerError):
     pass
 
 
@@ -68,7 +83,7 @@ class LanguageServer:
         self.stdout = process.stdout
         self.root = root
         self.documents = OpenDocuments(language_ids, self.notify)
-        self.pending: dict[RequestId, asyncio.Future[LSPAny]] = {}
+        self.pending: dict[RequestId, asyncio.Future[object]] = {}
         self.next_id = 1
         self.last_message_at = 0.0
         self.reader_task = asyncio.create_task(self.read_messages())
@@ -79,12 +94,12 @@ class LanguageServer:
 
     async def initialize(self) -> None:
         await self.request(
-            "initialize",
+            INITIALIZE,
             {
                 "processId": os.getpid(),
-                "rootUri": to_uri(self.root),
+                "rootUri": self.root.as_uri(),
                 "workspaceFolders": [
-                    {"uri": to_uri(self.root), "name": self.root.name}
+                    {"uri": self.root.as_uri(), "name": self.root.name}
                 ],
                 "capabilities": {
                     "window": {"workDoneProgress": True},
@@ -126,7 +141,7 @@ class LanguageServer:
     def notify(self, method: str, params: LSPAny) -> None:
         self.send({"jsonrpc": "2.0", "method": method, "params": params})
 
-    async def request(self, method: str, params: LSPAny) -> LSPAny:
+    async def request[Result](self, method: Method[Result], params: LSPAny) -> Result:
         if not self.alive:
             raise self.exited()
         request_id = self.next_id
@@ -134,12 +149,23 @@ class LanguageServer:
         future = asyncio.get_event_loop().create_future()
         self.pending[request_id] = future
         self.send(
-            {"jsonrpc": "2.0", "id": request_id, "method": method, "params": params}
+            {
+                "jsonrpc": "2.0",
+                "id": request_id,
+                "method": method.name,
+                "params": params,
+            }
         )
         try:
-            return await asyncio.wait_for(future, REQUEST_TIMEOUT_SECONDS)
+            result = await asyncio.wait_for(future, REQUEST_TIMEOUT_SECONDS)
         finally:
             self.pending.pop(request_id, None)
+        try:
+            return method.result.validate_python(result)
+        except ValidationError as error:
+            raise MalformedReply(
+                f"{self.name} sent a malformed {method.name} reply: {error}"
+            ) from error
 
     async def read_messages(self) -> None:
         try:
@@ -185,8 +211,10 @@ class LanguageServer:
         if future is None or future.done():
             return
         if "error" in response:
-            error = response["error"].get("message", "language server error")
-            future.set_exception(RuntimeError(error))
+            error = response["error"].get("message", "no message")
+            future.set_exception(
+                ErrorReply(f"{self.name} replied with an error: {error}")
+            )
             return
         future.set_result(response.get("result"))
 
@@ -215,21 +243,32 @@ class LanguageServer:
             self.documents.close(event["uri"])
         self.notify("workspace/didChangeWatchedFiles", {"changes": events})
 
-    async def at_position(
+    async def at_position[Result](
         self,
-        method: str,
+        method: Method[Result],
         document: Document,
         line: int,
         column: int,
-        extra: dict[str, LSPAny] | None = None,
-    ) -> LSPAny:
+        extra: Mapping[str, LSPAny] | None = None,
+    ) -> Result:
         position = lsp_position(document.text, line, column)
-        params = {"textDocument": {"uri": to_uri(document.path)}, "position": position}
-        params.update(extra or {})
-        return await self.ask_about(document, method, params)
+        return await self.about_document(
+            method, document, {"position": position, **(extra or {})}
+        )
 
-    async def ask_about(
-        self, document: Document, method: str, params: dict[str, LSPAny]
-    ) -> LSPAny:
+    async def about_document[Result](
+        self,
+        method: Method[Result],
+        document: Document,
+        extra: Mapping[str, LSPAny] | None = None,
+    ) -> Result:
+        text_document = {"uri": document.path.as_uri()}
+        return await self.request_after_opening(
+            method, document, {"textDocument": text_document, **(extra or {})}
+        )
+
+    async def request_after_opening[Result](
+        self, method: Method[Result], document: Document, params: Mapping[str, LSPAny]
+    ) -> Result:
         self.documents.open(document)
         return await self.request(method, params)

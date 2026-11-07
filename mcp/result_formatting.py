@@ -22,11 +22,14 @@ type CallSiteKey = tuple[str, int, int]
 
 
 def location_line(location: Location | LocationLink) -> str:
-    uri = location.get("targetUri") or location.get("uri")
-    if uri is None:
-        return "unknown location"
-    range_ = location.get("targetSelectionRange") or location.get("range")
-    return range_place(from_uri(uri), range_)
+    if is_location_link(location):
+        target = location["targetSelectionRange"]["start"]
+        return place(from_uri(location["targetUri"]), target)
+    return range_place(from_uri(location["uri"]), location.get("range"))
+
+
+def is_location_link(location: Location | LocationLink) -> TypeIs[LocationLink]:
+    return "targetUri" in location
 
 
 def position_text(path: Path, position: Position) -> str:
@@ -51,18 +54,16 @@ def locations_text(
 
 
 def hover_text(result: Hover | None) -> str:
-    if not result:
+    if not result or not result["contents"]:
         return "no hover information"
-    contents = result.get("contents")
-    if not contents:
-        return "no hover information"
-    if isinstance(contents, (str, dict)):
-        return hover_part_text(contents)
-    return "\n".join(hover_part_text(part) for part in contents)
+    contents = result["contents"]
+    if isinstance(contents, list):
+        return "\n".join(hover_part_text(part) for part in contents)
+    return hover_part_text(contents)
 
 
 def hover_part_text(part: MarkedString | MarkupContent) -> str:
-    return part if isinstance(part, str) else part.get("value", "")
+    return part if isinstance(part, str) else part["value"]
 
 
 SHOWN_SEVERITIES: dict[int, str] = {1: "error", 2: "warning", 3: "info"}
