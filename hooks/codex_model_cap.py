@@ -12,6 +12,7 @@ from collections.abc import Iterable, Iterator
 from pathlib import Path
 from typing import NamedTuple
 
+from config_folders import config_folders
 from hook_io import (
     PreToolUseDecision,
     allowed_with,
@@ -19,8 +20,8 @@ from hook_io import (
     denied,
     run_pre_tool_use,
 )
-from json_values import JsonObject, JsonValue, dict_or_empty
-from model_cap import outranks, project_folders
+from json_values import JsonObject, dict_or_empty, text_or_none
+from model_cap import Model, outranks, parsed_model
 
 DEFAULT_ROLE = "default"
 
@@ -44,23 +45,9 @@ def read_toml(path: Path) -> dict[str, object]:
         return {}
 
 
-def text_or_none(value: object) -> str | None:
-    return value if isinstance(value, str) and value else None
-
-
 def parsed_role_file(path: Path) -> RoleFile:
     table = read_toml(path)
     return RoleFile(text_or_none(table.get("name")), text_or_none(table.get("model")))
-
-
-def config_folders(cwd: str) -> list[Path]:
-    project_layers = [
-        folder / ".codex"
-        for folder in project_folders(Path(cwd))
-        if (folder / ".codex").is_dir()
-    ]
-    user_layer = Path(os.environ.get("CODEX_HOME") or "~/.codex").expanduser()
-    return [*project_layers, user_layer]
 
 
 def declared_role_files(folder: Path, agents: dict[str, object]) -> dict[str, Path]:
@@ -101,7 +88,9 @@ def parsed_layer(folder: Path) -> CodexLayer:
 
 
 def codex_layers(cwd: str) -> list[CodexLayer]:
-    return [parsed_layer(folder) for folder in config_folders(cwd)]
+    user_folder = Path(os.environ.get("CODEX_HOME") or "~/.codex").expanduser()
+    folders = config_folders(Path(cwd), Path(".codex"), user_folder)
+    return [parsed_layer(folder) for folder in folders]
 
 
 def role_model(role_name: str, layers: Iterable[CodexLayer]) -> str | None:
@@ -132,32 +121,34 @@ def applies_role(spawn: JsonObject, named_role: str) -> bool:
 
 
 def role_decision(
-    spawn: JsonObject, layers: list[CodexLayer], caller: JsonValue
+    spawn: JsonObject, layers: list[CodexLayer], caller: Model
 ) -> PreToolUseDecision | None:
     named_role = str(spawn.get("agent_type") or "").strip()
     role_name = named_role or DEFAULT_ROLE
     fixed_model = (
         role_model(role_name, layers) if applies_role(spawn, named_role) else None
     )
-    if not outranks(fixed_model, caller):
+    if not outranks(parsed_model(fixed_model), caller):
         return None
     return denied(
-        f"The {role_name} role runs on {fixed_model}, above your {caller}. "
+        f"The {role_name} role runs on {fixed_model}, above your {caller.name}. "
         "Spawn with a role at or below your model."
     )
 
 
 def request_decision(
-    spawn: JsonObject, layers: list[CodexLayer], caller: JsonValue
+    spawn: JsonObject, layers: list[CodexLayer], caller: Model
 ) -> PreToolUseDecision | None:
-    requested = spawn.get("model") or default_subagent_model(layers)
-    if not outranks(requested, caller):
+    requested = text_or_none(spawn.get("model")) or default_subagent_model(layers)
+    if not outranks(parsed_model(requested), caller):
         return None
-    return allowed_with({**spawn, "model": caller})
+    return allowed_with({**spawn, "model": caller.name})
 
 
 def cap_decision(payload: JsonObject) -> PreToolUseDecision | None:
-    caller = payload.get("model")
+    caller = parsed_model(payload.get("model"))
+    if caller is None:
+        return None
     spawn = dict_or_empty(payload.get("tool_input"))
     layers = codex_layers(cwd_of(payload))
     return role_decision(spawn, layers, caller) or request_decision(

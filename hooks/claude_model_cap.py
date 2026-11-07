@@ -7,10 +7,10 @@
 
 import glob
 import os
-import re
-from collections.abc import Iterator
+from collections.abc import Sequence
 from pathlib import Path
 
+from claude_agents import AgentFolder, agent_folders, definition_model
 from hook_io import (
     PreToolUseDecision,
     cwd_of,
@@ -18,127 +18,82 @@ from hook_io import (
     run_pre_tool_use,
     transcript_path_of,
 )
-from json_values import JsonObject, JsonValue, dict_or_empty
-from model_cap import outranks, project_folders, tier_rank
-from plugin_paths import PLUGIN_ROOT
+from json_values import JsonObject, dict_or_empty, text_or_none
+from model_cap import Model, claude_alias, outranks, parsed_model
 from transcript import recent_entries
 
 INHERIT = "inherit"
 TRUTHY_FLAGS = ("1", "true", "yes", "on")
-FRONTMATTER = re.compile(r"---\s*\n([\s\S]*?)---\s*\n?")
-CLAUDE_ALIASES = ("haiku", "sonnet", "opus", "fable")
 SUBAGENT_MODEL_VARIABLE = "CLAUDE_CODE_SUBAGENT_MODEL"
-PLUGIN_NAME = "misticos"
-PLUGIN_AGENTS_DIR = PLUGIN_ROOT / "agents"
 
 
-def with_model(tool_input: JsonObject, model: JsonValue) -> PreToolUseDecision:
+def with_model(tool_input: JsonObject, model: str | None) -> PreToolUseDecision:
     return {"updatedInput": {**tool_input, "model": model}}
 
 
-def latest_model(transcript_path: str, include_sidechains: bool = False) -> JsonValue:
+def latest_model(
+    transcript_path: str, include_sidechains: bool = False
+) -> Model | None:
     for entry in recent_entries(transcript_path):
         if entry.get("isSidechain") and not include_sidechains:
             continue
-        model = dict_or_empty(entry.get("message")).get("model")
-        if tier_rank(model) is not None:
+        model = parsed_model(dict_or_empty(entry.get("message")).get("model"))
+        if model:
             return model
     return None
 
 
-def subagent_transcript(transcript_path: str, agent_id: JsonValue) -> str:
+def subagent_transcript(transcript_path: str, agent_id: str) -> str:
     subagents_dir = os.path.join(transcript_path.removesuffix(".jsonl"), "subagents")
     pattern = os.path.join(subagents_dir, "**", f"agent-{agent_id}.jsonl")
     return next(iter(glob.glob(pattern, recursive=True)), "")
 
 
-def caller_model(payload: JsonObject, main_model: JsonValue) -> JsonValue:
-    agent_id = payload.get("agent_id")
-    if not agent_id:
-        return main_model
-    main_transcript = transcript_path_of(payload)
-    if main_transcript is None:
+def main_model(transcript_path: str | None) -> Model | None:
+    return latest_model(transcript_path) if transcript_path else None
+
+
+def caller_model(transcript_path: str | None, agent_id: str | None) -> Model | None:
+    if agent_id is None:
+        return main_model(transcript_path)
+    if transcript_path is None:
         return None
-    transcript_path = subagent_transcript(main_transcript, agent_id)
-    return latest_model(transcript_path, include_sidechains=True)
+    own_transcript = subagent_transcript(transcript_path, agent_id)
+    return latest_model(own_transcript, include_sidechains=True)
 
 
-def definition_text(definition_path: Path) -> str:
-    try:
-        with open(definition_path, encoding="utf-8", errors="replace") as definition:
-            return definition.read().lstrip("\ufeff").replace("\r\n", "\n")
-    except OSError:
-        return ""
+def wanted_agent_model(
+    definition: str | None, pinned: Model | None, caller: Model | None
+) -> Model | None:
+    if definition == INHERIT:
+        return caller
+    if definition:
+        return pinned
+    model = os.environ.get(SUBAGENT_MODEL_VARIABLE) or INHERIT
+    return caller if model == INHERIT else parsed_model(model)
 
 
-def frontmatter_fields(text: str) -> dict[str, str]:
-    block = FRONTMATTER.match(text)
-    if not block:
-        return {}
-    top_level_lines = (
-        line for line in block[1].splitlines() if line and not line[0].isspace()
-    )
-    fields: dict[str, str] = {}
-    for line in top_level_lines:
-        key, _, value = line.partition(":")
-        fields[key.strip()] = value.strip().strip("\"'")
-    return fields
-
-
-def agent_dirs(cwd: Path) -> list[Path]:
-    project_dirs = [folder / ".claude" / "agents" for folder in project_folders(cwd)]
-    return [*project_dirs, Path("~/.claude/agents").expanduser()]
-
-
-def agent_definitions(cwd: Path) -> Iterator[tuple[str, dict[str, str]]]:
-    sources = [(directory, "**/*.md", "") for directory in agent_dirs(cwd)]
-    sources.append((PLUGIN_AGENTS_DIR, "*.md", f"{PLUGIN_NAME}:"))
-    for directory, pattern, name_prefix in sources:
-        for path in sorted(directory.glob(pattern)):
-            fields = frontmatter_fields(definition_text(path))
-            yield name_prefix + fields.get("name", ""), fields
-
-
-def definition_model(subagent_type: JsonValue, cwd: str) -> str | None:
-    if not subagent_type:
-        return None
-    definitions = agent_definitions(Path(cwd))
-    named = (fields for name, fields in definitions if name == subagent_type)
-    return next(named, {}).get("model")
-
-
-def claude_alias(model: JsonValue) -> str | None:
-    rank = tier_rank(model)
-    return next((alias for alias in CLAUDE_ALIASES if tier_rank(alias) == rank), None)
-
-
-def wanted_agent_model(definition: str | None, caller: JsonValue) -> JsonValue:
-    model = definition or os.environ.get(SUBAGENT_MODEL_VARIABLE) or INHERIT
-    return caller if model == INHERIT else model
-
-
-def forced_decision(caller: JsonValue) -> PreToolUseDecision | None:
+def forced_decision(caller: Model | None) -> PreToolUseDecision | None:
     forced_model = os.environ.get(SUBAGENT_MODEL_VARIABLE)
-    if not outranks(forced_model, caller):
+    if caller is None or not outranks(parsed_model(forced_model), caller):
         return None
     return denied(
         f"CLAUDE_CODE_SUBAGENT_MODEL_FORCE runs every subagent on "
-        f"{forced_model}, above your {caller}. Do the work yourself."
+        f"{forced_model}, above your {caller.name}. Do the work yourself."
     )
 
 
 def requested_model_decision(
-    tool_input: JsonObject, caller: JsonValue
+    tool_input: JsonObject, requested: Model | None, caller: Model | None
 ) -> PreToolUseDecision | None:
-    if not outranks(tool_input.get("model"), caller):
+    if not outranks(requested, caller):
         return None
     return with_model(tool_input, claude_alias(caller))
 
 
-def definition_model_decision(
-    tool_input: JsonObject, definition: str | None, caller: JsonValue
+def wanted_model_decision(
+    tool_input: JsonObject, wanted_model: Model | None, caller: Model | None
 ) -> PreToolUseDecision | None:
-    wanted_model = wanted_agent_model(definition, caller)
     if claude_alias(wanted_model) is None:
         return None
     capped_model = caller if outranks(wanted_model, caller) else wanted_model
@@ -146,15 +101,19 @@ def definition_model_decision(
 
 
 def agent_model_decision(
-    tool_input: JsonObject, cwd: str, caller: JsonValue
+    tool_input: JsonObject, folders: Sequence[AgentFolder], caller: Model | None
 ) -> PreToolUseDecision | None:
     force_flag = os.environ.get("CLAUDE_CODE_SUBAGENT_MODEL_FORCE", "")
     if force_flag.strip().lower() in TRUTHY_FLAGS:
         return forced_decision(caller)
-    definition = definition_model(tool_input.get("subagent_type"), cwd)
-    if tool_input.get("model") and claude_alias(definition) is None:
-        return requested_model_decision(tool_input, caller)
-    return definition_model_decision(tool_input, definition, caller)
+    subagent_type = text_or_none(tool_input.get("subagent_type"))
+    definition = definition_model(subagent_type, folders)
+    pinned = parsed_model(definition)
+    requested = text_or_none(tool_input.get("model"))
+    if requested and claude_alias(pinned) is None:
+        return requested_model_decision(tool_input, parsed_model(requested), caller)
+    wanted = wanted_agent_model(definition, pinned, caller)
+    return wanted_model_decision(tool_input, wanted, caller)
 
 
 def without_effort(tool_input: JsonObject) -> JsonObject:
@@ -162,32 +121,35 @@ def without_effort(tool_input: JsonObject) -> JsonObject:
 
 
 def agent_decision(
-    tool_input: JsonObject, cwd: str, caller: JsonValue
+    tool_input: JsonObject, folders: Sequence[AgentFolder], caller: Model | None
 ) -> PreToolUseDecision | None:
     agent_input = without_effort(tool_input)
-    decision = agent_model_decision(agent_input, cwd, caller)
+    decision = agent_model_decision(agent_input, folders, caller)
     if decision is None and agent_input != tool_input:
         return {"updatedInput": agent_input}
     return decision
 
 
 def session_decision(
-    tool_input: JsonObject, main_model: JsonValue, caller: JsonValue
+    tool_input: JsonObject, main: Model | None, caller: Model | None
 ) -> PreToolUseDecision | None:
-    requested = tool_input.get("model") or main_model
-    if not outranks(requested, caller):
+    requested = tool_input.get("model")
+    requested_model = parsed_model(requested) if requested else main
+    if caller is None or not outranks(requested_model, caller):
         return None
-    return with_model(tool_input, caller)
+    return with_model(tool_input, caller.name)
 
 
 def cap_decision(payload: JsonObject) -> PreToolUseDecision | None:
     tool_input = dict_or_empty(payload.get("tool_input"))
     transcript_path = transcript_path_of(payload)
-    main_model = latest_model(transcript_path) if transcript_path else None
-    caller = caller_model(payload, main_model)
+    agent_id = text_or_none(payload.get("agent_id"))
+    caller = caller_model(transcript_path, agent_id)
     if payload.get("tool_name") in ("Agent", "Task"):
-        return agent_decision(tool_input, cwd_of(payload), caller)
-    return session_decision(tool_input, main_model, caller)
+        folders = agent_folders(Path(cwd_of(payload)))
+        return agent_decision(tool_input, folders, caller)
+    main = caller if agent_id is None else main_model(transcript_path)
+    return session_decision(tool_input, main, caller)
 
 
 if __name__ == "__main__":
