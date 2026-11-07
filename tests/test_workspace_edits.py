@@ -31,3 +31,13 @@ def test_changes_apply_without_document_changes(tmp_path: Path) -> None:
     source.write_text("abc")
     apply_workspace_edit({"changes": {to_uri(source): [INSERT_AT_START]}})
     assert source.read_text() == "Xabc"
+
+
+def test_inserts_at_one_position_keep_their_order(tmp_path: Path) -> None:
+    source = tmp_path / "source.py"
+    source.write_text("abc")
+    inserts: list[TextEdit] = [
+        {"range": {"start": START, "end": START}, "newText": text} for text in "AB"
+    ]
+    apply_workspace_edit({"changes": {to_uri(source): inserts}})
+    assert source.read_text() == "ABabc"

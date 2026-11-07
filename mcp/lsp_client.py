@@ -13,7 +13,7 @@ from lsp_types import (
     Response,
     ResponseError,
 )
-from open_documents import OpenDocuments
+from open_documents import Document, OpenDocuments
 from text_positions import lsp_position, to_uri
 
 QUIET_SECONDS_BEFORE_READY = 2.0
@@ -47,6 +47,7 @@ class LanguageServer:
         server = cls(name, process, language_ids, root)
         try:
             await server.initialize()
+            await server.wait_until_quiet()
         except Exception:
             server.stop()
             raise
@@ -90,6 +91,7 @@ class LanguageServer:
                     "workspace": {"workspaceEdit": {"documentChanges": True}},
                     "textDocument": {
                         "hover": {"contentFormat": ["markdown", "plaintext"]},
+                        "documentSymbol": {"hierarchicalDocumentSymbolSupport": True},
                         "diagnostic": {},
                         "callHierarchy": {},
                     },
@@ -97,7 +99,6 @@ class LanguageServer:
             },
         )
         self.notify("initialized", {})
-        await self.wait_until_quiet()
 
     def stop(self) -> None:
         if self.process.returncode is None:
@@ -217,13 +218,18 @@ class LanguageServer:
     async def at_position(
         self,
         method: str,
-        path: pathlib.Path,
+        document: Document,
         line: int,
         column: int,
         extra: dict[str, LSPAny] | None = None,
     ) -> LSPAny:
-        text = self.documents.open(path)
-        position = lsp_position(text, line, column)
-        params = {"textDocument": {"uri": to_uri(path)}, "position": position}
+        position = lsp_position(document.text, line, column)
+        params = {"textDocument": {"uri": to_uri(document.path)}, "position": position}
         params.update(extra or {})
+        return await self.ask_about(document, method, params)
+
+    async def ask_about(
+        self, document: Document, method: str, params: dict[str, LSPAny]
+    ) -> LSPAny:
+        self.documents.open(document)
         return await self.request(method, params)

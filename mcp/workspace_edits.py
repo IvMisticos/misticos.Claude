@@ -43,17 +43,19 @@ def apply_text_edits(path: Path, edits: Iterable[TextEdit]) -> str:
     text = read_text(path)
     lines = LINE_BREAK.split(text)
     offsets = line_offsets(text)
-    for edit in sorted(
-        edits,
-        key=lambda e: position_key(e["range"]["start"]),
-        reverse=True,
-    ):
+    back_to_front = sorted(enumerate(edits), key=start_then_index, reverse=True)
+    for _, edit in back_to_front:
         start = text_offset(lines, offsets, edit["range"]["start"])
         end = text_offset(lines, offsets, edit["range"]["end"])
         text = text[:start] + edit["newText"] + text[end:]
     with open(path, "w", encoding="utf-8", newline="") as file:
         file.write(text)
     return str(path)
+
+
+def start_then_index(indexed_edit: tuple[int, TextEdit]) -> tuple[int, int, int]:
+    index, edit = indexed_edit
+    return *position_key(edit["range"]["start"]), index
 
 
 def text_offset(

@@ -3,9 +3,19 @@ from pathlib import Path
 from typing import NamedTuple
 
 from lsp_types import LSPAny
-from text_positions import read_text, to_uri
+from text_positions import to_uri
 
 FIRST_VERSION = 1
+
+
+class Document(NamedTuple):
+    path: Path
+    text: str
+
+
+def read_document(path: Path) -> Document:
+    with open(path, encoding="utf-8", errors="replace", newline="") as file:
+        return Document(path, file.read())
 
 
 class OpenedDocument(NamedTuple):
@@ -21,15 +31,14 @@ class OpenDocuments:
         self.notify = notify
         self.opened: dict[str, OpenedDocument] = {}
 
-    def open(self, path: Path) -> str:
-        text = read_text(path)
-        uri = to_uri(path)
+    def open(self, document: Document) -> None:
+        uri = to_uri(document.path)
         opened = self.opened.get(uri)
         if opened is None:
-            self.did_open(uri, self.language_ids[path.suffix], text)
-        elif opened.text != text:
-            self.did_change(uri, opened.version + 1, text)
-        return text
+            language_id = self.language_ids[document.path.suffix]
+            self.did_open(uri, language_id, document.text)
+        elif opened.text != document.text:
+            self.did_change(uri, opened.version + 1, document.text)
 
     def did_open(self, uri: str, language_id: str, text: str) -> None:
         self.opened[uri] = OpenedDocument(FIRST_VERSION, text)

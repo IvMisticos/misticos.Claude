@@ -1,10 +1,11 @@
 from collections.abc import Sequence
 from pathlib import Path
-from typing import NamedTuple
+from typing import NamedTuple, TypeIs
 
 from lsp_types import (
     CallHierarchyItem,
     Diagnostic,
+    DocumentSymbol,
     Hover,
     Location,
     LocationLink,
@@ -13,6 +14,7 @@ from lsp_types import (
     Position,
     Range,
     Symbol,
+    WorkspaceSymbol,
 )
 from text_positions import from_uri, lines_of, position_key, utf16_offset_to_index
 
@@ -138,28 +140,49 @@ def place(path: Path, position: Position) -> str:
     return f"{path}:{position_text(path, position)}"
 
 
-def symbols_text(result: Sequence[Symbol] | None) -> str:
-    lines = symbol_lines(result or [], 0)
+def document_symbols_text(document: Path, symbols: Sequence[Symbol] | None) -> str:
+    lines = document_symbol_lines(document, symbols or [], 0)
     return "\n".join(lines) or "no symbols"
 
 
-def symbol_lines(symbols: Sequence[Symbol], indent: int) -> list[str]:
+def document_symbol_lines(
+    document: Path, symbols: Sequence[Symbol], indent: int
+) -> list[str]:
     lines = []
     for symbol in symbols:
-        lines.append(
-            f"{'  ' * indent}{symbol['name']} ({symbol_kind(symbol['kind'])}) {symbol_place(symbol)}"
-        )
-        lines.extend(symbol_lines(symbol.get("children") or [], indent + 1))
+        symbol_place = document_symbol_place(document, symbol)
+        lines.append(symbol_line(symbol, indent, symbol_place))
+        children = symbol.get("children") or []
+        lines.extend(document_symbol_lines(document, children, indent + 1))
     return lines
 
 
-def symbol_place(symbol: Symbol) -> str:
-    location = symbol.get("location") or {}
-    path = from_uri(location["uri"]) if "uri" in location else None
-    range_ = symbol.get("selectionRange") or location.get("range")
-    if path is None:
-        return "" if range_ is None else one_based(range_["start"])
-    return range_place(path, range_)
+def document_symbol_place(document: Path, symbol: Symbol) -> str:
+    if is_document_symbol(symbol):
+        return place(document, symbol["selectionRange"]["start"])
+    return workspace_symbol_place(symbol)
+
+
+def is_document_symbol(symbol: Symbol) -> TypeIs[DocumentSymbol]:
+    return "selectionRange" in symbol
+
+
+def workspace_symbols_text(symbols: Sequence[WorkspaceSymbol] | None) -> str:
+    lines = [
+        symbol_line(symbol, 0, workspace_symbol_place(symbol))
+        for symbol in symbols or []
+    ]
+    return "\n".join(lines) or "no symbols"
+
+
+def workspace_symbol_place(symbol: WorkspaceSymbol) -> str:
+    location = symbol["location"]
+    return range_place(from_uri(location["uri"]), location.get("range"))
+
+
+def symbol_line(symbol: Symbol, indent: int, symbol_place: str) -> str:
+    kind = symbol_kind(symbol["kind"])
+    return f"{'  ' * indent}{symbol['name']} ({kind}) {symbol_place}"
 
 
 SYMBOL_KINDS: dict[int, str] = {
