@@ -22,7 +22,6 @@ class LocationLink(TypedDict):
     targetUri: str
     targetRange: Range
     targetSelectionRange: Range
-    originSelectionRange: NotRequired[Range]
 
 
 class MarkupContent(TypedDict):
@@ -41,7 +40,6 @@ type HoverContents = MarkedString | MarkupContent | list[MarkedString]
 
 class Hover(TypedDict):
     contents: HoverContents
-    range: NotRequired[Range]
 
 
 class Diagnostic(TypedDict):
@@ -49,6 +47,10 @@ class Diagnostic(TypedDict):
     message: str
     severity: NotRequired[int]
     code: NotRequired[int | str]
+
+
+class FullDocumentDiagnosticReport(TypedDict):
+    items: list[Diagnostic]
 
 
 class DocumentSymbol(TypedDict):
@@ -59,14 +61,15 @@ class DocumentSymbol(TypedDict):
     children: NotRequired[list["DocumentSymbol"]]
 
 
-class LocationUri(TypedDict):
+class SymbolLocation(TypedDict):
     uri: str
+    range: NotRequired[Range]
 
 
 class WorkspaceSymbol(TypedDict):
     name: str
     kind: int
-    location: Location | LocationUri
+    location: SymbolLocation
 
 
 type Symbol = DocumentSymbol | WorkspaceSymbol
@@ -75,9 +78,22 @@ type Symbol = DocumentSymbol | WorkspaceSymbol
 class CallHierarchyItem(TypedDict):
     name: str
     kind: int
+    tags: NotRequired[list[int]]
+    detail: NotRequired[str]
     uri: str
     range: Range
     selectionRange: Range
+    data: NotRequired[LSPAny]
+
+
+CallHierarchyIncomingCall = TypedDict(
+    "CallHierarchyIncomingCall", {"from": CallHierarchyItem, "fromRanges": list[Range]}
+)
+
+
+class CallHierarchyOutgoingCall(TypedDict):
+    to: CallHierarchyItem
+    fromRanges: list[Range]
 
 
 class TextEdit(TypedDict):
@@ -102,6 +118,10 @@ class ResourceOperation(TypedDict):
 class WorkspaceEdit(TypedDict, total=False):
     changes: dict[str, list[TextEdit]]
     documentChanges: list[TextDocumentEdit | ResourceOperation]
+
+
+class InitializeResult(TypedDict):
+    capabilities: dict[str, LSPAny]
 
 
 class FileEvent(TypedDict):
@@ -133,7 +153,7 @@ class Notification(TypedDict):
 class Response(TypedDict):
     jsonrpc: str
     id: RequestId
-    result: NotRequired[LSPAny]
+    result: NotRequired[object]
     error: NotRequired[ResponseError]
 
 

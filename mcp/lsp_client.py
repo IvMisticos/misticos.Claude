@@ -4,7 +4,9 @@ import os
 import pathlib
 import subprocess
 import sys
+from collections.abc import Mapping
 
+from lsp_methods import INITIALIZE, Method
 from lsp_types import (
     FileEvent,
     LSPAny,
@@ -68,7 +70,7 @@ class LanguageServer:
         self.stdout = process.stdout
         self.root = root
         self.documents = OpenDocuments(language_ids, self.notify)
-        self.pending: dict[RequestId, asyncio.Future[LSPAny]] = {}
+        self.pending: dict[RequestId, asyncio.Future[object]] = {}
         self.next_id = 1
         self.last_message_at = 0.0
         self.reader_task = asyncio.create_task(self.read_messages())
@@ -79,7 +81,7 @@ class LanguageServer:
 
     async def initialize(self) -> None:
         await self.request(
-            "initialize",
+            INITIALIZE,
             {
                 "processId": os.getpid(),
                 "rootUri": self.root.as_uri(),
@@ -126,7 +128,7 @@ class LanguageServer:
     def notify(self, method: str, params: LSPAny) -> None:
         self.send({"jsonrpc": "2.0", "method": method, "params": params})
 
-    async def request(self, method: str, params: LSPAny) -> LSPAny:
+    async def request[Result](self, method: Method[Result], params: LSPAny) -> Result:
         if not self.alive:
             raise self.exited()
         request_id = self.next_id
@@ -134,12 +136,18 @@ class LanguageServer:
         future = asyncio.get_event_loop().create_future()
         self.pending[request_id] = future
         self.send(
-            {"jsonrpc": "2.0", "id": request_id, "method": method, "params": params}
+            {
+                "jsonrpc": "2.0",
+                "id": request_id,
+                "method": method.name,
+                "params": params,
+            }
         )
         try:
-            return await asyncio.wait_for(future, REQUEST_TIMEOUT_SECONDS)
+            result = await asyncio.wait_for(future, REQUEST_TIMEOUT_SECONDS)
         finally:
             self.pending.pop(request_id, None)
+        return method.result.validate_python(result)
 
     async def read_messages(self) -> None:
         try:
@@ -215,21 +223,21 @@ class LanguageServer:
             self.documents.close(event["uri"])
         self.notify("workspace/didChangeWatchedFiles", {"changes": events})
 
-    async def at_position(
+    async def at_position[Result](
         self,
-        method: str,
+        method: Method[Result],
         document: Document,
         line: int,
         column: int,
-        extra: dict[str, LSPAny] | None = None,
-    ) -> LSPAny:
+        extra: Mapping[str, LSPAny] | None = None,
+    ) -> Result:
         position = lsp_position(document.text, line, column)
         params = {"textDocument": {"uri": document.path.as_uri()}, "position": position}
         params.update(extra or {})
         return await self.ask_about(document, method, params)
 
-    async def ask_about(
-        self, document: Document, method: str, params: dict[str, LSPAny]
-    ) -> LSPAny:
+    async def ask_about[Result](
+        self, document: Document, method: Method[Result], params: dict[str, LSPAny]
+    ) -> Result:
         self.documents.open(document)
         return await self.request(method, params)

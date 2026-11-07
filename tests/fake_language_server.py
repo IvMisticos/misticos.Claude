@@ -4,7 +4,9 @@ from typing import Any
 
 type Message = dict[str, Any]
 
-CLASS, METHOD = 5, 6
+CLASS, METHOD, FUNCTION = 5, 6, 12
+FUNCTION_NAMES = ["greet", "welcome"]
+GREET_LINE, WELCOME_LINE = 0, 1
 
 
 def read_message() -> Message | None:
@@ -71,6 +73,31 @@ def workspace_symbols(opened_uris: list[str]) -> list[Message]:
     ]
 
 
+CALL_SITE = starting_at(2, 4)
+
+
+def function(uri: str, line: int) -> Message:
+    return {
+        "name": FUNCTION_NAMES[line],
+        "kind": FUNCTION,
+        "uri": uri,
+        "range": starting_at(line, 0),
+        "selectionRange": starting_at(line, 4),
+        "data": {"line": line},
+    }
+
+
+def keeps_data(item: Message) -> bool:
+    return item.get("data") == {"line": item["selectionRange"]["start"]["line"]}
+
+
+def calls(item: Message, other_end: str, other_line: int) -> list[Message]:
+    if not keeps_data(item):
+        return []
+    call = {other_end: function(item["uri"], other_line), "fromRanges": [CALL_SITE]}
+    return [call]
+
+
 class GreeterServer:
     def __init__(self) -> None:
         self.nests_symbols = False
@@ -92,6 +119,15 @@ class GreeterServer:
                 return flat_symbols(params["textDocument"]["uri"])
             case "workspace/symbol":
                 return workspace_symbols(self.opened_uris)
+            case "textDocument/definition":
+                return {"uri": params["textDocument"]["uri"]}
+            case "textDocument/prepareCallHierarchy":
+                uri = params["textDocument"]["uri"]
+                return [function(uri, params["position"]["line"])]
+            case "callHierarchy/incomingCalls":
+                return calls(params["item"], "from", WELCOME_LINE)
+            case "callHierarchy/outgoingCalls":
+                return calls(params["item"], "to", GREET_LINE)
         return None
 
 
