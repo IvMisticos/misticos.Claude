@@ -39,38 +39,6 @@ class EventLog(NamedTuple):
             return self
         return copy.replace(self, history=self.history[self.history.index(prompt) :])
 
-    def to_json(self) -> JsonObject:
-        return {
-            "next_id": self.next_id,
-            "history": [
-                {"reply": item.id, "length": item.prose_length}
-                if isinstance(item, Reply)
-                else {"prompt": item.id}
-                for item in self.history
-            ],
-        }
-
-
-def parsed_history_item(stored: JsonValue) -> Prompt | Reply | None:
-    item = dict_or_empty(stored)
-    prompt_id = item.get("prompt")
-    if isinstance(prompt_id, str):
-        return Prompt(prompt_id)
-    reply_id, length = item.get("reply"), item.get("length")
-    if isinstance(reply_id, str) and isinstance(length, int):
-        return Reply(reply_id, length)
-    return None
-
-
-def parsed_event_log(stored: JsonValue) -> "EventLog":
-    log = dict_or_empty(stored)
-    next_id = log.get("next_id")
-    history = log.get("history")
-    if not (isinstance(next_id, int) and isinstance(history, list)):
-        return EventLog()
-    items = (parsed_history_item(item) for item in history)
-    return EventLog(next_id, tuple(item for item in items if item))
-
 
 def is_wake(message: JsonObject) -> bool:
     kind = dict_or_empty(message.get("origin")).get("kind")

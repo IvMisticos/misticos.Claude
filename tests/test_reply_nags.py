@@ -8,9 +8,11 @@ from conftest import (
     run_json_hook,
     text_at,
 )
+from hook_io import HookEvent
 from json_values import JsonObject, JsonValue
 from prose import prose_length
-from reply_history import EventLog, Prompt, Reply, transcript_history
+from reply_history import Prompt, Reply, transcript_history
+from reply_nags import NagState, nags_from_events
 
 ROOT = Path(__file__).resolve().parent.parent
 REPLY_NAGS = ROOT / "hooks" / "reply_nags.py"
@@ -40,12 +42,6 @@ WAKE_PROMPTS = [
 )
 def test_counts_prose_outside_code_and_links(text: str, length: int) -> None:
     assert prose_length(text) == length
-
-
-def test_log_starts_at_the_reviewed_prompt() -> None:
-    log = EventLog().with_reply(SHORT).with_prompt().with_reply(SHORT)
-    log = log.with_prompt().starting_at("1")
-    assert [type(item) for item in log.history] == [Prompt, Reply, Prompt]
 
 
 def run_hook(home: Path, payload: JsonObject, *arguments: str) -> JsonValue:
@@ -411,3 +407,13 @@ def test_cursor_nags_about_repeated_updates_after_a_tool(home: Path) -> None:
     cursor(home, "afterAgentResponse", text=SHORT)
     cursor(home, "afterAgentResponse", text=SHORT)
     assert "2 messages in a row" in nag_text(cursor(home, "postToolUse"))
+
+
+def test_cursor_state_stays_bounded_over_many_turns() -> None:
+    state = NagState()
+    for _ in range(25):
+        _, state = nags_from_events(
+            HookEvent.AFTER_AGENT_RESPONSE, {"text": SHORT}, state
+        )
+        _, state = nags_from_events(HookEvent.BEFORE_SUBMIT_PROMPT, {}, state)
+    assert len(state.log.history) <= 3

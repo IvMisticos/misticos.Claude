@@ -22,23 +22,17 @@ from hook_io import (
     transcript_path_of,
     write_context,
 )
-from json_values import JsonObject, JsonValue, dict_or_empty
+from json_values import JsonObject, JsonValue
 from plugin_paths import DATA_ROOT
 from reply_history import (
     EventLog,
     Prompt,
     Reply,
     Window,
-    parsed_event_log,
     transcript_history,
     window_under_review,
 )
-from session_state import (
-    locked_session_file,
-    parsed_record,
-    read_json,
-    write_json,
-)
+from session_state import locked_session_file, read_record, write_record
 
 PROSE_LIMIT = 1000
 FIRST_NAG_AT_MESSAGES = 2
@@ -98,22 +92,6 @@ class NagState(NamedTuple):
     log: EventLog = EventLog()
     pending_nags: DueNags = DueNags()
 
-    def to_json(self) -> JsonObject:
-        return {
-            "memory": self.memory._asdict(),
-            "log": self.log.to_json(),
-            "pending_nags": self.pending_nags._asdict(),
-        }
-
-
-def parsed_state(stored: JsonValue) -> NagState:
-    state = dict_or_empty(stored)
-    return NagState(
-        parsed_record(NagMemory, state.get("memory")) or NagMemory(),
-        parsed_event_log(state.get("log")),
-        parsed_record(DueNags, state.get("pending_nags")) or DueNags(),
-    )
-
 
 def unseen_replies(replies: list[Reply], seen_reply: str) -> list[Reply]:
     ids = [reply.id for reply in replies]
@@ -122,10 +100,10 @@ def unseen_replies(replies: list[Reply], seen_reply: str) -> list[Reply]:
     return replies[ids.index(seen_reply) + 1 :]
 
 
-def long_reply_nag(unseen: list[Reply]) -> str | None:
+def long_reply_nag(unseen: list[Reply]) -> str:
     long_replies = [reply for reply in unseen if reply.prose_length > PROSE_LIMIT]
     if not long_replies:
-        return None
+        return ""
     return LONG_REPLY.format(length=long_replies[-1].prose_length)
 
 
@@ -137,10 +115,10 @@ def remembered_window(memory: NagMemory) -> Window:
 
 def repeated_updates_nag(
     history: Sequence[Prompt | Reply], memory: NagMemory, unseen: list[Reply]
-) -> tuple[str | None, NagMemory]:
+) -> tuple[str, NagMemory]:
     window = window_under_review(history, remembered_window(memory), len(unseen))
     if window is None:
-        return None, memory
+        return "", memory
     nagged_at = memory.nagged_at if memory.window == window.prompt_id else 0
     due_at = nagged_at + MESSAGES_BETWEEN_NAGS if nagged_at else FIRST_NAG_AT_MESSAGES
     count = window.reply_count
@@ -148,7 +126,7 @@ def repeated_updates_nag(
         memory, window=window.prompt_id, window_replies=count, submitted_prompt=""
     )
     if count < due_at:
-        return None, copy.replace(memory, nagged_at=nagged_at)
+        return "", copy.replace(memory, nagged_at=nagged_at)
     return REPEATED_UPDATES.format(count=count), copy.replace(memory, nagged_at=count)
 
 
@@ -160,7 +138,7 @@ def due_nags(
     repeated_updates, memory = repeated_updates_nag(history, memory, unseen)
     if replies:
         memory = copy.replace(memory, seen_reply=replies[-1].id)
-    return DueNags(long_reply_nag(unseen) or "", repeated_updates or ""), memory
+    return DueNags(long_reply_nag(unseen), repeated_updates), memory
 
 
 def nags_from_transcript(
@@ -219,9 +197,8 @@ def main() -> None:
         else nags_from_events
     )
     with locked_session_file(STATE_DIR, session_id) as state_file:
-        state = parsed_state(read_json(state_file))
-        nags, state = nags_for(event, payload, state)
-        write_json(state_file, state.to_json())
+        nags, state = nags_for(event, payload, read_record(state_file, NagState()))
+        write_record(state_file, state)
     if nags:
         event_name = event_name_of(payload)
         write_context(event_name, " ".join(nags), options.harness.output_shape)
