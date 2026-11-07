@@ -18,6 +18,7 @@ from pull_requests import (
     PullRequest,
     last_activity_by_pull_request,
     pull_requests_in_result,
+    pull_requests_linked_in,
 )
 from review_threads import output_by, started
 from transcript import TranscriptPart, positioned_entries, transcript_part_from
@@ -595,3 +596,24 @@ def test_redirections_are_not_gh_arguments(tmp_path: Path) -> None:
 def test_result_of_an_unknown_use_has_no_pull_requests() -> None:
     result: JsonObject = {"text": "https://github.com/acme/a/pull/1"}
     assert list(pull_requests_in_result(result, None)) == []
+
+
+def test_a_link_with_trailing_letters_names_no_pull_request() -> None:
+    assert list(pull_requests_linked_in(["https://github.com/o/r/pull/10abc"])) == []
+
+
+def test_a_link_to_a_pull_request_page_names_the_pull_request() -> None:
+    link = "https://github.com/o/r/pull/10/files"
+    assert list(pull_requests_linked_in([link])) == [PullRequest("o", "r", 10)]
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "[#10](https://github.com/o/r/pull/10)",
+        "Opened https://github.com/o/r/pull/10.",
+        '{"url": "https://github.com/o/r/pull/10"}',
+    ],
+)
+def test_a_link_followed_by_punctuation_names_the_pull_request(text: str) -> None:
+    assert list(pull_requests_linked_in([text])) == [PullRequest("o", "r", 10)]

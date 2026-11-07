@@ -30,10 +30,8 @@ def install_lock_is_old() -> bool:
 def process_is_gone(process_id: int) -> bool:
     try:
         os.kill(process_id, 0)
-    except ProcessLookupError:
+    except (ProcessLookupError, PermissionError):
         return True
-    except PermissionError:
-        return False
     return False
 
 
