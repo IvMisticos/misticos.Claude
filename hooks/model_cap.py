@@ -1,11 +1,9 @@
 import re
-from collections.abc import Callable, Iterator
+from collections.abc import Iterator
 from pathlib import Path
 from typing import NamedTuple
 
-from json_values import JsonObject, JsonValue
-
-DATE_DIGITS = 8
+from json_values import JsonValue
 
 
 class Tier(NamedTuple):
@@ -21,6 +19,8 @@ TIERS = (
     Tier("fable", ("fable", "best", "astra")),
 )
 
+DATE_DIGITS = 8
+
 
 class Model(NamedTuple):
     name: str
@@ -29,8 +29,9 @@ class Model(NamedTuple):
     version: tuple[int, ...]
 
 
-def version_of(name: str) -> tuple[int, ...]:
-    numbers = re.findall(r"\d+", name.split("[", 1)[0])
+def version(name: str) -> tuple[int, ...]:
+    slug = name.split("[", 1)[0]
+    numbers = re.findall(r"\d+", slug)
     return tuple(int(number) for number in numbers if len(number) < DATE_DIGITS)
 
 
@@ -39,7 +40,7 @@ def parsed_model(value: JsonValue) -> Model | None:
         return None
     words = set(re.split(r"[^a-z]+", value.lower()))
     models = (
-        Model(value, rank, family, version_of(value))
+        Model(value, rank, family, version(value))
         for rank, tier in enumerate(TIERS)
         for family in tier.families
         if family in words
@@ -51,46 +52,12 @@ def claude_alias(model: Model | None) -> str | None:
     return TIERS[model.rank].claude_alias if model else None
 
 
-def over_cap(
-    requested: Model | None, caller: Model | None
-) -> tuple[Model, Model] | None:
-    if requested is None or caller is None:
-        return None
-    if requested.family != caller.family:
-        higher = requested.rank > caller.rank
-    else:
-        higher = requested.version > caller.version
-    return (requested, caller) if higher else None
-
-
 def outranks(requested: Model | None, caller: Model | None) -> bool:
-    return over_cap(requested, caller) is not None
-
-
-def full_name(model: Model) -> str:
-    return model.name
-
-
-def capped_input(
-    tool_input: JsonObject,
-    requested: Model | None,
-    caller: Model | None,
-    name_of: Callable[[Model], str | None] = full_name,
-) -> JsonObject | None:
-    pair = over_cap(requested, caller)
-    if pair is None:
-        return None
-    return {**tool_input, "model": name_of(pair[1])}
-
-
-def denial_reason(
-    subject: str, remedy: str, model: Model | None, caller: Model | None
-) -> str | None:
-    pair = over_cap(model, caller)
-    if pair is None:
-        return None
-    capped, limit = pair
-    return f"{subject} runs on {capped.name}, above your {limit.name}. {remedy}"
+    if requested is None or caller is None:
+        return False
+    if requested.family != caller.family:
+        return requested.rank > caller.rank
+    return requested.version > caller.version
 
 
 def project_folders(cwd: Path) -> Iterator[Path]:
