@@ -11,7 +11,7 @@ from collections.abc import Callable, Generator
 from enum import Enum
 from typing import Protocol, TextIO, TypeIs
 
-from json_values import JsonValue
+from json_values import JsonObject, JsonValue
 
 if sys.platform == "win32":
     import msvcrt
@@ -84,6 +84,20 @@ def is_record_type(field_type: object) -> TypeIs[type[Record]]:
     )
 
 
+def is_record(value: object) -> TypeIs[Record]:
+    return is_record_type(type(value))
+
+
+def stored_form(value: object) -> object:
+    if is_record(value):
+        return {name: stored_form(field) for name, field in value._asdict().items()}
+    if isinstance(value, tuple):
+        return [stored_form(item) for item in value]
+    if isinstance(value, dict):
+        return {key: stored_form(item) for key, item in value.items()}
+    return value
+
+
 def parsed_union_member(members: tuple[object, ...], stored: JsonValue) -> object:
     for member in members:
         with contextlib.suppress(ValueError):
@@ -108,28 +122,32 @@ def parsed_field(field_type: object, stored: JsonValue) -> object:
             field_type, Enum
         ):
             return field_type(stored)
-        case (None, ()) if is_record_type(field_type) and isinstance(stored, list):
-            field_types = typing.get_type_hints(field_type).values()
-            fields = zip(field_types, stored, strict=True)
-            return field_type(*(parsed_field(type_, value) for type_, value in fields))
+        case (None, ()) if is_record_type(field_type) and isinstance(stored, dict):
+            return record_from_fields(field_type, stored)
         case (None, ()) if type(stored) is field_type:
             return stored
     raise ValueError(f"stored {stored!r} is not a {field_type}")
 
 
+def record_from_fields[R](record_type: Callable[..., R], stored: JsonObject) -> R:
+    field_types = typing.get_type_hints(record_type)
+    if not stored.keys() <= field_types.keys():
+        raise ValueError(f"stored {stored!r} has fields {record_type} lacks")
+    fields = {
+        name: parsed_field(field_types[name], value) for name, value in stored.items()
+    }
+    try:
+        return record_type(**fields)
+    except TypeError as error:
+        raise ValueError(f"stored {stored!r} lacks fields of {record_type}") from error
+
+
 def parsed_record[R](record_type: Callable[..., R], stored: JsonValue) -> R | None:
     if not isinstance(stored, dict):
         return None
-    field_types = typing.get_type_hints(record_type)
-    if not stored.keys() <= field_types.keys():
-        return None
     try:
-        fields = {
-            name: parsed_field(field_types[name], value)
-            for name, value in stored.items()
-        }
-        return record_type(**fields)
-    except (ValueError, TypeError):
+        return record_from_fields(record_type, stored)
+    except ValueError:
         return None
 
 
@@ -139,4 +157,4 @@ def read_record[R: Record](state_file: TextIO, empty_record: R) -> R:
 
 
 def write_record(state_file: TextIO, record: Record) -> None:
-    write_json(state_file, record._asdict())
+    write_json(state_file, stored_form(record))
