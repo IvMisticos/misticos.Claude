@@ -14,18 +14,8 @@ from pathlib import Path
 from typing import NamedTuple
 
 from install_lock import install_lock
-from json_values import JsonObject, JsonValue, dict_or_empty, json_object
-from plugin_paths import DATA_ROOT
 
-HOOKS_DIR = Path(__file__).resolve().parent
 HOME = Path.home()
-CLAUDE_SETTINGS = HOME / ".claude" / "settings.json"
-INSTALLED_PLUGINS = HOME / ".claude" / "plugins" / "installed_plugins.json"
-WEB_GUIDANCE_NAME = "modern-web-guidance"
-WEB_GUIDANCE_PLUGIN = f"{WEB_GUIDANCE_NAME}@googlechrome"
-WEB_GUIDANCE_MARKETPLACE = "GoogleChrome/modern-web-guidance"
-PLUGIN_DATA = Path(os.environ.get("CLAUDE_PLUGIN_DATA") or DATA_ROOT)
-WEB_GUIDANCE_OFFERED = PLUGIN_DATA / "web-guidance-offered"
 CLOUD_SESSION_MARK = "CCR_AGENT_PROXY_ENABLED"
 LOCAL_BIN = HOME / ".local" / "bin"
 MISE = LOCAL_BIN / "mise"
@@ -118,45 +108,6 @@ def run(
 
 def run_pipeline(script: str) -> None:
     run("bash", "-o", "pipefail", "-c", script)
-
-
-def read_json_leniently(path: Path) -> JsonObject:
-    try:
-        return json_object(path.read_text()) or {}
-    except OSError:
-        return {}
-
-
-def web_guidance_plugin_choice() -> JsonValue:
-    settings = read_json_leniently(CLAUDE_SETTINGS)
-    enabled = dict_or_empty(settings.get("enabledPlugins"))
-    return enabled.get(WEB_GUIDANCE_PLUGIN)
-
-
-def web_guidance_plugin_wanted() -> bool:
-    plugins = read_json_leniently(INSTALLED_PLUGINS).get("plugins")
-    installed = dict_or_empty(plugins)
-    return (
-        WEB_GUIDANCE_PLUGIN not in installed
-        and web_guidance_plugin_choice() is not False
-    )
-
-
-def install_web_guidance_plugin() -> None:
-    run(
-        "claude",
-        "plugin",
-        "install",
-        WEB_GUIDANCE_NAME,
-        "--marketplace",
-        WEB_GUIDANCE_MARKETPLACE,
-        "--scope",
-        "user",
-    )
-
-
-def enable_web_guidance_plugin() -> None:
-    run("claude", "plugin", "enable", WEB_GUIDANCE_PLUGIN, "--scope", "user")
 
 
 def install_apt_packages() -> None:
@@ -371,33 +322,5 @@ def install_cloud_tools() -> None:
     exit_if_any_failed(failed)
 
 
-def reapply_settings() -> None:
-    run(str(HOOKS_DIR / "run.sh"), "setup_settings.py")
-
-
-def set_up_web_guidance_plugin() -> None:
-    try:
-        install_web_guidance_plugin()
-    finally:
-        reapply_settings()
-    if web_guidance_plugin_choice() is not True:
-        enable_web_guidance_plugin()
-
-
-def offer_web_guidance_plugin() -> None:
-    if WEB_GUIDANCE_OFFERED.exists() or not web_guidance_plugin_wanted():
-        return
-    set_up_web_guidance_plugin()
-    WEB_GUIDANCE_OFFERED.parent.mkdir(parents=True, exist_ok=True)
-    WEB_GUIDANCE_OFFERED.touch()
-
-
-def main() -> None:
-    try:
-        offer_web_guidance_plugin()
-    finally:
-        install_cloud_tools()
-
-
 if __name__ == "__main__":
-    main()
+    install_cloud_tools()

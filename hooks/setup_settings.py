@@ -16,9 +16,10 @@ from pathlib import Path
 import tomli_w
 from atomic_write import write_atomically
 from json_values import JsonObject, JsonValue
+from web_guidance import WEB_GUIDANCE_PLUGIN, offer_web_guidance_plugin
 
 HOME = Path.home()
-CLAUDE_DIR = HOME / ".claude"
+CLAUDE_SETTINGS = HOME / ".claude" / "settings.json"
 CODEX_DIR = HOME / ".codex"
 AUTO_COMPACT_WINDOW_TOKENS = 400_000
 REMOTE_SERVER_NAMES = ("claude-code-remote", "Claude_Code_Remote")
@@ -131,10 +132,15 @@ def list_setting(settings: JsonObject, key: str) -> list[JsonValue]:
     return value
 
 
+def plugin_choice(plugin: str) -> bool | None:
+    enabled = object_setting(read_json(CLAUDE_SETTINGS), "enabledPlugins")
+    choice = enabled.get(plugin)
+    return choice if isinstance(choice, bool) else None
+
+
 def configure_claude_settings() -> None:
-    CLAUDE_DIR.mkdir(parents=True, exist_ok=True)
-    settings_path = CLAUDE_DIR / "settings.json"
-    settings = read_json(settings_path)
+    CLAUDE_SETTINGS.parent.mkdir(parents=True, exist_ok=True)
+    settings = read_json(CLAUDE_SETTINGS)
     wanted = dict(settings)
     wanted["attribution"] = {"commit": "", "pr": "", "sessionUrl": False}
     wanted["autoMemoryEnabled"] = False
@@ -183,7 +189,7 @@ def configure_claude_settings() -> None:
         "CLAUDE_CODE_TURN_UPDATES": "0",
     }
     if wanted != settings:
-        write_atomically(settings_path, json.dumps(wanted, indent=2) + "\n")
+        write_atomically(CLAUDE_SETTINGS, json.dumps(wanted, indent=2) + "\n")
 
 
 def configure_codex() -> None:
@@ -207,8 +213,12 @@ def configure_codex() -> None:
 
 
 def main() -> None:
-    configure_claude_settings()
-    configure_codex()
+    web_guidance_choice = plugin_choice(WEB_GUIDANCE_PLUGIN)
+    try:
+        offer_web_guidance_plugin(web_guidance_choice)
+    finally:
+        configure_claude_settings()
+        configure_codex()
 
 
 if __name__ == "__main__":
