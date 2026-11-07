@@ -77,40 +77,38 @@ def measured_context(
 
 
 def allowed_actions(
-    payload: JsonObject, fire: str, messages: Sequence[str]
+    event: HookEvent, fire: str, messages: Sequence[str]
 ) -> frozenset[Action]:
     allowed: set[Action] = set()
     if len(messages) <= REMINDER_PARTS and (fire or len(messages) == 1):
         allowed.add(Action.COPY)
-    if hook_event_of(payload) != HookEvent.USER_PROMPT_SUBMIT:
+    if event != HookEvent.USER_PROMPT_SUBMIT:
         allowed.add(Action.POINTER)
     return frozenset(allowed)
 
 
-def growth_reminder(rules: Rules, payload: JsonObject, options: Options) -> str | None:
+def growth_reminder(
+    rules: Rules, event: HookEvent, payload: JsonObject, options: Options
+) -> str | None:
     messages = full_copy_messages(rules, GROWN_PREAMBLE)
     session_id = session_id_of(payload)
     if not (messages and session_id):
         return None
-    fire = fire_id(event_name_of(payload), payload)
+    fire = fire_id(event, payload)
     if not fire and options.part > 1:
         return None
     context = measured_context(payload, options.harness.context_from)
     if context is None:
         return None
-    allowed = allowed_actions(payload, fire, messages)
+    allowed = allowed_actions(event, fire, messages)
     action = claim_action(session_id, fire, allowed, context)
     return message_for_part(action, options.part, messages, rules)
 
 
-def is_subagent_start(payload: JsonObject) -> bool:
-    return is_subagent(payload) or hook_event_of(payload) == HookEvent.SUBAGENT_START
-
-
 def session_start_reminder(
-    rules: Rules, payload: JsonObject, options: Options
+    rules: Rules, event: HookEvent, payload: JsonObject, options: Options
 ) -> str | None:
-    for_subagent = is_subagent_start(payload)
+    for_subagent = is_subagent(payload) or event == HookEvent.SUBAGENT_START
     session_id = session_id_of(payload)
     if options.part == 1 and session_id and not for_subagent:
         forget_baseline(session_id)
@@ -127,13 +125,13 @@ def session_start_reminder(
     return message_for_part(Action.COPY, options.part, messages, rules)
 
 
-def reminder_for(payload: JsonObject, options: Options) -> str | None:
+def reminder_for(event: HookEvent, payload: JsonObject, options: Options) -> str | None:
     rules = rules_at(RULES_PATH, options.harness.model_names)
-    if hook_event_of(payload) in (HookEvent.SESSION_START, HookEvent.SUBAGENT_START):
-        return session_start_reminder(rules, payload, options)
+    if event in (HookEvent.SESSION_START, HookEvent.SUBAGENT_START):
+        return session_start_reminder(rules, event, payload, options)
     if is_subagent(payload):
         return None
-    return growth_reminder(rules, payload, options)
+    return growth_reminder(rules, event, payload, options)
 
 
 def parsed_options(argv: Sequence[str]) -> Options:
@@ -146,12 +144,12 @@ def parsed_options(argv: Sequence[str]) -> Options:
 def main() -> None:
     options = parsed_options(sys.argv[1:])
     payload = read_payload()
-    event = event_name_of(payload)
-    if not event:
+    event = hook_event_of(payload)
+    if event is None:
         return
-    reminder = reminder_for(payload, options)
+    reminder = reminder_for(event, payload, options)
     if reminder:
-        write_context(event, reminder, options.harness.output_shape)
+        write_context(event_name_of(payload), reminder, options.harness.output_shape)
 
 
 if __name__ == "__main__":
