@@ -8,10 +8,11 @@
 # ///
 
 import atexit
+import functools
 from collections.abc import Awaitable, Callable, Mapping
 from pathlib import Path
 
-from lsp_client import LanguageServer
+from lsp_client import LanguageServer, LanguageServerError
 from lsp_methods import (
     DEFINITION,
     DIAGNOSTICS,
@@ -27,6 +28,7 @@ from lsp_methods import (
 )
 from lsp_types import CallHierarchyItem, LSPAny
 from mcp.server.mcpserver import MCPServer
+from mcp.server.mcpserver.exceptions import ToolError
 from open_documents import Document, read_document
 from result_formatting import (
     Call,
@@ -43,6 +45,8 @@ from workspace_edits import apply_workspace_edit
 type ServerFor = Callable[[Path], Awaitable[LanguageServer]]
 type Tool = Callable[..., Awaitable[str]]
 
+ANTICIPATED_ERRORS = (ValueError, LanguageServerError)
+
 
 def resolved(file: str) -> Path:
     path = Path(file).expanduser().resolve()
@@ -51,12 +55,23 @@ def resolved(file: str) -> Path:
     return path
 
 
+def reporting_errors(tool: Tool) -> Tool:
+    @functools.wraps(tool)
+    async def reported(*arguments: object, **keyword_arguments: object) -> str:
+        try:
+            return await tool(*arguments, **keyword_arguments)
+        except ANTICIPATED_ERRORS as error:
+            raise ToolError(str(error)) from error
+
+    return reported
+
+
 class CodeNavigation:
     def __init__(self, server_for: ServerFor) -> None:
         self.server_for = server_for
 
     def tools(self) -> list[Tool]:
-        return [
+        tools = [
             self.definition,
             self.references,
             self.hover,
@@ -67,6 +82,7 @@ class CodeNavigation:
             self.callers,
             self.callees,
         ]
+        return [reporting_errors(tool) for tool in tools]
 
     async def document_and_server(self, file: str) -> tuple[Document, LanguageServer]:
         document = read_document(resolved(file))
@@ -119,8 +135,9 @@ class CodeNavigation:
     async def workspace_symbols(self, query: str, file_in_project: str) -> str:
         """Symbols matching query across the project that contains file_in_project; that file picks the language."""
         document, server = await self.document_and_server(file_in_project)
-        server.documents.open(document)
-        symbols = await server.request(WORKSPACE_SYMBOLS, {"query": query})
+        symbols = await server.request_after_opening(
+            WORKSPACE_SYMBOLS, document, {"query": query}
+        )
         return workspace_symbols_text(symbols)
 
     async def diagnostics(self, file: str) -> str:
@@ -131,39 +148,41 @@ class CodeNavigation:
 
     async def callers(self, file: str, line: int, column: int) -> str:
         """Functions that call the function at file:line:column (1-based), each with the places it calls from."""
-        server, functions = await self.functions_at(file, line, column)
+        document, server = await self.document_and_server(file)
         calls = [
             Call(call["from"], call["from"]["uri"], call["fromRanges"])
-            for function in functions
+            for function in await functions_at(server, document, line, column)
             for call in await server.request(INCOMING_CALLS, {"item": function}) or []
         ]
         return calls_text(calls)
 
     async def callees(self, file: str, line: int, column: int) -> str:
         """Functions that the function at file:line:column (1-based) calls, each with the places it is called."""
-        server, functions = await self.functions_at(file, line, column)
+        document, server = await self.document_and_server(file)
         calls = [
             Call(call["to"], function["uri"], call["fromRanges"])
-            for function in functions
+            for function in await functions_at(server, document, line, column)
             for call in await server.request(OUTGOING_CALLS, {"item": function}) or []
         ]
         return calls_text(calls)
 
-    async def functions_at(
-        self, file: str, line: int, column: int
-    ) -> tuple[LanguageServer, list[CallHierarchyItem]]:
-        document, server = await self.document_and_server(file)
-        functions = await server.at_position(
-            PREPARE_CALL_HIERARCHY, document, line, column
-        )
-        if not functions:
-            raise ValueError(f"no function at {document.path}:{line}:{column}")
-        return server, functions
+
+async def functions_at(
+    server: LanguageServer, document: Document, line: int, column: int
+) -> list[CallHierarchyItem]:
+    functions = await server.at_position(PREPARE_CALL_HIERARCHY, document, line, column)
+    if not functions:
+        raise ValueError(f"no function at {document.path}:{line}:{column}")
+    return functions
+
+
+def navigation_server(server_for: ServerFor) -> MCPServer:
+    navigation = MCPServer("code-navigation")
+    for tool in CodeNavigation(server_for).tools():
+        navigation.add_tool(tool)
+    return navigation
 
 
 if __name__ == "__main__":
     atexit.register(stop_all_servers)
-    mcp = MCPServer("code-navigation")
-    for tool in CodeNavigation(server_for).tools():
-        mcp.add_tool(tool)
-    mcp.run()
+    navigation_server(server_for).run()

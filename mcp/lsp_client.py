@@ -16,6 +16,7 @@ from lsp_types import (
     ResponseError,
 )
 from open_documents import Document, OpenDocuments
+from pydantic import ValidationError
 from text_positions import lsp_position
 
 QUIET_SECONDS_BEFORE_READY = 2.0
@@ -24,7 +25,19 @@ REQUEST_TIMEOUT_SECONDS = 60.0
 METHOD_NOT_FOUND = -32601
 
 
-class LanguageServerExited(RuntimeError):
+class LanguageServerError(Exception):
+    pass
+
+
+class LanguageServerExited(LanguageServerError):
+    pass
+
+
+class ErrorReply(LanguageServerError):
+    pass
+
+
+class MalformedReply(LanguageServerError):
     pass
 
 
@@ -147,7 +160,12 @@ class LanguageServer:
             result = await asyncio.wait_for(future, REQUEST_TIMEOUT_SECONDS)
         finally:
             self.pending.pop(request_id, None)
-        return method.result.validate_python(result)
+        try:
+            return method.result.validate_python(result)
+        except ValidationError as error:
+            raise MalformedReply(
+                f"{self.name} sent a malformed {method.name} reply: {error}"
+            ) from error
 
     async def read_messages(self) -> None:
         try:
@@ -193,8 +211,10 @@ class LanguageServer:
         if future is None or future.done():
             return
         if "error" in response:
-            error = response["error"].get("message", "language server error")
-            future.set_exception(RuntimeError(error))
+            error = response["error"].get("message", "no message")
+            future.set_exception(
+                ErrorReply(f"{self.name} replied with an error: {error}")
+            )
             return
         future.set_result(response.get("result"))
 
@@ -242,8 +262,13 @@ class LanguageServer:
         document: Document,
         extra: Mapping[str, LSPAny] | None = None,
     ) -> Result:
-        self.documents.open(document)
         text_document = {"uri": document.path.as_uri()}
-        return await self.request(
-            method, {"textDocument": text_document, **(extra or {})}
+        return await self.request_after_opening(
+            method, document, {"textDocument": text_document, **(extra or {})}
         )
+
+    async def request_after_opening[Result](
+        self, method: Method[Result], document: Document, params: Mapping[str, LSPAny]
+    ) -> Result:
+        self.documents.open(document)
+        return await self.request(method, params)
