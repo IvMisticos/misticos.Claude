@@ -51,13 +51,6 @@ def resolved(file: str) -> Path:
     return path
 
 
-async def about_document[Result](
-    method: Method[Result], document: Document, server: LanguageServer
-) -> Result:
-    params = {"textDocument": {"uri": document.path.as_uri()}}
-    return await server.ask_about(document, method, params)
-
-
 class CodeNavigation:
     def __init__(self, server_for: ServerFor) -> None:
         self.server_for = server_for
@@ -120,20 +113,20 @@ class CodeNavigation:
     async def document_symbols(self, file: str) -> str:
         """Outline of a file: classes, functions, methods, fields, with positions."""
         document, server = await self.document_and_server(file)
-        symbols = await about_document(DOCUMENT_SYMBOLS, document, server)
+        symbols = await server.about_document(DOCUMENT_SYMBOLS, document)
         return document_symbols_text(document.path, symbols)
 
     async def workspace_symbols(self, query: str, file_in_project: str) -> str:
         """Symbols matching query across the project that contains file_in_project; that file picks the language."""
         document, server = await self.document_and_server(file_in_project)
-        return workspace_symbols_text(
-            await server.ask_about(document, WORKSPACE_SYMBOLS, {"query": query})
-        )
+        server.documents.open(document)
+        symbols = await server.request(WORKSPACE_SYMBOLS, {"query": query})
+        return workspace_symbols_text(symbols)
 
     async def diagnostics(self, file: str) -> str:
         """Compile errors and warnings in a file, without building the project."""
         document, server = await self.document_and_server(file)
-        report = await about_document(DIAGNOSTICS, document, server)
+        report = await server.about_document(DIAGNOSTICS, document)
         return diagnostics_text(document.path, report["items"])
 
     async def callers(self, file: str, line: int, column: int) -> str:

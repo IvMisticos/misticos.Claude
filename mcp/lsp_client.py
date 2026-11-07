@@ -232,12 +232,18 @@ class LanguageServer:
         extra: Mapping[str, LSPAny] | None = None,
     ) -> Result:
         position = lsp_position(document.text, line, column)
-        params = {"textDocument": {"uri": document.path.as_uri()}, "position": position}
-        params.update(extra or {})
-        return await self.ask_about(document, method, params)
+        return await self.about_document(
+            method, document, {"position": position, **(extra or {})}
+        )
 
-    async def ask_about[Result](
-        self, document: Document, method: Method[Result], params: dict[str, LSPAny]
+    async def about_document[Result](
+        self,
+        method: Method[Result],
+        document: Document,
+        extra: Mapping[str, LSPAny] | None = None,
     ) -> Result:
         self.documents.open(document)
-        return await self.request(method, params)
+        text_document = {"uri": document.path.as_uri()}
+        return await self.request(
+            method, {"textDocument": text_document, **(extra or {})}
+        )
