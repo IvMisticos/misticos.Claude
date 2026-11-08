@@ -6,7 +6,7 @@ from pathlib import Path
 from atomic_write import write_atomically
 from disk_cleanup import cleared_caches
 from disks import BYTES_PER_MIB, Disk, disks, total_free
-from json_values import json_object
+from json_values import json_object_in
 from plugin_paths import DATA_ROOT
 from session_state import lock_exclusively
 
@@ -17,10 +17,7 @@ CLEANUP_RECORD = DATA_ROOT / "disk-cleanup.json"
 
 
 def read_most_free_since_cleanup(record: Path) -> dict[str, int]:
-    try:
-        stored = json_object(record.read_bytes()) or {}
-    except OSError:
-        return {}
+    stored = json_object_in(record)
     return {device: free for device, free in stored.items() if isinstance(free, int)}
 
 

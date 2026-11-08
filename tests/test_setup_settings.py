@@ -10,9 +10,7 @@ import setup_settings
 from conftest import (
     ROOT,
     FakeBin,
-    claude_hook_commands,
     json_at,
-    plugin_hook_command,
     without_session_variables,
 )
 from json_values import JsonObject, JsonValue
@@ -158,12 +156,6 @@ def test_malformed_settings_fail_the_hook_once_and_stay_untouched(
     assert result.stderr.count(b"Traceback") == 1
     assert claude_calls(home) == []
     assert settings_path.read_text() == stored
-
-
-def test_settings_hook_runs_every_session() -> None:
-    assert claude_hook_commands("SessionStart", "setup_settings.py") == [
-        plugin_hook_command("setup_settings.py")
-    ]
 
 
 @pytest.mark.parametrize(

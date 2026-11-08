@@ -15,7 +15,7 @@ from pathlib import Path
 
 import tomli_w
 from atomic_write import write_atomically
-from json_values import JsonObject, JsonValue
+from json_values import JsonObject
 from web_guidance import WEB_GUIDANCE_PLUGIN, offer_web_guidance_plugin
 
 HOME = Path.home()
@@ -114,26 +114,20 @@ def read_json(path: Path) -> JsonObject:
     return value
 
 
-def object_setting(settings: JsonObject, key: str) -> JsonObject:
+def setting[Kind: (dict, list)](
+    settings: JsonObject, key: str, kind: type[Kind]
+) -> Kind:
     value = settings.get(key)
     if value is None:
-        return {}
-    if not isinstance(value, dict):
-        raise TypeError(f"Claude setting {key} is not a JSON object")
-    return value
-
-
-def list_setting(settings: JsonObject, key: str) -> list[JsonValue]:
-    value = settings.get(key)
-    if value is None:
-        return []
-    if not isinstance(value, list):
-        raise TypeError(f"Claude setting {key} is not a JSON list")
+        return kind()
+    if not isinstance(value, kind):
+        json_name = "object" if kind is dict else "list"
+        raise TypeError(f"Claude setting {key} is not a JSON {json_name}")
     return value
 
 
 def plugin_choice(plugin: str) -> bool | None:
-    enabled = object_setting(read_json(CLAUDE_SETTINGS), "enabledPlugins")
+    enabled = setting(read_json(CLAUDE_SETTINGS), "enabledPlugins", dict)
     choice = enabled.get(plugin)
     return choice if isinstance(choice, bool) else None
 
@@ -145,30 +139,30 @@ def configure_claude_settings() -> None:
     wanted["attribution"] = {"commit": "", "pr": "", "sessionUrl": False}
     wanted["autoMemoryEnabled"] = False
     wanted["autoCompactWindow"] = AUTO_COMPACT_WINDOW_TOKENS
-    permissions = dict(object_setting(settings, "permissions"))
-    denied = list_setting(permissions, "deny")
+    permissions = dict(setting(settings, "permissions", dict))
+    denied = setting(permissions, "deny", list)
     permissions["deny"] = denied + [tool for tool in DENIED_TOOLS if tool not in denied]
     wanted["permissions"] = permissions
     wanted["skillOverrides"] = {
         **dict.fromkeys(USER_INVOCABLE_ONLY_SKILLS, USER_INVOCABLE_ONLY),
-        **object_setting(settings, "skillOverrides"),
+        **setting(settings, "skillOverrides", dict),
     }
     wanted["enabledPlugins"] = {
         **dict.fromkeys(DISABLED_PLUGINS, False),
-        **object_setting(settings, "enabledPlugins"),
+        **setting(settings, "enabledPlugins", dict),
     }
-    marketplaces = object_setting(settings, "extraKnownMarketplaces")
+    marketplaces = setting(settings, "extraKnownMarketplaces", dict)
     own_marketplace: JsonObject = {
         "source": OWN_MARKETPLACE_SOURCE,
         "autoUpdate": True,
-        **object_setting(marketplaces, OWN_MARKETPLACE),
+        **setting(marketplaces, OWN_MARKETPLACE, dict),
     }
     wanted["extraKnownMarketplaces"] = {
         **marketplaces,
         OWN_MARKETPLACE: own_marketplace,
     }
     wanted["env"] = {
-        **object_setting(settings, "env"),
+        **setting(settings, "env", dict),
         "CLAUDE_CODE_ACT_DONT_REDERIVE": "0",
         "CLAUDE_CODE_ARTIFACT_COMMENT_FAST_ACK": "0",
         "CLAUDE_CODE_ARTIFACT_COMMENT_FAST_ACK_FIXED": "0",

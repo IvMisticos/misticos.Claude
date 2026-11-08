@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 type JsonValue = (
     str | int | float | bool | None | list[JsonValue] | dict[str, JsonValue]
@@ -20,3 +21,10 @@ def json_object(text: str | bytes) -> JsonObject | None:
     except ValueError:
         return None
     return value if isinstance(value, dict) else None
+
+
+def json_object_in(path: Path) -> JsonObject:
+    try:
+        return json_object(path.read_bytes()) or {}
+    except OSError:
+        return {}
