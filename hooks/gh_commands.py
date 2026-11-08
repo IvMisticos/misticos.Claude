@@ -1,16 +1,15 @@
 import re
 import shlex
-from collections.abc import Iterable, Sequence
+from collections.abc import Sequence
 from typing import NamedTuple
 
+from gh_arguments import API_COMMAND, CREATE_SUBCOMMANDS, PR_COMMAND, gh_arguments
 from json_values import JsonValue
 
 COMMAND_SEPARATORS = "();<>|&\n"
 WORD_SEPARATORS = " \t\r"
 LINE_CONTINUATION = "\\\n"
 REDIRECTED_FILE_DESCRIPTOR = re.compile(r"(?<!\S)\d+(?=[<>])")
-REPO_FLAGS = frozenset({"-R", "--repo"})
-CREATE_SUBCOMMANDS = frozenset({"create", "new"})
 
 
 class GhPrCall(NamedTuple):
@@ -74,36 +73,16 @@ def gh_argument_lists(command: JsonValue) -> list[list[str]]:
     return argument_lists
 
 
-def without_repo_flags(arguments: Iterable[str]) -> tuple[str | None, list[str]]:
-    repo: str | None = None
-    remaining: list[str] = []
-    words = iter(arguments)
-    for word in words:
-        if word in REPO_FLAGS:
-            repo = next(words, None)
-        elif word.startswith("--repo="):
-            repo = word.removeprefix("--repo=")
-        elif word.startswith("-R"):
-            repo = word.removeprefix("-R")
-        else:
-            remaining.append(word)
-    return repo or None, remaining
-
-
-def pr_target(words_after_subcommand: Sequence[str]) -> str | None:
-    if not words_after_subcommand or words_after_subcommand[0].startswith("-"):
-        return None
-    return words_after_subcommand[0]
-
-
 def gh_pr_call(arguments: Sequence[str]) -> GhPrCall | None:
-    repo, words = without_repo_flags(arguments)
-    if len(words) < 2 or words[0] != "pr":
+    parsed = gh_arguments(arguments)
+    if len(parsed.command) < 2 or parsed.command[0] != PR_COMMAND:
         return None
-    return GhPrCall(words[1], pr_target(words[2:]), repo)
+    target = parsed.positionals[0] if parsed.positionals else None
+    return GhPrCall(parsed.command[1], target, parsed.last_value("repo") or None)
 
 
-def gh_api_words(arguments: list[str]) -> list[str]:
-    if arguments[:1] != ["api"]:
+def gh_api_words(arguments: Sequence[str]) -> list[str]:
+    parsed = gh_arguments(arguments)
+    if parsed.command != (API_COMMAND,):
         return []
-    return arguments[1:]
+    return [*parsed.positionals, *parsed.option_values()]

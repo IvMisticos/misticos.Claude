@@ -1,105 +1,123 @@
+import os
+import subprocess
+import sys
+from pathlib import Path
+
 import pytest
-from conftest import FAKE_GH, ShimRun, ShimRunner
+from conftest import (
+    FAKE_GH,
+    SYSTEM_DIRS,
+    FakeBin,
+    ShimRun,
+    ShimRunner,
+    real_uv_directories,
+    run_shim,
+    session_uv_pythons,
+    shim_run_for,
+)
+from pull_request_writes import denial
+
+WRITES_ON_EVERY_PATH = [
+    ["pr", "merge", "1"],
+    ["api", "-X", "POST", "repos/o/r/pulls/1/reviews"],
+    ["api", "repos/o/r/pulls/1/comments", "--input", "-"],
+]
+FAKE_GH_ECHOING_INPUT = """#!/usr/bin/env bash
+echo "ran $* with $(cat)"
+"""
 
 
 @pytest.fixture
-def run_gh(shim_runner: ShimRunner) -> ShimRun:
+def run_gh_in_cloud(shim_runner: ShimRunner) -> ShimRun:
+    return shim_runner("gh", FAKE_GH, CLAUDE_CODE_REMOTE="true")
+
+
+@pytest.fixture
+def run_gh_elsewhere(shim_runner: ShimRunner) -> ShimRun:
     return shim_runner("gh", FAKE_GH)
 
 
-@pytest.mark.parametrize(
-    "arguments",
-    [
-        ["pr", "create", "--fill"],
-        ["pr", "merge", "1"],
-        ["api", "-X", "POST", "repos/o/r/pulls"],
-        ["api", "-Xpost", "repos/o/r/pulls"],
-        ["api", "--method=PUT", "repos/o/r/pulls/1/merge"],
-        ["api", "repos/o/r/pulls", "-f", "title=x"],
-        ["api", "repos/o/r/pulls", "--input=body.json"],
-        ["api", "repos/o/r/pulls", "-ftitle=x"],
-        ["pr", "-R", "o/r", "merge", "1"],
-        ["pr", "--repo=o/r", "create"],
-        ["pr", "new", "--fill"],
-        ["api", "graphql", "-f", "query=mutation { mergePullRequest(input: {}) }"],
-        ["pr", "edit", "1", "--body", "x"],
-        ["api", "-X", "PATCH", "repos/o/r/pulls/1", "-f", "body=x"],
-        ["api", "graphql", "-f", "query=mutation { enqueuePullRequest(input: {}) }"],
-        ["api", "/graphql", "-f", "query=mutation { createPullRequest(input: {}) }"],
-        [
-            "api",
-            "https://api.github.com/graphql",
-            "-f",
-            "query=mutation { mergePullRequest(input: {}) }",
-        ],
-        [
-            "api",
-            "graphql",
-            "-f",
-            "query=mutation { enablePullRequestAutoMerge(input: {}) }",
-        ],
-        ["-R", "o/r", "pr", "create", "--fill"],
-        ["--repo", "o/r", "pr", "merge", "1"],
-        ["--repo=o/r", "pr", "edit", "1", "--body", "x"],
-        ["-Ro/r", "pr", "merge", "1"],
-        ["pr", "--body", "x", "merge", "1"],
-        ["--jq", ".url", "api", "-X", "POST", "repos/o/r/pulls"],
-        ["api", "--paginate", "repos/o/r/pulls", "-f", "title=x"],
-        ["api", "-X", "POST", "-f", "title=x", "--", "repos/o/r/pulls"],
-        ["api", "-iX", "POST", "repos/o/r/pulls", "-f", "title=x"],
-        ["api", "-iXPOST", "repos/o/r/pulls"],
-        ["api", "-if", "title=x", "repos/o/r/pulls"],
-        ["api", "--some-new-switch", "repos/o/r/pulls", "-f", "title=x"],
-        ["api", "graphql", "-f", "query=mutation { updatePullRequest(input: {}) }"],
-        ["api", "graphql", "-F", "query=@mutation.graphql"],
-        ["api", "graphql", "--input", "mutation.json"],
-        ["api", "-X=PUT", "repos/o/r/pulls/1/merge"],
-        ["api", "-iX=PUT", "repos/o/r/pulls/1/merge"],
-        ["api", "-i=t", "repos/o/r/pulls", "-f", "title=x"],
-        ["api", "graphql", "-F=query=@mutation.graphql"],
-        ["pr", "", "merge", "1"],
-        ["api", "graphql?x=1", "-f", "query=mutation { mergePullRequest(input: {}) }"],
-        ["api", "graphql#x", "-f", "query=mutation { mergePullRequest(input: {}) }"],
-        ["api", "/graphql/", "-f", "query=mutation { mergePullRequest(input: {}) }"],
-    ],
-)
-def test_denies_pull_request_writes(run_gh: ShimRun, arguments: list[str]) -> None:
-    assert run_gh(*arguments).returncode == 1
+def assert_ran(result: subprocess.CompletedProcess[str], arguments: list[str]) -> None:
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == f"ran {' '.join(arguments)}\n"
+
+
+@pytest.mark.parametrize("arguments", WRITES_ON_EVERY_PATH)
+def test_denies_pull_request_writes_in_claude_cloud(
+    run_gh_in_cloud: ShimRun, arguments: list[str]
+) -> None:
+    result = run_gh_in_cloud(*arguments)
+    assert result.returncode == 1
+    assert result.stdout == ""
+    assert result.stderr == f"{denial(arguments)}\n"
 
 
 @pytest.mark.parametrize(
     "arguments",
     [
         ["pr", "view", "1"],
-        ["pr", "list"],
-        ["pr", "-R", "o/r", "view", "1"],
-        ["api", "repos/o/r/pulls"],
+        ["pr", "create", "--help"],
+        ["pr", "comment", "1", "--attach", "shot.png"],
         ["api", "repos/o/r/issues", "-f", "title=x"],
-        ["api", "search/code?q=mergePullRequest"],
-        ["api", "repos/o/r/issues/1/comments", "-f", "body=createPullRequest fails"],
-        ["api", "graphql", "-f", "query=query { viewer { login } }"],
-        ["issue", "create", "--title", "pr merge"],
-        ["-R", "o/r", "pr", "view", "1"],
         [],
-        [
-            "api",
-            "-q",
-            "graphql",
-            "repos/o/r/issues/1/comments",
-            "-f",
-            "body=mergePullRequest",
-        ],
-        ["api", "graphql", "-f", "query=@mutation.graphql"],
-        ["api", "repos/o/r/issues", "-f", "body=see /pulls/1"],
-        ["api", "-H", "Accept: x/pulls", "repos/o/r/issues", "-f", "title=x"],
     ],
 )
-def test_runs_other_commands(run_gh: ShimRun, arguments: list[str]) -> None:
-    result = run_gh(*arguments)
-    assert result.returncode == 0
-    assert result.stdout == f"ran {' '.join(arguments)}\n"
+def test_runs_other_commands(run_gh_in_cloud: ShimRun, arguments: list[str]) -> None:
+    assert_ran(run_gh_in_cloud(*arguments), arguments)
 
 
-def test_runs_pull_request_writes_on_request(run_gh: ShimRun) -> None:
-    result = run_gh("pr", "merge", "1", ALLOW_GH_PULL_REQUEST_WRITE="1")
-    assert result.stdout == "ran pr merge 1\n"
+def test_passes_standard_input_to_gh(shim_runner: ShimRunner) -> None:
+    run = shim_runner("gh", FAKE_GH_ECHOING_INPUT, CLAUDE_CODE_REMOTE="true")
+    result = run("api", "repos/o/r/issues", "--input", "-", standard_input="body")
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == "ran api repos/o/r/issues --input - with body\n"
+
+
+@pytest.mark.parametrize("arguments", WRITES_ON_EVERY_PATH)
+def test_runs_pull_request_writes_on_request(
+    run_gh_in_cloud: ShimRun, arguments: list[str]
+) -> None:
+    assert_ran(run_gh_in_cloud(*arguments, ALLOW_GH_PULL_REQUEST_WRITE="1"), arguments)
+
+
+@pytest.mark.parametrize("arguments", WRITES_ON_EVERY_PATH)
+def test_runs_pull_request_writes_outside_claude_cloud(
+    run_gh_elsewhere: ShimRun, arguments: list[str]
+) -> None:
+    assert_ran(run_gh_elsewhere(*arguments), arguments)
+
+
+@pytest.fixture
+def run_gh_in_cloud_without_home(fake_bin: FakeBin, tmp_path: Path) -> ShimRun:
+    path = [str(fake_bin("gh", FAKE_GH)), *SYSTEM_DIRS, *real_uv_directories()]
+    environment = {
+        "PATH": os.pathsep.join(path),
+        "CLAUDE_CODE_REMOTE": "true",
+        "UV_CACHE_DIR": str(tmp_path / "uv-cache"),
+        "UV_PYTHON_INSTALL_DIR": str(session_uv_pythons()),
+    }
+    return shim_run_for("gh", environment)
+
+
+def test_runs_gh_in_cloud_without_home(run_gh_in_cloud_without_home: ShimRun) -> None:
+    assert_ran(run_gh_in_cloud_without_home("pr", "view", "1"), ["pr", "view", "1"])
+
+
+def test_denies_pull_request_writes_without_home(
+    run_gh_in_cloud_without_home: ShimRun,
+) -> None:
+    result = run_gh_in_cloud_without_home("pr", "merge", "1")
+    assert result.returncode == 1
+    assert result.stderr == f"{denial(['pr', 'merge', '1'])}\n"
+
+
+def test_checks_with_the_python_the_session_found(fake_bin: FakeBin) -> None:
+    fake_bin("uv", "#!/usr/bin/env bash\nexit 3\n")
+    environment = {
+        "PATH": f"{fake_bin('gh', FAKE_GH)}:/usr/bin:/bin",
+        "CLAUDE_CODE_REMOTE": "true",
+        "HARNESS_HOOK_PYTHON": sys.executable,
+    }
+    result = run_shim("gh", environment, "pr", "merge", "1")
+    assert result.returncode == 1
+    assert result.stderr == f"{denial(['pr', 'merge', '1'])}\n"

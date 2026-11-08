@@ -7,6 +7,7 @@
 
 import os
 import shlex
+import sys
 from pathlib import Path
 
 from plugin_paths import PLUGIN_ROOT
@@ -21,7 +22,8 @@ def project_dir() -> str:
 
 def session_environment_command() -> str:
     script = str(SESSION_ENVIRONMENT_SCRIPT)
-    return shlex.join([".", script, str(SHIMS_DIR), project_dir()])
+    python = str(Path(sys.executable).resolve())
+    return shlex.join([".", script, str(SHIMS_DIR), project_dir(), python])
 
 
 def main() -> None:
