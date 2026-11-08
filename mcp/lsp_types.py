@@ -1,5 +1,7 @@
 from typing import Any, NotRequired, TypedDict
 
+from pydantic import with_config
+
 type LSPAny = Any
 
 
@@ -15,14 +17,13 @@ class Range(TypedDict):
 
 class Location(TypedDict):
     uri: str
-    range: Range
+    range: NotRequired[Range]
 
 
 class LocationLink(TypedDict):
     targetUri: str
     targetRange: Range
     targetSelectionRange: Range
-    originSelectionRange: NotRequired[Range]
 
 
 class MarkupContent(TypedDict):
@@ -36,12 +37,11 @@ class LanguageString(TypedDict):
 
 
 type MarkedString = str | LanguageString
-type HoverContents = MarkedString | MarkupContent | list[MarkedString]
+type HoverContents = MarkedString | MarkupContent | list[MarkedString | MarkupContent]
 
 
 class Hover(TypedDict):
     contents: HoverContents
-    range: NotRequired[Range]
 
 
 class Diagnostic(TypedDict):
@@ -49,6 +49,10 @@ class Diagnostic(TypedDict):
     message: str
     severity: NotRequired[int]
     code: NotRequired[int | str]
+
+
+class FullDocumentDiagnosticReport(TypedDict):
+    items: list[Diagnostic]
 
 
 class DocumentSymbol(TypedDict):
@@ -59,25 +63,32 @@ class DocumentSymbol(TypedDict):
     children: NotRequired[list["DocumentSymbol"]]
 
 
-class LocationUri(TypedDict):
-    uri: str
-
-
 class WorkspaceSymbol(TypedDict):
     name: str
     kind: int
-    location: Location | LocationUri
+    location: Location
 
 
 type Symbol = DocumentSymbol | WorkspaceSymbol
 
 
+@with_config(extra="allow")
 class CallHierarchyItem(TypedDict):
     name: str
     kind: int
     uri: str
     range: Range
     selectionRange: Range
+
+
+CallHierarchyIncomingCall = TypedDict(
+    "CallHierarchyIncomingCall", {"from": CallHierarchyItem, "fromRanges": list[Range]}
+)
+
+
+class CallHierarchyOutgoingCall(TypedDict):
+    to: CallHierarchyItem
+    fromRanges: list[Range]
 
 
 class TextEdit(TypedDict):
@@ -133,7 +144,7 @@ class Notification(TypedDict):
 class Response(TypedDict):
     jsonrpc: str
     id: RequestId
-    result: NotRequired[LSPAny]
+    result: NotRequired[object]
     error: NotRequired[ResponseError]
 
 

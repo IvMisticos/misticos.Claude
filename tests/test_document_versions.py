@@ -5,7 +5,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "mcp"))
 
 from lsp_types import LSPAny
 from open_documents import OpenDocuments, read_document
-from text_positions import to_uri
 
 type Notification = tuple[str, LSPAny]
 
@@ -46,7 +45,7 @@ def test_closed_document_opens_again_at_the_first_version(tmp_path: Path) -> Non
     source = tmp_path / "main.py"
     source.write_text("a")
     documents.open(read_document(source))
-    documents.close(to_uri(source))
+    documents.close(source.as_uri())
     documents.open(read_document(source))
     assert notifications[-1][0] == "textDocument/didOpen"
     assert notifications[-1][1]["textDocument"]["version"] == 1

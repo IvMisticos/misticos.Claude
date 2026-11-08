@@ -7,7 +7,6 @@ from pathlib import Path
 from typing import NamedTuple
 
 from lsp_types import FileEvent
-from text_positions import to_uri
 
 SKIPPED_DIRECTORIES = {"bin", "obj", "node_modules"}
 CREATED, CHANGED, DELETED = 1, 2, 3
@@ -154,7 +153,7 @@ class ProjectFileChanges:
             if (change := change_between(previous.get(path), current.get(path)))
         ]
         events: list[FileEvent] = [
-            {"uri": to_uri(path), "type": change} for path, change in changes
+            {"uri": Path(path).as_uri(), "type": change} for path, change in changes
         ]
         config_changed = any(self.configures_server_root(path) for path, _ in changes)
         return events, config_changed
