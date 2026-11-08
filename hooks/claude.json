@@ -5,19 +5,19 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/run.sh\" reminder.py 1 4"
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/run.sh\" reminder.py 1"
           },
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/run.sh\" reminder.py 2 4"
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/run.sh\" reminder.py 2"
           },
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/run.sh\" reminder.py 3 4"
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/run.sh\" reminder.py 3"
           },
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/run.sh\" reminder.py 4 4"
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/run.sh\" reminder.py 4"
           }
         ]
       },
@@ -70,19 +70,19 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/run.sh\" reminder.py 1 4"
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/run.sh\" reminder.py 1"
           },
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/run.sh\" reminder.py 2 4"
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/run.sh\" reminder.py 2"
           },
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/run.sh\" reminder.py 3 4"
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/run.sh\" reminder.py 3"
           },
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/run.sh\" reminder.py 4 4"
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/run.sh\" reminder.py 4"
           }
         ]
       },
@@ -100,19 +100,19 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/run.sh\" reminder.py 1 4"
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/run.sh\" reminder.py 1"
           },
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/run.sh\" reminder.py 2 4"
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/run.sh\" reminder.py 2"
           },
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/run.sh\" reminder.py 3 4"
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/run.sh\" reminder.py 3"
           },
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/run.sh\" reminder.py 4 4"
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/run.sh\" reminder.py 4"
           }
         ]
       },
@@ -148,19 +148,19 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/run.sh\" reminder.py 1 4"
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/run.sh\" reminder.py 1"
           },
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/run.sh\" reminder.py 2 4"
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/run.sh\" reminder.py 2"
           },
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/run.sh\" reminder.py 3 4"
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/run.sh\" reminder.py 3"
           },
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/run.sh\" reminder.py 4 4"
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/run.sh\" reminder.py 4"
           }
         ]
       }

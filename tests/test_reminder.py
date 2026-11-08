@@ -5,12 +5,16 @@ import pytest
 from conftest import (
     append_json_lines,
     home_environment,
+    hook_commands,
     json_at,
+    plugin_hook_command,
     run_json_hook,
     text_at,
 )
 from json_values import JsonObject, JsonValue
+from reminder import REMINDER_PARTS
 from rule_sections import RuleSection
+from transcript import CHARS_PER_TOKEN_ESTIMATE
 
 from agents import AGENTS, Agent
 
@@ -18,7 +22,8 @@ ROOT = Path(__file__).resolve().parent.parent
 REMINDER = ROOT / "hooks" / "reminder.py"
 RULES = ROOT / "INSTRUCTIONS.md"
 CLAUDE_ARGUMENTS = ["--harness", "claude"]
-PARTS = 4
+CURSOR_ARGUMENTS = ["--harness", "cursor"]
+CODEX_ARGUMENTS = ["--harness", "codex"]
 
 
 def reminder(
@@ -28,14 +33,18 @@ def reminder(
     arguments: Sequence[str] = CLAUDE_ARGUMENTS,
 ) -> JsonValue:
     return run_json_hook(
-        REMINDER, payload, str(part), str(PARTS), *arguments, env=home_environment(home)
+        REMINDER, payload, str(part), *arguments, env=home_environment(home)
     )
 
 
 def context(output: JsonValue) -> str | None:
-    return (
-        text_at(output, "hookSpecificOutput", "additionalContext") if output else None
-    )
+    match output:
+        case None:
+            return None
+        case {"additional_context": str(cursor_context)}:
+            return cursor_context
+        case _:
+            return text_at(output, "hookSpecificOutput", "additionalContext")
 
 
 def all_parts(
@@ -43,7 +52,7 @@ def all_parts(
 ) -> list[str | None]:
     return [
         context(reminder(home, part, payload, arguments))
-        for part in range(1, PARTS + 1)
+        for part in range(1, REMINDER_PARTS + 1)
     ]
 
 
@@ -66,44 +75,33 @@ def prompt(transcript: Path, prompt_id: str) -> JsonObject:
     }
 
 
-def tool_batch(transcript: Path, prompt_id: str) -> JsonObject:
-    return {**prompt(transcript, prompt_id), "hook_event_name": "PostToolBatch"}
+def tool_batch(transcript: Path, prompt_id: str, tool_use_id: str) -> JsonObject:
+    return {
+        **prompt(transcript, prompt_id),
+        "hook_event_name": "PostToolBatch",
+        "tool_calls": [{"tool_use_id": tool_use_id}],
+    }
+
+
+def rule_headings() -> list[str]:
+    return [line for line in RULES.read_text().splitlines() if line.startswith("# ")]
 
 
 def test_session_start_sends_the_whole_file_in_parts(home: Path) -> None:
     parts = all_parts(home, {"hook_event_name": "SessionStart", "session_id": "s1"})
     sent = [part for part in parts if part]
-    headings = [
-        line for line in RULES.read_text().splitlines() if line.startswith("# ")
-    ]
     assert len(sent) > 1
-    assert all(heading in "".join(sent) for heading in headings)
+    assert all(heading in "".join(sent) for heading in rule_headings())
     assert all(len(part) <= 10_000 for part in sent)
 
 
-@pytest.mark.parametrize(
-    "payload",
-    [
-        pytest.param(
-            {"hook_event_name": "SubagentStart", "agent_id": "a1", "agent_type": "x"},
-            id="subagent",
-        ),
-        pytest.param(
-            {
-                "hook_event_name": "SessionStart",
-                "session_id": "s1",
-                "agent_type": "misticos:scout",
-            },
-            id="main-session-of-a-skipped-type",
-        ),
-    ],
-)
-def test_start_sends_the_file(home: Path, payload: JsonObject) -> None:
+def test_a_main_session_of_a_skipped_type_gets_the_file(home: Path) -> None:
+    payload: JsonObject = {
+        "hook_event_name": "SessionStart",
+        "session_id": "s1",
+        "agent_type": "misticos:scout",
+    }
     assert context(reminder(home, 1, payload))
-
-
-def rule_headings() -> list[str]:
-    return [line for line in RULES.read_text().splitlines() if line.startswith("# ")]
 
 
 def subagent_rules(home: Path, agent_type: str) -> str:
@@ -123,10 +121,7 @@ def test_agents_get_only_their_sections(home: Path, agent: Agent) -> None:
 
 
 def test_rule_sections_match_headings() -> None:
-    headings = [
-        line for line in RULES.read_text().splitlines() if line.startswith("# ")
-    ]
-    assert [f"# {section}" for section in RuleSection] == headings
+    assert [f"# {section}" for section in RuleSection] == rule_headings()
 
 
 def test_agents_name_real_agent_files() -> None:
@@ -155,34 +150,103 @@ def test_agents_without_sections_get_nothing(
     home: Path, agent: Agent, ids: JsonObject
 ) -> None:
     payload = {"hook_event_name": "SubagentStart", "agent_type": agent.name, **ids}
-    assert all_parts(home, payload) == [None] * PARTS
+    assert all_parts(home, payload) == [None] * REMINDER_PARTS
 
 
 def test_growth_sends_a_pointer_then_a_full_copy(home: Path, tmp_path: Path) -> None:
     transcript = transcript_at(tmp_path, 10_000)
-    assert all_parts(home, prompt(transcript, "p1")) == [None] * PARTS
+    assert all_parts(home, prompt(transcript, "p1")) == [None] * REMINDER_PARTS
     transcript_at(tmp_path, 40_000)
-    pointer = all_parts(home, tool_batch(transcript, "p2"))
-    assert pointer[0] and pointer[1:] == [None] * (PARTS - 1)
+    pointer = all_parts(home, tool_batch(transcript, "p1", "u1"))
+    assert pointer[0] and pointer[1:] == [None] * (REMINDER_PARTS - 1)
     transcript_at(tmp_path, 45_000)
-    assert all_parts(home, prompt(transcript, "p3")) == [None] * PARTS
+    assert all_parts(home, prompt(transcript, "p2")) == [None] * REMINDER_PARTS
     transcript_at(tmp_path, 120_000)
-    copy = all_parts(home, prompt(transcript, "p4"))
+    copy = all_parts(home, prompt(transcript, "p3"))
     assert copy[0] and copy[1]
     assert len(copy[0]) > len(pointer[0])
+
+
+def test_a_prompt_leaves_the_pointer_to_the_next_tool_batch(
+    home: Path, tmp_path: Path
+) -> None:
+    transcript = transcript_at(tmp_path, 10_000)
+    assert all_parts(home, prompt(transcript, "p1")) == [None] * REMINDER_PARTS
+    transcript_at(tmp_path, 40_000)
+    assert all_parts(home, prompt(transcript, "p2")) == [None] * REMINDER_PARTS
+    transcript_at(tmp_path, 45_000)
+    pointer = all_parts(home, tool_batch(transcript, "p2", "u1"))
+    assert pointer[0] and pointer[1:] == [None] * (REMINDER_PARTS - 1)
+    transcript_at(tmp_path, 60_000)
+    later = all_parts(home, tool_batch(transcript, "p2", "u2"))
+    assert later == [None] * REMINDER_PARTS
+
+
+def codex_transcript_at(tmp_path: Path, tokens: int) -> Path:
+    transcript = tmp_path / "rollout.jsonl"
+    transcript.write_text("x" * tokens * CHARS_PER_TOKEN_ESTIMATE)
+    return transcript
+
+
+def codex_prompt(transcript: Path, turn_id: str) -> JsonObject:
+    return {
+        "hook_event_name": "UserPromptSubmit",
+        "session_id": "x1",
+        "turn_id": turn_id,
+        "transcript_path": str(transcript),
+    }
+
+
+def codex_tool_use(transcript: Path, turn_id: str, tool_use_id: str) -> JsonObject:
+    return {
+        **codex_prompt(transcript, turn_id),
+        "hook_event_name": "PostToolUse",
+        "tool_use_id": tool_use_id,
+    }
+
+
+def test_a_codex_prompt_leaves_the_pointer_to_the_next_tool_use(
+    home: Path, tmp_path: Path
+) -> None:
+    transcript = codex_transcript_at(tmp_path, 10_000)
+    first = all_parts(home, codex_prompt(transcript, "t1"), CODEX_ARGUMENTS)
+    assert first == [None] * REMINDER_PARTS
+    codex_transcript_at(tmp_path, 40_000)
+    second = all_parts(home, codex_prompt(transcript, "t2"), CODEX_ARGUMENTS)
+    assert second == [None] * REMINDER_PARTS
+    codex_transcript_at(tmp_path, 45_000)
+    pointer = all_parts(home, codex_tool_use(transcript, "t2", "u1"), CODEX_ARGUMENTS)
+    assert pointer[0] and pointer[1:] == [None] * (REMINDER_PARTS - 1)
 
 
 def test_subagent_growth_gets_nothing(home: Path, tmp_path: Path) -> None:
     transcript = transcript_at(tmp_path, 500_000)
     payload: JsonObject = {**prompt(transcript, "p1"), "agent_id": "a1"}
-    assert all_parts(home, payload) == [None] * PARTS
+    assert all_parts(home, payload) == [None] * REMINDER_PARTS
 
 
 def test_cursor_shape(home: Path) -> None:
-    cursor = ["--harness", "cursor"]
     payload: JsonObject = {"hook_event_name": "sessionStart", "session_id": "c1"}
-    output = reminder(home, 1, payload, cursor)
+    output = reminder(home, 1, payload, CURSOR_ARGUMENTS)
     assert json_at(output, "additional_context")
+
+
+def cursor_tool_use(tool_use_id: str, tokens: int) -> JsonObject:
+    return {
+        "hook_event_name": "postToolUse",
+        "conversation_id": "c1",
+        "tool_use_id": tool_use_id,
+        "tool_output": "x" * tokens * CHARS_PER_TOKEN_ESTIMATE,
+    }
+
+
+def test_cursor_counts_each_tool_output_once(home: Path) -> None:
+    first = all_parts(home, cursor_tool_use("t1", 10_000), CURSOR_ARGUMENTS)
+    assert first == [None] * REMINDER_PARTS
+    second = all_parts(home, cursor_tool_use("t2", 20_000), CURSOR_ARGUMENTS)
+    assert second == [None] * REMINDER_PARTS
+    pointer = all_parts(home, cursor_tool_use("t3", 10_000), CURSOR_ARGUMENTS)
+    assert pointer[0] and pointer[1:] == [None] * (REMINDER_PARTS - 1)
 
 
 def test_session_start_with_a_non_text_session_id_still_sends_the_rules(
@@ -194,14 +258,34 @@ def test_session_start_with_a_non_text_session_id_still_sends_the_rules(
 
 def test_prompt_without_a_token_count_gets_nothing(home: Path, tmp_path: Path) -> None:
     missing = tmp_path / "missing.jsonl"
-    assert all_parts(home, prompt(missing, "p1")) == [None] * PARTS
+    assert all_parts(home, prompt(missing, "p1")) == [None] * REMINDER_PARTS
 
 
-def test_a_prompt_gets_the_copy_but_not_the_pointer(home: Path, tmp_path: Path) -> None:
+def test_a_prompt_gets_the_copy(home: Path, tmp_path: Path) -> None:
     transcript = transcript_at(tmp_path, 10_000)
-    assert all_parts(home, prompt(transcript, "p1")) == [None] * PARTS
-    transcript_at(tmp_path, 40_000)
-    assert all_parts(home, prompt(transcript, "p2")) == [None] * PARTS
+    assert all_parts(home, prompt(transcript, "p1")) == [None] * REMINDER_PARTS
     transcript_at(tmp_path, 120_000)
-    copy = all_parts(home, prompt(transcript, "p3"))
+    copy = all_parts(home, prompt(transcript, "p2"))
     assert copy[0] and copy[1]
+
+
+@pytest.mark.parametrize(
+    ("config", "run", "harness"),
+    [
+        ("claude.json", plugin_hook_command("reminder.py"), ""),
+        ("codex.json", plugin_hook_command("reminder.py"), " --harness codex"),
+        (
+            "cursor.json",
+            '"${CURSOR_PLUGIN_ROOT}/hooks/run.sh" reminder.py',
+            " --harness cursor",
+        ),
+    ],
+    ids=("claude", "codex", "cursor"),
+)
+def test_every_reminder_event_runs_each_part_once(
+    config: str, run: str, harness: str
+) -> None:
+    expected = [f"{run} {part}{harness}" for part in range(1, REMINDER_PARTS + 1)]
+    runs = hook_commands(config, "reminder.py")
+    assert runs
+    assert runs == dict.fromkeys(runs, expected)
