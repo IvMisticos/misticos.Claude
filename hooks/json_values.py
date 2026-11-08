@@ -10,6 +10,10 @@ def dict_or_empty(value: JsonValue) -> JsonObject:
     return value if isinstance(value, dict) else {}
 
 
+def text_or_none(value: object) -> str | None:
+    return value if isinstance(value, str) and value else None
+
+
 def json_object(text: str | bytes) -> JsonObject | None:
     try:
         value = json.loads(text)

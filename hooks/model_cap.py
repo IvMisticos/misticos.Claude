@@ -1,57 +1,59 @@
 import re
-from collections.abc import Iterator
-from pathlib import Path
+from typing import NamedTuple
 
 from json_values import JsonValue
 
-TIER_LEVELS = (
-    ("haiku",),
-    ("sonnet", "luna"),
-    ("terra",),
-    ("opus", "opusplan", "sol"),
-    ("fable", "best", "astra"),
+
+class Tier(NamedTuple):
+    claude_alias: str | None
+    families: tuple[str, ...]
+
+
+TIERS = (
+    Tier("haiku", ("haiku",)),
+    Tier("sonnet", ("sonnet", "luna")),
+    Tier(None, ("terra",)),
+    Tier("opus", ("opus", "opusplan", "sol")),
+    Tier("fable", ("fable", "best", "astra")),
 )
+FAMILY_RANKS = {
+    family: rank for rank, tier in enumerate(TIERS) for family in tier.families
+}
 
 DATE_DIGITS = 8
 
 
-def model_words(model: JsonValue) -> set[str]:
-    return set(re.split(r"[^a-z]+", str(model or "").lower()))
+class Model(NamedTuple):
+    name: str
+    family: str
+    version: tuple[int, ...]
+
+    @property
+    def rank(self) -> int:
+        return FAMILY_RANKS[self.family]
 
 
-def tier_rank(model: JsonValue) -> int | None:
-    words = model_words(model)
-    return next(
-        (rank for rank, level in enumerate(TIER_LEVELS) if words.intersection(level)),
-        None,
-    )
-
-
-def tier_name(model: JsonValue) -> str | None:
-    words = model_words(model)
-    return next(
-        (word for level in TIER_LEVELS for word in level if word in words), None
-    )
-
-
-def version(model: JsonValue) -> tuple[int, ...]:
-    slug = str(model or "").split("[", 1)[0]
+def version(name: str) -> tuple[int, ...]:
+    slug = name.split("[", 1)[0]
     numbers = re.findall(r"\d+", slug)
     return tuple(int(number) for number in numbers if len(number) < DATE_DIGITS)
 
 
-def outranks(requested: JsonValue, caller: JsonValue) -> bool:
-    requested_rank = tier_rank(requested)
-    caller_rank = tier_rank(caller)
-    if requested_rank is None or caller_rank is None:
+def parsed_model(value: JsonValue) -> Model | None:
+    if not isinstance(value, str):
+        return None
+    words = set(re.split(r"[^a-z]+", value.lower()))
+    family = next((family for family in FAMILY_RANKS if family in words), None)
+    return Model(value, family, version(value)) if family else None
+
+
+def claude_alias(model: Model | None) -> str | None:
+    return TIERS[model.rank].claude_alias if model else None
+
+
+def outranks(requested: Model | None, caller: Model | None) -> bool:
+    if requested is None or caller is None:
         return False
-    if requested_rank != caller_rank or tier_name(requested) != tier_name(caller):
-        return requested_rank > caller_rank
-    return bool(version(requested)) and version(requested) > version(caller)
-
-
-def project_folders(cwd: Path) -> Iterator[Path]:
-    for folder in (cwd, *cwd.parents):
-        yield folder
-        if (folder / ".git").exists():
-            return
+    if requested.family != caller.family:
+        return requested.rank > caller.rank
+    return requested.version > caller.version

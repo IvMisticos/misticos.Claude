@@ -28,6 +28,10 @@ def test_role_above_the_caller_is_denied(codex: Path) -> None:
     (codex / "w.toml").write_text('model = "gpt-5-astra"\n')
     denied = decision(codex.parent, agent_type="worker", message="go")
     assert denied["permissionDecision"] == "deny"
+    assert denied["permissionDecisionReason"] == (
+        f"The worker role runs on gpt-5-astra, above your {CALLER}. "
+        "Spawn with a role at or below your model."
+    )
 
 
 def test_discovered_role_is_found_by_its_name(codex: Path) -> None:
