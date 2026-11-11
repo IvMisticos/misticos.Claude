@@ -38,6 +38,14 @@ from rules_copy import (
     full_copy_messages,
     pointer_reminder,
     rules_at,
+    rules_text,
+)
+from rules_receipts import (
+    confirm_session_start_copy,
+    has_received,
+    note_received,
+    note_sent_at_session_start,
+    rules_digest,
 )
 from transcript import context_tokens, payload_tokens
 
@@ -45,7 +53,6 @@ from agents import ALL_SECTIONS, rule_sections_for
 
 RULES_PATH = str(PLUGIN_ROOT / "INSTRUCTIONS.md")
 REMINDER_PARTS = 4
-SOURCES_WITH_EARLIER_CONTEXT = ("resume", "fork")
 
 
 class Options(NamedTuple):
@@ -63,6 +70,10 @@ def message_for_part(
             return messages[part - 1] if part <= len(messages) else None
         case Action.IDLE:
             return None
+
+
+def main_session_digest(rules: Rules) -> str:
+    return rules_digest(rules_text(rules))
 
 
 def measured_context(
@@ -84,6 +95,8 @@ def growth_reminder(
     session_id = session_id_of(payload)
     if not (messages and session_id):
         return None
+    if options.part == 1:
+        confirm_session_start_copy(session_id)
     fire = fire_id(event, payload)
     if not fire and options.part > 1:
         return None
@@ -97,6 +110,8 @@ def growth_reminder(
         can_copy=len(messages) <= REMINDER_PARTS and bool(fire or len(messages) == 1),
         can_point=event != HookEvent.USER_PROMPT_SUBMIT,
     )
+    if action == Action.COPY:
+        note_received(session_id, main_session_digest(rules))
     return message_for_part(action, options.part, messages, rules)
 
 
@@ -107,6 +122,7 @@ def session_start_reminder(
     session_id = session_id_of(payload)
     if options.part == 1 and session_id and not for_subagent:
         forget_baseline(session_id)
+        note_sent_at_session_start(session_id, main_session_digest(rules))
     sections = (
         rule_sections_for(payload.get("agent_type")) if for_subagent else ALL_SECTIONS
     )
@@ -120,18 +136,23 @@ def session_start_reminder(
     return message_for_part(Action.COPY, options.part, messages, rules)
 
 
-def continues_earlier_context(event: HookEvent, payload: JsonObject) -> bool:
+def resumes_with_same_rules(
+    rules: Rules, event: HookEvent, payload: JsonObject
+) -> bool:
+    session_id = session_id_of(payload)
     return (
         event == HookEvent.SESSION_START
         and not is_subagent(payload)
-        and payload.get("source") in SOURCES_WITH_EARLIER_CONTEXT
+        and payload.get("source") == "resume"
+        and session_id is not None
+        and has_received(session_id, main_session_digest(rules))
     )
 
 
 def reminder_for(event: HookEvent, payload: JsonObject, options: Options) -> str | None:
-    if continues_earlier_context(event, payload):
-        return None
     rules = rules_at(RULES_PATH, options.harness.model_names)
+    if resumes_with_same_rules(rules, event, payload):
+        return None
     if event in (HookEvent.SESSION_START, HookEvent.SUBAGENT_START):
         return session_start_reminder(rules, event, payload, options)
     if is_subagent(payload):

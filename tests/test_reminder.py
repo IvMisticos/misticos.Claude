@@ -1,3 +1,4 @@
+import json
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -95,33 +96,71 @@ def test_session_start_sends_the_whole_file_in_parts(home: Path) -> None:
     assert all(len(part) <= 10_000 for part in sent)
 
 
-@pytest.mark.parametrize("source", ["startup", "clear", "compact"])
-def test_a_session_start_without_earlier_context_gets_the_file(
-    home: Path, source: str
-) -> None:
-    payload: JsonObject = {
+def session_start(session_id: str, source: str) -> JsonObject:
+    return {
         "hook_event_name": "SessionStart",
-        "session_id": "s1",
+        "session_id": session_id,
         "source": source,
     }
-    assert context(reminder(home, 1, payload))
 
 
-@pytest.mark.parametrize("source", ["resume", "fork"])
-def test_a_continued_session_keeps_its_copy_and_growth_baseline(
+def full_copy(home: Path) -> list[str | None]:
+    return all_parts(home, session_start("fresh", "startup"))
+
+
+def start_with_copy(home: Path, transcript: Path) -> None:
+    assert all_parts(home, session_start("s1", "startup")) == full_copy(home)
+    assert all_parts(home, prompt(transcript, "p1")) == [None] * REMINDER_PARTS
+
+
+@pytest.mark.parametrize("source", ["startup", "clear", "compact"])
+def test_a_session_start_with_a_new_context_gets_the_copy_again(
     home: Path, tmp_path: Path, source: str
 ) -> None:
+    start_with_copy(home, transcript_at(tmp_path, 10_000))
+    assert all_parts(home, session_start("s1", source)) == full_copy(home)
+
+
+def test_a_resume_with_unchanged_rules_keeps_the_copy_and_growth_baseline(
+    home: Path, tmp_path: Path
+) -> None:
     transcript = transcript_at(tmp_path, 10_000)
-    assert all_parts(home, prompt(transcript, "p1")) == [None] * REMINDER_PARTS
-    payload: JsonObject = {
-        "hook_event_name": "SessionStart",
-        "session_id": "s1",
-        "source": source,
-    }
-    assert all_parts(home, payload) == [None] * REMINDER_PARTS
+    start_with_copy(home, transcript)
+    assert all_parts(home, session_start("s1", "resume")) == [None] * REMINDER_PARTS
     transcript_at(tmp_path, 120_000)
     copy = all_parts(home, prompt(transcript, "p2"))
     assert copy[0] and copy[1]
+
+
+def test_a_resume_after_a_growth_copy_keeps_that_copy(
+    home: Path, tmp_path: Path
+) -> None:
+    transcript = transcript_at(tmp_path, 10_000)
+    assert all_parts(home, prompt(transcript, "p1")) == [None] * REMINDER_PARTS
+    transcript_at(tmp_path, 120_000)
+    assert all_parts(home, prompt(transcript, "p2"))[0]
+    assert all_parts(home, session_start("s1", "resume")) == [None] * REMINDER_PARTS
+
+
+def test_a_fork_gets_the_copy(home: Path, tmp_path: Path) -> None:
+    start_with_copy(home, transcript_at(tmp_path, 10_000))
+    assert all_parts(home, session_start("s2", "fork")) == full_copy(home)
+
+
+def test_a_resume_with_changed_rules_gets_the_copy(home: Path, tmp_path: Path) -> None:
+    start_with_copy(home, transcript_at(tmp_path, 10_000))
+    receipt = home / ".claude/hooks/data/misticos.Claude/rules-receipts/s1"
+    receipt.write_text(json.dumps({"received": "digest of older rules"}))
+    assert all_parts(home, session_start("s1", "resume")) == full_copy(home)
+
+
+def test_a_resume_without_stored_state_gets_the_copy(home: Path) -> None:
+    assert all_parts(home, session_start("s1", "resume")) == full_copy(home)
+
+
+def test_a_resume_before_any_prompt_gets_the_copy(home: Path) -> None:
+    assert all_parts(home, session_start("s1", "startup")) == full_copy(home)
+    assert all_parts(home, session_start("s1", "resume")) == full_copy(home)
 
 
 def test_a_main_session_of_a_skipped_type_gets_the_file(home: Path) -> None:

@@ -116,16 +116,20 @@ def without_sections(text: str, headings: Collection[str]) -> str:
     return "".join(kept).strip()
 
 
-def full_copy_messages(
-    rules: Rules, first_preamble: str, skipped_sections: Collection[str] = frozenset()
-) -> tuple[str, ...]:
+def rules_text(rules: Rules, skipped_sections: Collection[str] = frozenset()) -> str:
     try:
         with open(rules.path, encoding="utf-8", errors="replace") as rules_file:
             text = with_model_names(rules_file.read().strip(), rules.model_names)
     except OSError as error:
         print(f"reminder: cannot read rules: {error}", file=sys.stderr)
-        return ()
-    text = without_sections(text, skipped_sections)
+        return ""
+    return without_sections(text, skipped_sections)
+
+
+def full_copy_messages(
+    rules: Rules, first_preamble: str, skipped_sections: Collection[str] = frozenset()
+) -> tuple[str, ...]:
+    text = rules_text(rules, skipped_sections)
     if not text:
         return ()
     budget = MAX_INJECTED_CHARS
