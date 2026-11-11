@@ -5,6 +5,7 @@
 # root = ["."]
 # ///
 
+import contextlib
 import math
 import os
 from collections.abc import Iterable
@@ -23,9 +24,9 @@ from hook_io import (
     write_context,
 )
 from json_values import JsonObject
-from low_space_throttle import LowSpaceLimit, claim_low_disks, parsed_most_free
+from low_space_throttle import LowSpaceLimit, claim_low_disks_in
 from plugin_paths import DATA_ROOT
-from session_state import locked_session_file, read_json, write_json
+from session_state import forget_stale_files, session_file_path
 
 NOTE_LIMIT = LowSpaceLimit(2 << 30, 0.1)
 DISK_NOTES_DIR = DATA_ROOT / "disk-notes"
@@ -50,15 +51,18 @@ def watched_paths(payload: JsonObject) -> tuple[str, ...]:
     return (cwd, os.path.expanduser("~"), *temp_dirs, "/tmp", *scratchpad)
 
 
+def session_record(notes_dir: Path, agent_key: str) -> Path:
+    return Path(session_file_path(notes_dir, agent_key)).with_suffix(".json")
+
+
 def disks_to_note(
     agent_key: str, current: Iterable[Disk], notes_dir: Path = DISK_NOTES_DIR
 ) -> list[Disk]:
-    with locked_session_file(notes_dir, agent_key) as state_file:
-        stored = parsed_most_free(read_json(state_file))
-        claim = claim_low_disks(stored, current, NOTE_LIMIT)
-        if claim.most_free != stored:
-            write_json(state_file, claim.most_free)
-        return claim.due
+    record = session_record(notes_dir, agent_key)
+    if not record.exists():
+        with contextlib.suppress(OSError):
+            forget_stale_files(notes_dir)
+    return claim_low_disks_in(record, current, NOTE_LIMIT)
 
 
 def in_words(items: list[str]) -> str:

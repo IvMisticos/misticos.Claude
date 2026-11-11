@@ -1,8 +1,13 @@
-from collections.abc import Iterable
+import contextlib
+import json
+from collections.abc import Generator, Iterable
+from pathlib import Path
 from typing import NamedTuple
 
+from atomic_write import write_atomically
 from disks import Disk
-from json_values import JsonValue
+from json_values import JsonValue, json_object_in
+from session_state import lock_exclusively
 
 AGAIN_AFTER_BYTES = 1 << 30
 
@@ -53,3 +58,44 @@ def claim_low_disks(
     raised = raised_most_free(most_free, current)
     due = [disk for disk in current if is_due(disk, raised, limit)]
     return Claim(due, raised | {disk.device: disk.free for disk in due})
+
+
+def read_most_free(record: Path) -> MostFree:
+    return parsed_most_free(json_object_in(record))
+
+
+def write_most_free(record: Path, most_free: MostFree) -> None:
+    with contextlib.suppress(OSError):
+        record.parent.mkdir(parents=True, exist_ok=True)
+        write_atomically(record, json.dumps(most_free))
+
+
+@contextlib.contextmanager
+def locked_record(record: Path) -> Generator[None]:
+    with contextlib.ExitStack() as stack:
+        with contextlib.suppress(OSError):
+            record.parent.mkdir(parents=True, exist_ok=True)
+            lock = stack.enter_context(
+                open(record.with_suffix(".lock"), "a+", encoding="utf-8")
+            )
+            lock_exclusively(lock)
+        yield
+
+
+def claim_low_disks_in(
+    record: Path, disks: Iterable[Disk], limit: LowSpaceLimit
+) -> list[Disk]:
+    with locked_record(record):
+        stored = read_most_free(record)
+        claim = claim_low_disks(stored, disks, limit)
+        if claim.most_free != stored:
+            write_most_free(record, claim.most_free)
+        return claim.due
+
+
+def raise_most_free_in(record: Path, disks: Iterable[Disk]) -> None:
+    with locked_record(record):
+        stored = read_most_free(record)
+        raised = raised_most_free(stored, disks)
+        if raised != stored:
+            write_most_free(record, raised)

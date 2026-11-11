@@ -1,3 +1,4 @@
+import errno
 import json
 import os
 import stat
@@ -6,17 +7,23 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import cleanup_policy
+import low_space_throttle
 import pytest
 from cleanup_policy import (
     CLEANUP_LIMIT,
     Cleanup,
     clean_up_low_disks,
-    read_most_free_since_cleanup,
-    write_most_free_since_cleanup,
 )
 from disk_space import HOW_TO_CLEAN_UP, NOTE_LIMIT, disk_note, disks_to_note
 from disks import BYTES_PER_MIB, Disk
-from low_space_throttle import LowSpaceLimit, claim_low_disks, is_due
+from low_space_throttle import (
+    LowSpaceLimit,
+    claim_low_disks,
+    claim_low_disks_in,
+    is_due,
+    read_most_free,
+    write_most_free,
+)
 
 GIB = 1 << 30
 
@@ -72,7 +79,7 @@ def test_measures_use_from_the_most_free_space_since_the_last_claim(
 @pytest.fixture
 def record(tmp_path: Path) -> Path:
     record = tmp_path / "free.json"
-    write_most_free_since_cleanup(record, {"1": int(1.5 * GIB), "2": 3 * GIB})
+    write_most_free(record, {"1": int(1.5 * GIB), "2": 3 * GIB})
     return record
 
 
@@ -84,7 +91,7 @@ def test_a_failed_write_keeps_the_record_whole(
 
     before = record.read_bytes()
     monkeypatch.setattr(os, "replace", fail)
-    write_most_free_since_cleanup(record, {"3": GIB})
+    write_most_free(record, {"3": GIB})
     assert record.read_bytes() == before
     assert list(record.parent.iterdir()) == [record]
 
@@ -100,14 +107,14 @@ def test_a_write_never_shows_a_partial_record(
         replace(source, target)
 
     monkeypatch.setattr(os, "replace", peek)
-    write_most_free_since_cleanup(record, {"3": GIB})
+    write_most_free(record, {"3": GIB})
     assert json.loads(seen[0]) == {"1": int(1.5 * GIB), "2": 3 * GIB}
     assert json.loads(record.read_bytes()) == {"3": GIB}
 
 
 def test_a_write_keeps_the_mode_of_the_record(record: Path) -> None:
     record.chmod(0o640)
-    write_most_free_since_cleanup(record, {"3": GIB})
+    write_most_free(record, {"3": GIB})
     assert stat.S_IMODE(record.stat().st_mode) == 0o640
 
 
@@ -144,7 +151,7 @@ def test_a_cleanup_reports_what_it_freed(
     monkeypatch.setattr(cleanup_policy, "cleared_caches", lambda devices: ["x"])
     record = tmp_path / "free.json"
     assert clean_up_low_disks(["/"], record) == Cleanup(2 * GIB, ["x"])
-    assert read_most_free_since_cleanup(record) == {"1": 6 * GIB}
+    assert read_most_free(record) == {"1": 6 * GIB}
 
 
 @pytest.fixture
@@ -179,9 +186,41 @@ def test_a_full_disk_is_noted_once_per_session(notes_dir: Path) -> None:
 def test_a_claimed_cleanup_leaves_the_session_note_due(
     tmp_path: Path, notes_dir: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(cleanup_policy, "disks", lambda paths: [disk(250, 1.5)])
-    cleanup_policy.claim_disks_to_clean(["/"], tmp_path / "free.json")
+    claim_low_disks_in(tmp_path / "free.json", [disk(250, 1.5)], CLEANUP_LIMIT)
     assert disks_to_note("main", [disk(250, 1.5)], notes_dir) == [disk(250, 1.5)]
+
+
+def test_a_record_that_cannot_be_written_still_yields_the_note(
+    notes_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def disk_full(path: Path, text: str) -> None:
+        raise OSError(errno.ENOSPC, "No space left on device")
+
+    monkeypatch.setattr(low_space_throttle, "write_atomically", disk_full)
+    full = disk(250, 0)
+    assert disks_to_note("main", [full], notes_dir) == [full]
+    assert disks_to_note("main", [full], notes_dir) == [full]
+
+
+def test_a_lock_that_cannot_be_created_still_yields_the_note(
+    notes_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def disk_full(self: Path, *args: object, **kwargs: object) -> None:
+        raise OSError(errno.ENOSPC, "No space left on device")
+
+    monkeypatch.setattr(Path, "mkdir", disk_full)
+    assert disks_to_note("main", [disk(250, 0)], notes_dir) == [disk(250, 0)]
+
+
+def test_stale_session_records_are_forgotten(notes_dir: Path) -> None:
+    disks_to_note("old", [disk(250, 1.5)], notes_dir)
+    for stale in notes_dir.iterdir():
+        os.utime(stale, (0, 0))
+    disks_to_note("new", [disk(250, 1.5)], notes_dir)
+    assert sorted(path.name for path in notes_dir.iterdir()) == [
+        "new.json",
+        "new.lock",
+    ]
 
 
 def test_the_note_says_what_the_hooks_freed_and_what_to_free() -> None:
