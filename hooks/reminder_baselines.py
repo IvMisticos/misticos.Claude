@@ -15,18 +15,15 @@ from session_state import (
 )
 
 FULL_COPY_EVERY_TOKENS = 100_000
-POINTER_EVERY_TOKENS = 25_000
 BASELINE_DIR = DATA_ROOT / "reminder"
 
 
 class Action(StrEnum):
     IDLE = ""
-    POINTER = "pointer"
     COPY = "copy"
 
 
 class Baselines(NamedTuple):
-    pointed_at: int
     copied_at: int
     fire: str
     action: Action
@@ -63,7 +60,7 @@ def fire_id(event: str, payload: JsonObject) -> str:
 
 
 def context_shrank(baselines: Baselines, tokens: int) -> bool:
-    return tokens < baselines.pointed_at
+    return tokens < baselines.seen
 
 
 def next_action(
@@ -72,17 +69,12 @@ def next_action(
     tokens: int,
     *,
     can_copy: bool,
-    can_point: bool,
 ) -> tuple[Action, Baselines]:
     if baselines is None or context_shrank(baselines, tokens):
-        return Action.IDLE, Baselines(tokens, tokens, fire, Action.IDLE)
+        return Action.IDLE, Baselines(tokens, fire, Action.IDLE)
     copy_due = tokens - baselines.copied_at >= FULL_COPY_EVERY_TOKENS
     if can_copy and copy_due:
-        return Action.COPY, Baselines(tokens, tokens, fire, Action.COPY)
-    pointer_due = tokens - baselines.pointed_at >= POINTER_EVERY_TOKENS
-    if can_point and pointer_due:
-        pointed = Baselines(tokens, baselines.copied_at, fire, Action.POINTER)
-        return Action.POINTER, pointed
+        return Action.COPY, Baselines(tokens, fire, Action.COPY)
     return Action.IDLE, copy.replace(baselines, fire=fire, action=Action.IDLE)
 
 
@@ -92,11 +84,10 @@ def action_for_fire(
     tokens: int,
     *,
     can_copy: bool,
-    can_point: bool,
 ) -> tuple[Action, Baselines]:
     if baselines is not None and fire and baselines.fire == fire:
         return baselines.action, baselines
-    return next_action(baselines, fire, tokens, can_copy=can_copy, can_point=can_point)
+    return next_action(baselines, fire, tokens, can_copy=can_copy)
 
 
 def tokens_now(
@@ -115,14 +106,11 @@ def claim_action(
     context: ContextTotal | ContextAdded,
     *,
     can_copy: bool,
-    can_point: bool,
 ) -> Action:
     with locked_session_file(BASELINE_DIR, session_id) as baseline_file:
         stored = parsed_record(Baselines, read_json(baseline_file))
         tokens = tokens_now(stored, fire, context)
-        action, baselines = action_for_fire(
-            stored, fire, tokens, can_copy=can_copy, can_point=can_point
-        )
+        action, baselines = action_for_fire(stored, fire, tokens, can_copy=can_copy)
         write_json(baseline_file, copy.replace(baselines, seen=tokens)._asdict())
         return action
 

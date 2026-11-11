@@ -36,7 +36,6 @@ from rules_copy import (
     SESSION_START_PREAMBLE,
     Rules,
     full_copy_messages,
-    pointer_reminder,
     rules_at,
 )
 from rules_receipts import has_received, note_received
@@ -53,12 +52,8 @@ class Options(NamedTuple):
     harness: Harness
 
 
-def message_for_part(
-    action: Action, part: int, messages: Sequence[str], rules: Rules
-) -> str | None:
+def message_for_part(action: Action, part: int, messages: Sequence[str]) -> str | None:
     match action:
-        case Action.POINTER:
-            return pointer_reminder(rules) if part == 1 else None
         case Action.COPY:
             return messages[part - 1] if part <= len(messages) else None
         case Action.IDLE:
@@ -95,11 +90,10 @@ def growth_reminder(
         fire,
         context,
         can_copy=len(messages) <= REMINDER_PARTS and bool(fire or len(messages) == 1),
-        can_point=event != HookEvent.USER_PROMPT_SUBMIT,
     )
     if action == Action.COPY:
         note_received(session_id, rules.digest)
-    return message_for_part(action, options.part, messages, rules)
+    return message_for_part(action, options.part, messages)
 
 
 def is_resume(payload: JsonObject) -> bool:
@@ -122,10 +116,14 @@ def session_start_reminder(
         rules, SESSION_START_PREAMBLE, ALL_SECTIONS - sections
     )
     if len(messages) > REMINDER_PARTS:
-        return pointer_reminder(rules) if options.part == 1 else None
+        print(
+            f"reminder: rules need {len(messages)} parts, over {REMINDER_PARTS}",
+            file=sys.stderr,
+        )
+        return None
     if options.part == 1 and session_id and not (for_subagent or is_resume(payload)):
         note_received(session_id, rules.digest)
-    return message_for_part(Action.COPY, options.part, messages, rules)
+    return message_for_part(Action.COPY, options.part, messages)
 
 
 def resumes_with_same_rules(
