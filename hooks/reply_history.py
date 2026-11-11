@@ -1,6 +1,6 @@
 import copy
 from collections.abc import Iterable
-from typing import NamedTuple
+from typing import Literal, NamedTuple
 
 from json_values import JsonObject, JsonValue, dict_or_empty
 from transcript import is_conversation_turn, tail_entries
@@ -8,11 +8,12 @@ from transcript import is_conversation_turn, tail_entries
 
 class Prompt(NamedTuple):
     id: str
+    kind: Literal["prompt"] = "prompt"
 
 
 class Reply(NamedTuple):
     id: str
-    is_reply: bool = True
+    kind: Literal["reply"] = "reply"
 
 
 class Window(NamedTuple):

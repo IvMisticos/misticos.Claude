@@ -109,6 +109,8 @@ def parsed_field(field_type: object, stored: JsonValue) -> object:
     match typing.get_origin(field_type), typing.get_args(field_type):
         case (types.UnionType, members):
             return parsed_union_member(members, stored)
+        case (typing.Literal, values) if stored in values:
+            return stored
         case (builtins.dict, (key_type, value_type)) if isinstance(stored, dict):
             return {
                 parsed_field(key_type, key): parsed_field(value_type, value)
