@@ -2,18 +2,29 @@ import contextlib
 import json
 from collections.abc import Collection, Generator, Iterable
 from pathlib import Path
+from typing import NamedTuple
 
 from atomic_write import write_atomically
 from disk_cleanup import cleared_caches
-from disks import BYTES_PER_MIB, Disk, disks, total_free
+from disks import Disk, disks, total_free
 from json_values import json_object_in
 from plugin_paths import DATA_ROOT
 from session_state import lock_exclusively
 
-CLEAN_UP_BELOW_BYTES = 5 << 30
-CLEAN_UP_BELOW_SHARE = 0.25
+LOW_SPACE_BYTES = 5 << 30
+LOW_SPACE_SHARE = 0.25
 CLEAN_UP_AGAIN_AFTER_BYTES = 1 << 30
 CLEANUP_RECORD = DATA_ROOT / "disk-cleanup.json"
+
+
+class Cleanup(NamedTuple):
+    freed: int
+    cleared: list[str]
+    low_disks: list[Disk]
+
+
+def space_to_free(disk: Disk) -> int:
+    return max(0, int(min(LOW_SPACE_BYTES, disk.total * LOW_SPACE_SHARE)) - disk.free)
 
 
 def read_most_free_since_cleanup(record: Path) -> dict[str, int]:
@@ -45,7 +56,7 @@ def most_free_since_cleanup(record: Path, disks: Iterable[Disk]) -> dict[str, in
 
 
 def needs_cleanup(disk: Disk, most_free_since_cleanup: dict[str, int]) -> bool:
-    if not disk.has_free_below(CLEAN_UP_BELOW_BYTES, CLEAN_UP_BELOW_SHARE):
+    if not space_to_free(disk):
         return False
     most_free = most_free_since_cleanup.get(disk.device)
     if most_free is None:
@@ -73,7 +84,7 @@ def claim_disks_to_clean(paths: Collection[str], record: Path) -> list[Disk]:
 
 def clean_up_low_disks(
     paths: Collection[str], record: Path = CLEANUP_RECORD
-) -> str | None:
+) -> Cleanup | None:
     before = claim_disks_to_clean(paths, record)
     if not before:
         return None
@@ -82,11 +93,5 @@ def clean_up_low_disks(
     after = [disk for disk in disks(paths) if disk.device in devices]
     remember_free_space(record, after)
     freed = max(0, total_free(after) - total_free(before))
-    if freed < BYTES_PER_MIB or not cleared:
-        return None
-    *rest, last = cleared
-    caches = f"{', '.join(rest)} and {last}" if rest else last
-    return (
-        f"Disk space ran low, so the hooks freed {freed // BYTES_PER_MIB} MiB. "
-        f"They cleared {caches}."
-    )
+    low_disks = [disk for disk in after if space_to_free(disk)]
+    return Cleanup(freed, cleared, low_disks)

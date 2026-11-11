@@ -8,13 +8,14 @@ from pathlib import Path
 import cleanup_policy
 import pytest
 from cleanup_policy import (
+    Cleanup,
     clean_up_low_disks,
     most_free_since_cleanup,
     needs_cleanup,
     write_most_free_since_cleanup,
 )
-from disk_space import needs_warning
-from disks import Disk
+from disk_space import HOW_TO_CLEAN_UP, disk_note
+from disks import BYTES_PER_MIB, Disk
 
 GIB = 1 << 30
 
@@ -31,16 +32,6 @@ def test_cleans_up_below_5_gib_or_a_quarter_of_a_small_disk(
     total_gib: float, free_gib: float, cleans_up: bool
 ) -> None:
     assert needs_cleanup(disk(total_gib, free_gib), {}) == cleans_up
-
-
-@pytest.mark.parametrize(
-    ("total_gib", "free_gib", "warns"),
-    [(250, 1.9, True), (250, 2, False), (4, 0.5, False), (4, 0.3, True)],
-)
-def test_warns_below_2_gib_or_a_tenth_of_a_small_disk(
-    total_gib: float, free_gib: float, warns: bool
-) -> None:
-    assert needs_warning(disk(total_gib, free_gib)) == warns
 
 
 @pytest.mark.parametrize(
@@ -132,3 +123,55 @@ def test_two_concurrent_runs_start_one_cleanup(
         for run in runs:
             run.result()
     assert len(cleanups) == 1
+
+
+def run_cleanup(
+    monkeypatch: pytest.MonkeyPatch,
+    record: Path,
+    free_gib: float,
+    freed_gib: float = 0,
+) -> Cleanup | None:
+    free = [disk(250, free_gib), disk(250, free_gib + freed_gib)]
+    monkeypatch.setattr(cleanup_policy, "disks", lambda paths: [free.pop(0)])
+    monkeypatch.setattr(cleanup_policy, "cleared_caches", lambda devices: [])
+    return clean_up_low_disks(["/"], record)
+
+
+def test_a_disk_that_stays_low_is_reported_once(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    record = tmp_path / "free.json"
+    first = run_cleanup(monkeypatch, record, 1.5)
+    assert first is not None
+    assert first.low_disks == [disk(250, 1.5)]
+    assert run_cleanup(monkeypatch, record, 1.4) is None
+    assert run_cleanup(monkeypatch, record, 0.7) is not None
+
+
+def test_a_cleanup_that_frees_enough_reports_no_low_disk(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cleanup = run_cleanup(monkeypatch, tmp_path / "free.json", 4, freed_gib=2)
+    assert cleanup == Cleanup(2 * GIB, [], [])
+
+
+def test_the_note_says_what_the_hooks_freed_and_what_to_free() -> None:
+    caches = ["the NuGet HTTP cache", "dangling Docker images"]
+    cleanup = Cleanup(300 * BYTES_PER_MIB, caches, [disk(250, 1)])
+    assert disk_note(cleanup) == (
+        "Disk space ran low, so the hooks freed 300 MiB: they cleared the NuGet "
+        "HTTP cache and dangling Docker images. Only 1024 MiB of disk is free at "
+        f"/, so free 4096 MiB more there. {HOW_TO_CLEAN_UP}"
+    )
+
+
+def test_the_note_only_reports_the_freed_space_when_the_disk_recovered() -> None:
+    cleanup = Cleanup(2 * GIB, ["the NuGet HTTP cache"], [])
+    assert disk_note(cleanup) == (
+        "Disk space ran low, so the hooks freed 2048 MiB: they cleared the NuGet "
+        "HTTP cache."
+    )
+
+
+def test_a_cleanup_that_freed_nothing_and_left_enough_space_says_nothing() -> None:
+    assert disk_note(Cleanup(0, [], [])) is None
