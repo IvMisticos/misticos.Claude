@@ -172,17 +172,17 @@ def test_catches_a_long_reply_before_the_next_prompt(
     assert "at least 1249 characters" in nag_text(transcript.submit_human(home))
 
 
-def test_nags_after_2_messages_then_after_6_more(
+def test_nags_after_3_messages_then_after_6_more(
     home: Path, transcript: Transcript
 ) -> None:
     transcript.human()
     nagged_at = []
-    for count in range(1, 15):
+    for count in range(1, 17):
         transcript.reply(SHORT)
         transcript.wake()
         if transcript.fire(home):
             nagged_at.append(count)
-    assert nagged_at == [2, 8, 14]
+    assert nagged_at == [3, 9, 15]
 
 
 @pytest.mark.parametrize("prompt", WAKE_PROMPTS)
@@ -195,13 +195,13 @@ def test_wakes_that_submit_a_prompt_keep_the_cadence(
 ) -> None:
     transcript.submit_human(home)
     nagged_at = []
-    for count in range(1, 15):
+    for count in range(1, 17):
         transcript.reply(SHORT)
         nags = [transcript.fire(home), transcript.submit(home, prompt)]
         add_wake(transcript, prompt)
         nags.append(transcript.fire(home))
         nagged_at += [count for nag in nags if nag]
-    assert nagged_at == [2, 8, 14]
+    assert nagged_at == [3, 9, 15]
 
 
 def test_wakes_with_an_unknown_start_keep_the_cadence(
@@ -209,13 +209,13 @@ def test_wakes_with_an_unknown_start_keep_the_cadence(
 ) -> None:
     transcript.submit_human(home)
     nagged_at = []
-    for count in range(1, 15):
+    for count in range(1, 17):
         transcript.reply(SHORT)
         nags = [transcript.fire(home), transcript.submit(home, "<unknown-wake>")]
         transcript.wake("<unknown-wake>")
         nags.append(transcript.fire(home))
         nagged_at += [count for nag in nags if nag]
-    assert nagged_at == [2, 8, 14]
+    assert nagged_at == [3, 9, 15]
 
 
 def test_a_wake_after_a_new_prompt_ignores_the_old_count(
@@ -241,10 +241,11 @@ def test_a_human_prompt_after_wakes_restarts_the_cadence(
         transcript.submit(home, WAKE_PROMPTS[0])
         transcript.wake()
     transcript.submit_human(home)
+    for _ in range(2):
+        transcript.reply(SHORT)
+        assert transcript.fire(home) is None
     transcript.reply(SHORT)
-    assert transcript.fire(home) is None
-    transcript.reply(SHORT)
-    assert "2 messages in a row" in nag_text(transcript.fire(home))
+    assert "3 messages in a row" in nag_text(transcript.fire(home))
 
 
 def test_counts_messages_sent_before_the_user_wrote_again(
@@ -254,8 +255,10 @@ def test_counts_messages_sent_before_the_user_wrote_again(
     transcript.reply(SHORT)
     transcript.wake()
     transcript.reply(SHORT)
+    transcript.wake()
+    transcript.reply(SHORT)
     nag = transcript.submit_human(home)
-    assert "2 messages in a row" in nag_text(nag)
+    assert "3 messages in a row" in nag_text(nag)
     assert transcript.fire(home) is None
 
 
@@ -286,12 +289,12 @@ def test_counts_replies_that_left_the_transcript_tail(
 ) -> None:
     transcript.human()
     nagged_at = []
-    for count in range(1, 9):
+    for count in range(1, 10):
         transcript.reply(SHORT)
         if transcript.fire(home):
             nagged_at.append(count)
         transcript.path.write_text("")
-    assert nagged_at == [2, 8]
+    assert nagged_at == [3, 9]
 
 
 def test_a_prompt_missing_from_the_tail_still_starts_a_new_count(
@@ -387,26 +390,27 @@ def test_cursor_counts_the_answer_after_the_last_tool(home: Path) -> None:
     cursor(home, "beforeSubmitPrompt", prompt="go")
     cursor(home, "afterAgentResponse", text="Checking.")
     assert cursor(home, "postToolUse") is None
+    cursor(home, "afterAgentResponse", text="Still checking.")
     cursor(home, "afterAgentResponse", text="Done.")
     cursor(home, "beforeSubmitPrompt", prompt="next")
-    assert "2 messages in a row" in nag_text(cursor(home, "postToolUse"))
+    assert "3 messages in a row" in nag_text(cursor(home, "postToolUse"))
     assert cursor(home, "postToolUse") is None
 
 
 def test_cursor_keeps_only_nags_from_the_last_turn_without_tools(home: Path) -> None:
     for _ in range(3):
         cursor(home, "beforeSubmitPrompt", prompt="go")
-        cursor(home, "afterAgentResponse", text=SHORT)
-        cursor(home, "afterAgentResponse", text=SHORT)
+        for _ in range(3):
+            cursor(home, "afterAgentResponse", text=SHORT)
     cursor(home, "beforeSubmitPrompt", prompt="next")
     assert nag_text(cursor(home, "postToolUse")).count("messages in a row") == 1
 
 
 def test_cursor_nags_about_repeated_updates_after_a_tool(home: Path) -> None:
     cursor(home, "beforeSubmitPrompt", prompt="go")
-    cursor(home, "afterAgentResponse", text=SHORT)
-    cursor(home, "afterAgentResponse", text=SHORT)
-    assert "2 messages in a row" in nag_text(cursor(home, "postToolUse"))
+    for _ in range(3):
+        cursor(home, "afterAgentResponse", text=SHORT)
+    assert "3 messages in a row" in nag_text(cursor(home, "postToolUse"))
 
 
 def test_cursor_state_stays_bounded_over_many_turns() -> None:
