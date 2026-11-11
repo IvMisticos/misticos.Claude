@@ -1,3 +1,4 @@
+import json
 from collections.abc import Callable
 from pathlib import Path
 
@@ -10,38 +11,17 @@ from conftest import (
 )
 from hook_io import HookEvent
 from json_values import JsonObject, JsonValue
-from prose import prose_length
 from reply_history import Prompt, Reply, transcript_history
 from reply_nags import NagState, nags_from_events
 
 ROOT = Path(__file__).resolve().parent.parent
 REPLY_NAGS = ROOT / "hooks" / "reply_nags.py"
-LONG = "word " * 250
 SHORT = "done"
 WAKE_PROMPTS = [
     "<task-notification>\n<task-id>b343utgl5</task-id>",
     '\n<agent-message from="worker">done</agent-message>',
     "Another Claude session sent a message:\ndone",
 ]
-
-
-@pytest.mark.parametrize(
-    ("text", "length"),
-    [
-        ("plain words", 11),
-        ("before\n```python\nprint('x' * 900)\n```\nafter", 12),
-        ("open fence\n~~~\nnever closed", 10),
-        ("short\n```\ncode\n````\nlong closer", 17),
-        ("shown\n~~~\n```\n~~~\nafter", 11),
-        ("run `make test` now", 7),
-        ("see [the PR](https://github.com/a/b/pull/1) ok", 13),
-        ("link https://example.com/very/long/path here", 9),
-        ("auto <https://example.com> link", 9),
-        ("spaced   \n\n  out", 10),
-    ],
-)
-def test_counts_prose_outside_code_and_links(text: str, length: int) -> None:
-    assert prose_length(text) == length
 
 
 def run_hook(home: Path, payload: JsonObject, *arguments: str) -> JsonValue:
@@ -145,31 +125,7 @@ def test_merges_entries_of_one_message(transcript: Transcript) -> None:
     transcript.tool_call("m")
     transcript.reply("second half", "m")
     history = transcript_history(str(transcript.path))
-    assert history == [Prompt("u1"), Reply("m", len("first half second half"))]
-
-
-def test_nags_once_about_a_long_reply(home: Path, transcript: Transcript) -> None:
-    transcript.human()
-    transcript.reply(LONG)
-    nag = transcript.fire(home)
-    assert "at least 1249 characters" in nag_text(nag)
-    assert transcript.fire(home) is None
-
-
-def test_stays_quiet_about_short_replies(home: Path, transcript: Transcript) -> None:
-    transcript.human()
-    transcript.reply(SHORT)
-    assert transcript.fire(home) is None
-
-
-def test_catches_a_long_reply_before_the_next_prompt(
-    home: Path, transcript: Transcript
-) -> None:
-    transcript.human()
-    transcript.reply(SHORT)
-    transcript.fire(home)
-    transcript.reply(LONG)
-    assert "at least 1249 characters" in nag_text(transcript.submit_human(home))
+    assert history == [Prompt("u1"), Reply("m")]
 
 
 def test_nags_after_2_messages_then_after_6_more(
@@ -345,7 +301,8 @@ def test_a_message_drained_with_a_wake_starts_a_new_count(
 
 def test_skips_subagents(home: Path, transcript: Transcript) -> None:
     transcript.human()
-    transcript.reply(LONG)
+    transcript.reply(SHORT)
+    transcript.reply(SHORT)
     payload: JsonObject = {
         "hook_event_name": "PostToolBatch",
         "session_id": "s1",
@@ -360,27 +317,31 @@ def codex(home: Path, event: str, **fields: JsonValue) -> str | None:
     return claude_context(run_hook(home, payload, "--harness", "codex"))
 
 
-def test_codex_nags_about_the_last_turn_on_the_next_prompt(home: Path) -> None:
+def test_codex_nags_about_repeated_updates_on_the_next_prompt(home: Path) -> None:
     codex(home, "UserPromptSubmit", prompt="go")
-    assert codex(home, "Stop", last_assistant_message=LONG) is None
-    assert "at least 1249 characters" in nag_text(
+    assert codex(home, "Stop", last_assistant_message=SHORT) is None
+    assert codex(home, "Stop", last_assistant_message=SHORT) is None
+    assert "2 messages in a row" in nag_text(
         codex(home, "UserPromptSubmit", prompt="next")
     )
+
+
+def test_codex_ignores_state_written_with_the_long_reply_nag(home: Path) -> None:
+    state = home / ".claude/hooks/data/misticos.Claude/reply-nags/s1"
+    old_state = {
+        "memory": {"seen_reply": "1", "window": "0", "window_replies": 1},
+        "log": {"next_id": 2, "history": [{"id": "0"}, {"id": "1", "prose_length": 5}]},
+        "pending_nags": {"long_reply": "old nag", "repeated_updates": ""},
+    }
+    state.parent.mkdir(parents=True)
+    state.write_text(json.dumps(old_state))
+    assert codex(home, "UserPromptSubmit", prompt="go") is None
 
 
 def cursor(home: Path, event: str, **fields: JsonValue) -> str | None:
     payload: JsonObject = {"hook_event_name": event, "conversation_id": "c1", **fields}
     output = run_hook(home, payload, "--harness", "cursor")
     return text_at(output, "additional_context") if output else None
-
-
-def test_cursor_keeps_long_replies_from_turns_without_tools(home: Path) -> None:
-    cursor(home, "beforeSubmitPrompt", prompt="go")
-    cursor(home, "afterAgentResponse", text=LONG)
-    cursor(home, "beforeSubmitPrompt", prompt="next")
-    cursor(home, "afterAgentResponse", text=SHORT)
-    cursor(home, "beforeSubmitPrompt", prompt="again")
-    assert "at least 1249 characters" in nag_text(cursor(home, "postToolUse"))
 
 
 def test_cursor_counts_the_answer_after_the_last_tool(home: Path) -> None:

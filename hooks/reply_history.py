@@ -3,7 +3,6 @@ from collections.abc import Iterable
 from typing import NamedTuple
 
 from json_values import JsonObject, JsonValue, dict_or_empty
-from prose import prose_length
 from transcript import is_conversation_turn, tail_entries
 
 
@@ -13,7 +12,7 @@ class Prompt(NamedTuple):
 
 class Reply(NamedTuple):
     id: str
-    prose_length: int
+    is_reply: bool = True
 
 
 class Window(NamedTuple):
@@ -25,8 +24,8 @@ class EventLog(NamedTuple):
     next_id: int = 0
     history: tuple[Prompt | Reply, ...] = ()
 
-    def with_reply(self, text: str) -> "EventLog":
-        reply = Reply(str(self.next_id), prose_length(text))
+    def with_reply(self) -> "EventLog":
+        reply = Reply(str(self.next_id))
         return EventLog(self.next_id + 1, (*self.history, reply))
 
     def with_prompt(self) -> "EventLog":
@@ -77,26 +76,20 @@ def message_id(entry: JsonObject) -> JsonValue:
 
 
 def transcript_history(transcript_path: str) -> list[Prompt | Reply]:
-    history: list[Prompt | str] = []
-    reply_texts: dict[str, str] = {}
+    history: list[Prompt | Reply] = []
+    reply_ids: set[str] = set()
     for entry in tail_entries(transcript_path):
         prompt_id = entry.get("uuid")
         if is_human_prompt(entry) and isinstance(prompt_id, str):
             history.append(Prompt(prompt_id))
             continue
-        text = reply_text(entry)
         reply_id = message_id(entry)
-        if not (text.strip() and isinstance(reply_id, str)):
+        if not (reply_text(entry).strip() and isinstance(reply_id, str)):
             continue
-        if reply_id not in reply_texts:
-            history.append(reply_id)
-        reply_texts[reply_id] = "\n".join(
-            filter(None, [reply_texts.get(reply_id), text])
-        )
-    return [
-        Reply(item, prose_length(reply_texts[item])) if isinstance(item, str) else item
-        for item in history
-    ]
+        if reply_id not in reply_ids:
+            reply_ids.add(reply_id)
+            history.append(Reply(reply_id))
+    return history
 
 
 def windows(history: Iterable[Prompt | Reply]) -> list[Window]:
