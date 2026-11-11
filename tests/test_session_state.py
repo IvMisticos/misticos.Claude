@@ -1,6 +1,6 @@
 import json
 from pathlib import Path
-from typing import NamedTuple
+from typing import Literal, NamedTuple
 
 from json_values import JsonObject, JsonValue
 from session_state import read_record, write_record
@@ -46,3 +46,25 @@ def test_union_members_with_one_field_each_resolve_by_name(tmp_path: Path) -> No
     stored: JsonObject = {"marks": [{"depth": 4}, {"x": 5}]}
     expected = Drawing(marks=(Indent(4), Point(5)))
     assert stored_drawing(tmp_path / "state", stored) == expected
+
+
+class Tagged(NamedTuple):
+    id: str
+    kind: Literal["tagged"] = "tagged"
+
+
+class Other(NamedTuple):
+    id: str
+    kind: Literal["other"] = "other"
+
+
+class Tagging(NamedTuple):
+    first: tuple[Tagged | Other, ...] = ()
+    second: tuple[Other | Tagged, ...] = ()
+
+
+def test_tagged_records_keep_their_type_in_either_union_order(tmp_path: Path) -> None:
+    tagging = Tagging((Other("1"), Tagged("2")), (Other("1"), Tagged("2")))
+    with (tmp_path / "state").open("w+") as state_file:
+        write_record(state_file, tagging)
+        assert read_record(state_file, Tagging()) == tagging

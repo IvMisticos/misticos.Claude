@@ -34,15 +34,9 @@ from reply_history import (
 )
 from session_state import locked_session_file, read_record, write_record
 
-PROSE_LIMIT = 1000
 FIRST_NAG_AT_MESSAGES = 3
 MESSAGES_BETWEEN_NAGS = 6
 STATE_DIR = DATA_ROOT / "reply-nags"
-LONG_REPLY = (
-    "One of your recent messages had at least {length} characters outside "
-    "code and links. Don't resend it, but from now on keep your messages "
-    "briefer and cut them as your instructions say."
-)
 REPEATED_UPDATES = (
     "You sent {count} messages in a row with no user message in between. "
     "Send no progress updates unless the user asked for them or something needs "
@@ -73,24 +67,10 @@ class NagMemory(NamedTuple):
     submitted_prompt: str = ""
 
 
-class DueNags(NamedTuple):
-    long_reply: str = ""
-    repeated_updates: str = ""
-
-    def merged_over(self, older: "DueNags") -> "DueNags":
-        return DueNags(
-            self.long_reply or older.long_reply,
-            self.repeated_updates or older.repeated_updates,
-        )
-
-    def texts(self) -> list[str]:
-        return [nag for nag in self if nag]
-
-
 class NagState(NamedTuple):
     memory: NagMemory = NagMemory()
     log: EventLog = EventLog()
-    pending_nags: DueNags = DueNags()
+    pending_nag: str = ""
 
 
 def unseen_replies(replies: list[Reply], seen_reply: str) -> list[Reply]:
@@ -98,13 +78,6 @@ def unseen_replies(replies: list[Reply], seen_reply: str) -> list[Reply]:
     if seen_reply not in ids:
         return replies
     return replies[ids.index(seen_reply) + 1 :]
-
-
-def long_reply_nag(unseen: list[Reply]) -> str:
-    long_replies = [reply for reply in unseen if reply.prose_length > PROSE_LIMIT]
-    if not long_replies:
-        return ""
-    return LONG_REPLY.format(length=long_replies[-1].prose_length)
 
 
 def remembered_window(memory: NagMemory) -> Window:
@@ -132,13 +105,13 @@ def repeated_updates_nag(
 
 def due_nags(
     history: Sequence[Prompt | Reply], memory: NagMemory
-) -> tuple[DueNags, NagMemory]:
+) -> tuple[str, NagMemory]:
     replies = [item for item in history if isinstance(item, Reply)]
     unseen = unseen_replies(replies, memory.seen_reply)
-    repeated_updates, memory = repeated_updates_nag(history, memory, unseen)
+    nag, memory = repeated_updates_nag(history, memory, unseen)
     if replies:
         memory = copy.replace(memory, seen_reply=replies[-1].id)
-    return DueNags(long_reply_nag(unseen), repeated_updates), memory
+    return nag, memory
 
 
 def nags_from_transcript(
@@ -148,10 +121,10 @@ def nags_from_transcript(
         return [], state
     transcript_path = transcript_path_of(payload)
     history = transcript_history(transcript_path) if transcript_path else []
-    nags, memory = due_nags(history, state.memory)
+    nag, memory = due_nags(history, state.memory)
     if event in PROMPT_EVENTS and not is_wake_prompt(payload.get("prompt")):
         memory = copy.replace(memory, submitted_prompt=submitted_prompt_id(payload))
-    return nags.texts(), copy.replace(state, memory=memory)
+    return [nag] if nag else [], copy.replace(state, memory=memory)
 
 
 def submitted_prompt_id(payload: JsonObject) -> str:
@@ -172,7 +145,7 @@ def nags_from_events(
     reply_field = REPLY_TEXT_FIELD_BY_EVENT.get(event)
     reply_text = payload.get(reply_field) if reply_field else None
     if isinstance(reply_text, str) and reply_text.strip():
-        log = log.with_reply(reply_text)
+        log = log.with_reply()
     if event not in NAG_EVENTS | PROMPT_EVENTS:
         return [], copy.replace(state, log=log)
     due, memory = due_nags(log.history, state.memory)
@@ -180,8 +153,9 @@ def nags_from_events(
     if event in PROMPT_EVENTS:
         log = log.with_prompt()
     if event in NAG_EVENTS:
-        return due.merged_over(state.pending_nags).texts(), NagState(memory, log)
-    return [], NagState(memory, log, due.merged_over(state.pending_nags))
+        nag = due or state.pending_nag
+        return [nag] if nag else [], NagState(memory, log)
+    return [], NagState(memory, log, due or state.pending_nag)
 
 
 def main() -> None:
