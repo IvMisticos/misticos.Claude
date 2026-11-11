@@ -8,41 +8,65 @@ from pathlib import Path
 import cleanup_policy
 import pytest
 from cleanup_policy import (
+    CLEANUP_LIMIT,
     Cleanup,
     clean_up_low_disks,
-    most_free_since_cleanup,
-    needs_cleanup,
+    read_most_free_since_cleanup,
     write_most_free_since_cleanup,
 )
-from disk_space import HOW_TO_CLEAN_UP, disk_note
+from disk_space import HOW_TO_CLEAN_UP, NOTE_LIMIT, disk_note, disks_to_note
 from disks import BYTES_PER_MIB, Disk
+from low_space_throttle import LowSpaceLimit, claim_low_disks, is_due
 
 GIB = 1 << 30
 
 
-def disk(total_gib: float, free_gib: float) -> Disk:
-    return Disk("/", "1", int(total_gib * GIB), int(free_gib * GIB))
+def disk(total_gib: float, free_gib: float, device: str = "1") -> Disk:
+    return Disk("/", device, int(total_gib * GIB), int(free_gib * GIB))
 
 
 @pytest.mark.parametrize(
-    ("total_gib", "free_gib", "cleans_up"),
-    [(250, 4.9, True), (250, 5, False), (4, 1.5, False), (4, 0.9, True)],
+    ("limit", "total_gib", "free_gib", "due"),
+    [
+        (CLEANUP_LIMIT, 250, 4.9, True),
+        (CLEANUP_LIMIT, 250, 5, False),
+        (CLEANUP_LIMIT, 4, 1.5, False),
+        (CLEANUP_LIMIT, 4, 0.9, True),
+        (NOTE_LIMIT, 250, 1.9, True),
+        (NOTE_LIMIT, 250, 2, False),
+        (NOTE_LIMIT, 4, 0.5, False),
+        (NOTE_LIMIT, 4, 0.3, True),
+    ],
 )
-def test_cleans_up_below_5_gib_or_a_quarter_of_a_small_disk(
-    total_gib: float, free_gib: float, cleans_up: bool
+def test_is_due_below_a_size_or_a_share_of_a_small_disk(
+    limit: LowSpaceLimit, total_gib: float, free_gib: float, due: bool
 ) -> None:
-    assert needs_cleanup(disk(total_gib, free_gib), {}) == cleans_up
+    assert is_due(disk(total_gib, free_gib), {}, limit) == due
 
 
 @pytest.mark.parametrize(
-    ("most_free_gib", "free_gib", "cleans_up"),
+    ("most_free_gib", "free_gib", "due"),
     [(4.5, 3.6, False), (4.5, 3.4, True), (0.8, 0.5, False), (0.8, 0.3, True)],
 )
-def test_cleans_up_again_after_another_gib_or_half_the_free_space_is_used(
-    most_free_gib: float, free_gib: float, cleans_up: bool
+def test_is_due_again_after_another_gib_or_half_the_free_space_is_used(
+    most_free_gib: float, free_gib: float, due: bool
 ) -> None:
     most_free = {"1": int(most_free_gib * GIB)}
-    assert needs_cleanup(disk(250, free_gib), most_free) == cleans_up
+    assert is_due(disk(250, free_gib), most_free, CLEANUP_LIMIT) == due
+
+
+@pytest.mark.parametrize(("free_gib", "due"), [(5.3, False), (4.8, False), (4.2, True)])
+def test_measures_use_from_the_most_free_space_since_the_last_claim(
+    free_gib: float, due: bool
+) -> None:
+    still_low = disk(250, 2, device="2")
+    stored = {"1": int(1.5 * GIB), "2": 3 * GIB}
+    raised = claim_low_disks(stored, [disk(250, 5.3), still_low], CLEANUP_LIMIT)
+    claim = claim_low_disks(
+        raised.most_free, [disk(250, free_gib), still_low], CLEANUP_LIMIT
+    )
+    assert claim.due == ([disk(250, free_gib)] if due else [])
+    assert claim.most_free["2"] == 3 * GIB
 
 
 @pytest.fixture
@@ -50,19 +74,6 @@ def record(tmp_path: Path) -> Path:
     record = tmp_path / "free.json"
     write_most_free_since_cleanup(record, {"1": int(1.5 * GIB), "2": 3 * GIB})
     return record
-
-
-@pytest.mark.parametrize(
-    ("free_gib", "cleans_up"), [(5.3, False), (4.8, False), (4.2, True)]
-)
-def test_measures_use_from_the_most_free_space_since_cleanup(
-    record: Path, free_gib: float, cleans_up: bool
-) -> None:
-    still_low = Disk("/tmp", "2", 250 * GIB, 2 * GIB)
-    most_free_since_cleanup(record, [disk(250, 5.3), still_low])
-    most_free = most_free_since_cleanup(record, [disk(250, free_gib), still_low])
-    assert most_free == {"1": int(5.3 * GIB), "2": 3 * GIB}
-    assert needs_cleanup(disk(250, free_gib), most_free) == cleans_up
 
 
 def test_a_failed_write_keeps_the_record_whole(
@@ -125,53 +136,78 @@ def test_two_concurrent_runs_start_one_cleanup(
     assert len(cleanups) == 1
 
 
-def run_cleanup(
-    monkeypatch: pytest.MonkeyPatch,
-    record: Path,
-    free_gib: float,
-    freed_gib: float = 0,
-) -> Cleanup | None:
-    free = [disk(250, free_gib), disk(250, free_gib + freed_gib)]
+def test_a_cleanup_reports_what_it_freed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    free = [disk(250, 4), disk(250, 6)]
     monkeypatch.setattr(cleanup_policy, "disks", lambda paths: [free.pop(0)])
-    monkeypatch.setattr(cleanup_policy, "cleared_caches", lambda devices: [])
-    return clean_up_low_disks(["/"], record)
-
-
-def test_a_disk_that_stays_low_is_reported_once(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+    monkeypatch.setattr(cleanup_policy, "cleared_caches", lambda devices: ["x"])
     record = tmp_path / "free.json"
-    first = run_cleanup(monkeypatch, record, 1.5)
-    assert first is not None
-    assert first.low_disks == [disk(250, 1.5)]
-    assert run_cleanup(monkeypatch, record, 1.4) is None
-    assert run_cleanup(monkeypatch, record, 0.7) is not None
+    assert clean_up_low_disks(["/"], record) == Cleanup(2 * GIB, ["x"])
+    assert read_most_free_since_cleanup(record) == {"1": 6 * GIB}
 
 
-def test_a_cleanup_that_frees_enough_reports_no_low_disk(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+@pytest.fixture
+def notes_dir(tmp_path: Path) -> Path:
+    return tmp_path / "disk-notes"
+
+
+def test_a_session_hears_once_until_free_space_drops_again(notes_dir: Path) -> None:
+    assert disks_to_note("main", [disk(250, 1.5)], notes_dir) == [disk(250, 1.5)]
+    assert disks_to_note("main", [disk(250, 1.5)], notes_dir) == []
+    assert disks_to_note("main", [disk(250, 1)], notes_dir) == []
+    assert disks_to_note("main", [disk(250, 0.7)], notes_dir) == [disk(250, 0.7)]
+
+
+def test_a_second_session_on_an_unchanged_low_disk_hears_too(notes_dir: Path) -> None:
+    disks_to_note("first", [disk(250, 1.5)], notes_dir)
+    assert disks_to_note("second", [disk(250, 1.5)], notes_dir) == [disk(250, 1.5)]
+
+
+def test_a_subagent_note_leaves_the_main_agent_note(notes_dir: Path) -> None:
+    disks_to_note("session-agent", [disk(250, 1.5)], notes_dir)
+    assert disks_to_note("session", [disk(250, 1.5)], notes_dir) == [disk(250, 1.5)]
+
+
+def test_a_full_disk_is_noted_once_per_session(notes_dir: Path) -> None:
+    full = disk(250, 0)
+    assert disks_to_note("first", [full], notes_dir) == [full]
+    assert disks_to_note("first", [full], notes_dir) == []
+    assert disks_to_note("second", [full], notes_dir) == [full]
+
+
+def test_a_claimed_cleanup_leaves_the_session_note_due(
+    tmp_path: Path, notes_dir: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    cleanup = run_cleanup(monkeypatch, tmp_path / "free.json", 4, freed_gib=2)
-    assert cleanup == Cleanup(2 * GIB, [], [])
+    monkeypatch.setattr(cleanup_policy, "disks", lambda paths: [disk(250, 1.5)])
+    cleanup_policy.claim_disks_to_clean(["/"], tmp_path / "free.json")
+    assert disks_to_note("main", [disk(250, 1.5)], notes_dir) == [disk(250, 1.5)]
 
 
 def test_the_note_says_what_the_hooks_freed_and_what_to_free() -> None:
     caches = ["the NuGet HTTP cache", "dangling Docker images"]
-    cleanup = Cleanup(300 * BYTES_PER_MIB, caches, [disk(250, 1)])
-    assert disk_note(cleanup) == (
+    cleanup = Cleanup(300 * BYTES_PER_MIB, caches)
+    assert disk_note(cleanup, [disk(250, 1)]) == (
         "Disk space ran low, so the hooks freed 300 MiB: they cleared the NuGet "
         "HTTP cache and dangling Docker images. Only 1024 MiB of disk is free at "
-        f"/, so free 4096 MiB more there. {HOW_TO_CLEAN_UP}"
+        f"/, so free 1024 MiB more there. {HOW_TO_CLEAN_UP}"
     )
 
 
-def test_the_note_only_reports_the_freed_space_when_the_disk_recovered() -> None:
-    cleanup = Cleanup(2 * GIB, ["the NuGet HTTP cache"], [])
-    assert disk_note(cleanup) == (
+def test_the_note_without_a_cleanup_says_what_to_free() -> None:
+    assert disk_note(None, [disk(250, 0.5)]) == (
+        "Only 512 MiB of disk is free at /, so free 1536 MiB more there. "
+        f"{HOW_TO_CLEAN_UP}"
+    )
+
+
+def test_the_note_only_reports_the_freed_space_when_no_disk_is_due() -> None:
+    cleanup = Cleanup(2 * GIB, ["the NuGet HTTP cache"])
+    assert disk_note(cleanup, []) == (
         "Disk space ran low, so the hooks freed 2048 MiB: they cleared the NuGet "
         "HTTP cache."
     )
 
 
-def test_a_cleanup_that_freed_nothing_and_left_enough_space_says_nothing() -> None:
-    assert disk_note(Cleanup(0, [], [])) is None
+def test_a_cleanup_that_freed_nothing_and_no_due_disk_says_nothing() -> None:
+    assert disk_note(Cleanup(0, []), []) is None

@@ -7,11 +7,14 @@
 
 import math
 import os
+from collections.abc import Iterable
+from pathlib import Path
 
-from cleanup_policy import Cleanup, clean_up_low_disks, space_to_free
-from disks import BYTES_PER_MIB, Disk
+from cleanup_policy import Cleanup, clean_up_low_disks
+from disks import BYTES_PER_MIB, Disk, disks
 from harnesses import harness_parser
 from hook_io import (
+    agent_session_key,
     cwd_of,
     event_name_of,
     read_payload,
@@ -20,7 +23,12 @@ from hook_io import (
     write_context,
 )
 from json_values import JsonObject
+from low_space_throttle import LowSpaceLimit, claim_low_disks, parsed_most_free
+from plugin_paths import DATA_ROOT
+from session_state import locked_session_file, read_json, write_json
 
+NOTE_LIMIT = LowSpaceLimit(2 << 30, 0.1)
+DISK_NOTES_DIR = DATA_ROOT / "disk-notes"
 TEMP_DIR_VARIABLES = ("TMPDIR", "TEMP", "TMP")
 HOOKS_FREED = (
     "Disk space ran low, so the hooks freed {freed} MiB: they cleared {caches}."
@@ -42,13 +50,24 @@ def watched_paths(payload: JsonObject) -> tuple[str, ...]:
     return (cwd, os.path.expanduser("~"), *temp_dirs, "/tmp", *scratchpad)
 
 
+def disks_to_note(
+    agent_key: str, current: Iterable[Disk], notes_dir: Path = DISK_NOTES_DIR
+) -> list[Disk]:
+    with locked_session_file(notes_dir, agent_key) as state_file:
+        stored = parsed_most_free(read_json(state_file))
+        claim = claim_low_disks(stored, current, NOTE_LIMIT)
+        if claim.most_free != stored:
+            write_json(state_file, claim.most_free)
+        return claim.due
+
+
 def in_words(items: list[str]) -> str:
     *rest, last = items
     return f"{', '.join(rest)} and {last}" if rest else last
 
 
-def freed_note(cleanup: Cleanup) -> list[str]:
-    if cleanup.freed < BYTES_PER_MIB or not cleanup.cleared:
+def freed_note(cleanup: Cleanup | None) -> list[str]:
+    if cleanup is None or cleanup.freed < BYTES_PER_MIB or not cleanup.cleared:
         return []
     freed = cleanup.freed // BYTES_PER_MIB
     return [HOOKS_FREED.format(freed=freed, caches=in_words(cleanup.cleared))]
@@ -58,12 +77,12 @@ def still_low_note(disk: Disk) -> str:
     return STILL_LOW.format(
         free=disk.free // BYTES_PER_MIB,
         path=disk.path,
-        needed=math.ceil(space_to_free(disk) / BYTES_PER_MIB),
+        needed=math.ceil(NOTE_LIMIT.space_to_free(disk) / BYTES_PER_MIB),
     )
 
 
-def disk_note(cleanup: Cleanup) -> str | None:
-    still_low = [still_low_note(disk) for disk in cleanup.low_disks]
+def disk_note(cleanup: Cleanup | None, low_disks: list[Disk]) -> str | None:
+    still_low = [still_low_note(disk) for disk in low_disks]
     how_to = [HOW_TO_CLEAN_UP] if still_low else []
     note = " ".join([*freed_note(cleanup), *still_low, *how_to])
     return note or None
@@ -72,10 +91,11 @@ def disk_note(cleanup: Cleanup) -> str | None:
 def main() -> None:
     options = harness_parser().parse_args()
     payload = read_payload()
-    cleanup = clean_up_low_disks(watched_paths(payload))
-    if cleanup is None:
-        return
-    note = disk_note(cleanup)
+    paths = watched_paths(payload)
+    cleanup = clean_up_low_disks(paths)
+    agent_key = agent_session_key(payload)
+    low_disks = disks_to_note(agent_key, disks(paths)) if agent_key else []
+    note = disk_note(cleanup, low_disks)
     if note:
         write_context(event_name_of(payload), note, options.harness.output_shape)
 
