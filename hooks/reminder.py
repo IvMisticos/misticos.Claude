@@ -38,15 +38,8 @@ from rules_copy import (
     full_copy_messages,
     pointer_reminder,
     rules_at,
-    rules_text,
 )
-from rules_receipts import (
-    confirm_session_start_copy,
-    has_received,
-    note_received,
-    note_sent_at_session_start,
-    rules_digest,
-)
+from rules_receipts import has_received, note_received
 from transcript import context_tokens, payload_tokens
 
 from agents import ALL_SECTIONS, rule_sections_for
@@ -72,10 +65,6 @@ def message_for_part(
             return None
 
 
-def main_session_digest(rules: Rules) -> str:
-    return rules_digest(rules_text(rules))
-
-
 def measured_context(
     payload: JsonObject, source: ContextSource
 ) -> ContextTotal | ContextAdded | None:
@@ -95,8 +84,6 @@ def growth_reminder(
     session_id = session_id_of(payload)
     if not (messages and session_id):
         return None
-    if options.part == 1:
-        confirm_session_start_copy(session_id)
     fire = fire_id(event, payload)
     if not fire and options.part > 1:
         return None
@@ -111,8 +98,12 @@ def growth_reminder(
         can_point=event != HookEvent.USER_PROMPT_SUBMIT,
     )
     if action == Action.COPY:
-        note_received(session_id, main_session_digest(rules))
+        note_received(session_id, rules.digest)
     return message_for_part(action, options.part, messages, rules)
+
+
+def is_resume(payload: JsonObject) -> bool:
+    return payload.get("source") == "resume"
 
 
 def session_start_reminder(
@@ -122,7 +113,6 @@ def session_start_reminder(
     session_id = session_id_of(payload)
     if options.part == 1 and session_id and not for_subagent:
         forget_baseline(session_id)
-        note_sent_at_session_start(session_id, main_session_digest(rules))
     sections = (
         rule_sections_for(payload.get("agent_type")) if for_subagent else ALL_SECTIONS
     )
@@ -133,6 +123,8 @@ def session_start_reminder(
     )
     if len(messages) > REMINDER_PARTS:
         return pointer_reminder(rules) if options.part == 1 else None
+    if options.part == 1 and session_id and not (for_subagent or is_resume(payload)):
+        note_received(session_id, rules.digest)
     return message_for_part(Action.COPY, options.part, messages, rules)
 
 
@@ -143,9 +135,9 @@ def resumes_with_same_rules(
     return (
         event == HookEvent.SESSION_START
         and not is_subagent(payload)
-        and payload.get("source") == "resume"
+        and is_resume(payload)
         and session_id is not None
-        and has_received(session_id, main_session_digest(rules))
+        and has_received(session_id, rules.digest)
     )
 
 

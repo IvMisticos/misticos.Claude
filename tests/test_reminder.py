@@ -113,6 +113,11 @@ def start_with_copy(home: Path, transcript: Path) -> None:
     assert all_parts(home, prompt(transcript, "p1")) == [None] * REMINDER_PARTS
 
 
+def outdated_receipt(home: Path, session_id: str) -> None:
+    receipt = home / ".claude/hooks/data/misticos.Claude/rules-receipts" / session_id
+    receipt.write_text(json.dumps({"digest": "digest of older rules"}))
+
+
 @pytest.mark.parametrize("source", ["startup", "clear", "compact"])
 def test_a_session_start_with_a_new_context_gets_the_copy_again(
     home: Path, tmp_path: Path, source: str
@@ -149,8 +154,7 @@ def test_a_fork_gets_the_copy(home: Path, tmp_path: Path) -> None:
 
 def test_a_resume_with_changed_rules_gets_the_copy(home: Path, tmp_path: Path) -> None:
     start_with_copy(home, transcript_at(tmp_path, 10_000))
-    receipt = home / ".claude/hooks/data/misticos.Claude/rules-receipts/s1"
-    receipt.write_text(json.dumps({"received": "digest of older rules"}))
+    outdated_receipt(home, "s1")
     assert all_parts(home, session_start("s1", "resume")) == full_copy(home)
 
 
@@ -158,9 +162,11 @@ def test_a_resume_without_stored_state_gets_the_copy(home: Path) -> None:
     assert all_parts(home, session_start("s1", "resume")) == full_copy(home)
 
 
-def test_a_resume_before_any_prompt_gets_the_copy(home: Path) -> None:
+def test_a_resume_after_a_compaction_keeps_the_compaction_copy(home: Path) -> None:
     assert all_parts(home, session_start("s1", "startup")) == full_copy(home)
-    assert all_parts(home, session_start("s1", "resume")) == full_copy(home)
+    outdated_receipt(home, "s1")
+    assert all_parts(home, session_start("s1", "compact")) == full_copy(home)
+    assert all_parts(home, session_start("s1", "resume")) == [None] * REMINDER_PARTS
 
 
 def test_a_main_session_of_a_skipped_type_gets_the_file(home: Path) -> None:
