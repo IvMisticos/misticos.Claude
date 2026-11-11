@@ -38,6 +38,7 @@ from rules_copy import (
     full_copy_messages,
     rules_at,
 )
+from rules_receipts import has_received, note_received
 from transcript import context_tokens, payload_tokens
 
 from agents import ALL_SECTIONS, rule_sections_for
@@ -90,7 +91,13 @@ def growth_reminder(
         context,
         can_copy=len(messages) <= REMINDER_PARTS and bool(fire or len(messages) == 1),
     )
+    if action == Action.COPY:
+        note_received(session_id, rules.digest)
     return message_for_part(action, options.part, messages)
+
+
+def is_resume(payload: JsonObject) -> bool:
+    return payload.get("source") == "resume"
 
 
 def session_start_reminder(
@@ -114,11 +121,28 @@ def session_start_reminder(
             file=sys.stderr,
         )
         return None
+    if options.part == 1 and session_id and not (for_subagent or is_resume(payload)):
+        note_received(session_id, rules.digest)
     return message_for_part(Action.COPY, options.part, messages)
+
+
+def resumes_with_same_rules(
+    rules: Rules, event: HookEvent, payload: JsonObject
+) -> bool:
+    session_id = session_id_of(payload)
+    return (
+        event == HookEvent.SESSION_START
+        and not is_subagent(payload)
+        and is_resume(payload)
+        and session_id is not None
+        and has_received(session_id, rules.digest)
+    )
 
 
 def reminder_for(event: HookEvent, payload: JsonObject, options: Options) -> str | None:
     rules = rules_at(RULES_PATH, options.harness.model_names)
+    if resumes_with_same_rules(rules, event, payload):
+        return None
     if event in (HookEvent.SESSION_START, HookEvent.SUBAGENT_START):
         return session_start_reminder(rules, event, payload, options)
     if is_subagent(payload):

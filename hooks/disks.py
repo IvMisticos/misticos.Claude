@@ -12,9 +12,6 @@ class Disk(NamedTuple):
     total: int
     free: int
 
-    def has_free_below(self, limit_bytes: int, limit_share: float) -> bool:
-        return self.free < min(limit_bytes, self.total * limit_share)
-
 
 def device_of(path: str) -> str | None:
     try:
