@@ -6,21 +6,8 @@
 # ///
 
 import sys
-from typing import NamedTuple
 
-from hook_io import (
-    agent_session_key,
-    event_name_of,
-    read_payload,
-    run_hook,
-    write_context,
-)
-from json_values import JsonObject
-from plugin_paths import DATA_ROOT
-from session_state import locked_session_file, read_record, write_record
-
-NOTIFICATION_CALLS_DIR = DATA_ROOT / "notification-calls"
-NOTIFICATIONS_NOTE_EVERY_CALLS = 5
+from hook_io import event_name_of, read_payload, run_hook, write_context
 
 NOTES = {
     "agent-roles": (
@@ -34,37 +21,14 @@ NOTES = {
         "now and remove that text. If you cannot edit the pull request, ask "
         "your parent agent to remove it."
     ),
-    "notifications": (
-        "Act on what these notifications need. If they need no action and "
-        "nothing from the user, end the turn without a reply."
-    ),
 }
-
-
-class NotificationCalls(NamedTuple):
-    notifications: int = 0
-
-
-def is_notifications_note_due(agent_key: str | None) -> bool:
-    if agent_key is None:
-        return True
-    with locked_session_file(NOTIFICATION_CALLS_DIR, agent_key) as state_file:
-        previous = read_record(state_file, NotificationCalls()).notifications
-        write_record(state_file, NotificationCalls(previous + 1))
-    return previous % NOTIFICATIONS_NOTE_EVERY_CALLS == 0
-
-
-def is_due(name: str, payload: JsonObject) -> bool:
-    if name != "notifications":
-        return True
-    return is_notifications_note_due(agent_session_key(payload))
 
 
 def main() -> None:
     name = sys.argv[1]
     payload = read_payload()
     event = event_name_of(payload)
-    if event and is_due(name, payload):
+    if event:
         write_context(event, NOTES[name])
 
 
