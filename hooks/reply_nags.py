@@ -34,7 +34,7 @@ from reply_history import (
 )
 from session_state import locked_session_file, read_record, write_record
 
-FIRST_NAG_AT_MESSAGES = 2
+FIRST_NAG_AT_MESSAGES = 3
 MESSAGES_BETWEEN_NAGS = 6
 STATE_DIR = DATA_ROOT / "reply-nags"
 REPEATED_UPDATES = (
