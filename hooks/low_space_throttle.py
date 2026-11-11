@@ -22,6 +22,9 @@ class LowSpaceLimit(NamedTuple):
         limit = int(min(self.limit_bytes, disk.total * self.limit_share))
         return max(0, limit - disk.free)
 
+    def has_low(self, disks: Iterable[Disk]) -> bool:
+        return any(self.space_to_free(disk) for disk in disks)
+
 
 class Claim(NamedTuple):
     due: list[Disk]
@@ -71,31 +74,37 @@ def write_most_free(record: Path, most_free: MostFree) -> None:
 
 
 @contextlib.contextmanager
-def locked_record(record: Path) -> Generator[None]:
+def locked(lock_path: Path) -> Generator[None]:
     with contextlib.ExitStack() as stack:
         with contextlib.suppress(OSError):
-            record.parent.mkdir(parents=True, exist_ok=True)
-            lock = stack.enter_context(
-                open(record.with_suffix(".lock"), "a+", encoding="utf-8")
-            )
+            lock_path.parent.mkdir(parents=True, exist_ok=True)
+            lock = stack.enter_context(open(lock_path, "a+", encoding="utf-8"))
             lock_exclusively(lock)
         yield
 
 
-def claim_low_disks_in(
-    record: Path, disks: Iterable[Disk], limit: LowSpaceLimit
-) -> list[Disk]:
-    with locked_record(record):
+def raise_most_free_in(record: Path, lock_path: Path, disks: Iterable[Disk]) -> None:
+    current = list(disks)
+    unlocked = read_most_free(record)
+    if raised_most_free(unlocked, current) == unlocked:
+        return
+    with locked(lock_path):
         stored = read_most_free(record)
-        claim = claim_low_disks(stored, disks, limit)
+        raised = raised_most_free(stored, current)
+        if raised != stored:
+            write_most_free(record, raised)
+
+
+def claim_low_disks_in(
+    record: Path, lock_path: Path, disks: Iterable[Disk], limit: LowSpaceLimit
+) -> list[Disk]:
+    current = list(disks)
+    if not limit.has_low(current):
+        raise_most_free_in(record, lock_path, current)
+        return []
+    with locked(lock_path):
+        stored = read_most_free(record)
+        claim = claim_low_disks(stored, current, limit)
         if claim.most_free != stored:
             write_most_free(record, claim.most_free)
         return claim.due
-
-
-def raise_most_free_in(record: Path, disks: Iterable[Disk]) -> None:
-    with locked_record(record):
-        stored = read_most_free(record)
-        raised = raised_most_free(stored, disks)
-        if raised != stored:
-            write_most_free(record, raised)

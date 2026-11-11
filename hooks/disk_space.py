@@ -51,18 +51,16 @@ def watched_paths(payload: JsonObject) -> tuple[str, ...]:
     return (cwd, os.path.expanduser("~"), *temp_dirs, "/tmp", *scratchpad)
 
 
-def session_record(notes_dir: Path, agent_key: str) -> Path:
-    return Path(session_file_path(notes_dir, agent_key)).with_suffix(".json")
-
-
 def disks_to_note(
     agent_key: str, current: Iterable[Disk], notes_dir: Path = DISK_NOTES_DIR
 ) -> list[Disk]:
-    record = session_record(notes_dir, agent_key)
-    if not record.exists():
+    disks_now = list(current)
+    record = Path(session_file_path(notes_dir, agent_key))
+    if NOTE_LIMIT.has_low(disks_now) and not record.exists():
         with contextlib.suppress(OSError):
             forget_stale_files(notes_dir)
-    return claim_low_disks_in(record, current, NOTE_LIMIT)
+    lock_path = notes_dir.with_suffix(".lock")
+    return claim_low_disks_in(record, lock_path, disks_now, NOTE_LIMIT)
 
 
 def in_words(items: list[str]) -> str:

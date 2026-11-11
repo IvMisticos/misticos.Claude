@@ -186,7 +186,8 @@ def test_a_full_disk_is_noted_once_per_session(notes_dir: Path) -> None:
 def test_a_claimed_cleanup_leaves_the_session_note_due(
     tmp_path: Path, notes_dir: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    claim_low_disks_in(tmp_path / "free.json", [disk(250, 1.5)], CLEANUP_LIMIT)
+    record = tmp_path / "free.json"
+    claim_low_disks_in(record, tmp_path / "free.lock", [disk(250, 1.5)], CLEANUP_LIMIT)
     assert disks_to_note("main", [disk(250, 1.5)], notes_dir) == [disk(250, 1.5)]
 
 
@@ -217,10 +218,20 @@ def test_stale_session_records_are_forgotten(notes_dir: Path) -> None:
     for stale in notes_dir.iterdir():
         os.utime(stale, (0, 0))
     disks_to_note("new", [disk(250, 1.5)], notes_dir)
-    assert sorted(path.name for path in notes_dir.iterdir()) == [
-        "new.json",
-        "new.lock",
-    ]
+    assert [path.name for path in notes_dir.iterdir()] == ["new"]
+
+
+def test_a_healthy_disk_leaves_the_notes_untouched(
+    tmp_path: Path, notes_dir: Path
+) -> None:
+    assert disks_to_note("main", [disk(250, 3)], notes_dir) == []
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_a_recovered_disk_is_noted_when_it_runs_low_again(notes_dir: Path) -> None:
+    disks_to_note("main", [disk(250, 1.5)], notes_dir)
+    disks_to_note("main", [disk(250, 10)], notes_dir)
+    assert disks_to_note("main", [disk(250, 1.9)], notes_dir) == [disk(250, 1.9)]
 
 
 def test_the_note_says_what_the_hooks_freed_and_what_to_free() -> None:

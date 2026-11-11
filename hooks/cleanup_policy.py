@@ -19,12 +19,13 @@ class Cleanup(NamedTuple):
 def clean_up_low_disks(
     paths: Collection[str], record: Path = CLEANUP_RECORD
 ) -> Cleanup | None:
-    before = claim_low_disks_in(record, disks(paths), CLEANUP_LIMIT)
+    lock_path = record.with_suffix(".lock")
+    before = claim_low_disks_in(record, lock_path, disks(paths), CLEANUP_LIMIT)
     if not before:
         return None
     devices = {disk.device for disk in before}
     cleared = cleared_caches(devices)
     after = [disk for disk in disks(paths) if disk.device in devices]
-    raise_most_free_in(record, after)
+    raise_most_free_in(record, lock_path, after)
     freed = max(0, total_free(after) - total_free(before))
     return Cleanup(freed, cleared)
