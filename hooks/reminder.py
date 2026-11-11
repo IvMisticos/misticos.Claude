@@ -109,6 +109,10 @@ def session_start_reminder(
         rules, SESSION_START_PREAMBLE, ALL_SECTIONS - sections
     )
     if len(messages) > REMINDER_PARTS:
+        print(
+            f"reminder: rules need {len(messages)} parts, over {REMINDER_PARTS}",
+            file=sys.stderr,
+        )
         return None
     return message_for_part(Action.COPY, options.part, messages)
 

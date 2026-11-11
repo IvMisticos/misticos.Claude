@@ -60,7 +60,7 @@ def fire_id(event: str, payload: JsonObject) -> str:
 
 
 def context_shrank(baselines: Baselines, tokens: int) -> bool:
-    return tokens < baselines.copied_at
+    return tokens < baselines.seen
 
 
 def next_action(

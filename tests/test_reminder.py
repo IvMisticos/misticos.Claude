@@ -204,6 +204,23 @@ def test_a_baseline_stored_with_a_pointer_field_is_ignored(
     assert all_parts(home, prompt(transcript, "p1")) == [None] * REMINDER_PARTS
 
 
+def test_a_shrink_above_the_last_copy_restarts_the_copy_interval(
+    home: Path, tmp_path: Path
+) -> None:
+    transcript = transcript_at(tmp_path, 10_000)
+    assert all_parts(home, prompt(transcript, "p1")) == [None] * REMINDER_PARTS
+    transcript_at(tmp_path, 120_000)
+    assert all_parts(home, prompt(transcript, "p2"))[0]
+    transcript_at(tmp_path, 210_000)
+    assert all_parts(home, prompt(transcript, "p3")) == [None] * REMINDER_PARTS
+    transcript_at(tmp_path, 150_000)
+    assert all_parts(home, prompt(transcript, "p4")) == [None] * REMINDER_PARTS
+    transcript_at(tmp_path, 240_000)
+    assert all_parts(home, prompt(transcript, "p5")) == [None] * REMINDER_PARTS
+    transcript_at(tmp_path, 255_000)
+    assert all_parts(home, prompt(transcript, "p6"))[0]
+
+
 def codex_transcript_at(tmp_path: Path, tokens: int) -> Path:
     transcript = tmp_path / "rollout.jsonl"
     transcript.write_text("x" * tokens * CHARS_PER_TOKEN_ESTIMATE)
@@ -225,6 +242,17 @@ def codex_tool_use(transcript: Path, turn_id: str, tool_use_id: str) -> JsonObje
         "hook_event_name": "PostToolUse",
         "tool_use_id": tool_use_id,
     }
+
+
+def test_codex_sends_a_full_copy_after_100k_of_growth(
+    home: Path, tmp_path: Path
+) -> None:
+    transcript = codex_transcript_at(tmp_path, 10_000)
+    first = all_parts(home, codex_prompt(transcript, "t1"), CODEX_ARGUMENTS)
+    assert first == [None] * REMINDER_PARTS
+    codex_transcript_at(tmp_path, 120_000)
+    second = all_parts(home, codex_tool_use(transcript, "t1", "u1"), CODEX_ARGUMENTS)
+    assert second[0] and second[1]
 
 
 def test_subagent_growth_gets_nothing(home: Path, tmp_path: Path) -> None:
