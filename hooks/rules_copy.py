@@ -1,3 +1,4 @@
+import hashlib
 import os
 import re
 import sys
@@ -41,10 +42,17 @@ class Rules(NamedTuple):
     path: str
     name: str
     model_names: dict[str, str]
+    text: str
+    digest: str
+
+
+def rules_digest(text: str) -> str:
+    return hashlib.sha256(text.encode()).hexdigest()
 
 
 def rules_at(path: str, model_names: dict[str, str]) -> Rules:
-    return Rules(path, os.path.basename(path), model_names)
+    text = rules_file_text(path, model_names)
+    return Rules(path, os.path.basename(path), model_names, text, rules_digest(text))
 
 
 def with_model_names(text: str, model_names: dict[str, str]) -> str:
@@ -116,16 +124,19 @@ def without_sections(text: str, headings: Collection[str]) -> str:
     return "".join(kept).strip()
 
 
+def rules_file_text(path: str, model_names: dict[str, str]) -> str:
+    try:
+        with open(path, encoding="utf-8", errors="replace") as rules_file:
+            return with_model_names(rules_file.read().strip(), model_names)
+    except OSError as error:
+        print(f"reminder: cannot read rules: {error}", file=sys.stderr)
+        return ""
+
+
 def full_copy_messages(
     rules: Rules, first_preamble: str, skipped_sections: Collection[str] = frozenset()
 ) -> tuple[str, ...]:
-    try:
-        with open(rules.path, encoding="utf-8", errors="replace") as rules_file:
-            text = with_model_names(rules_file.read().strip(), rules.model_names)
-    except OSError as error:
-        print(f"reminder: cannot read rules: {error}", file=sys.stderr)
-        return ()
-    text = without_sections(text, skipped_sections)
+    text = without_sections(rules.text, skipped_sections)
     if not text:
         return ()
     budget = MAX_INJECTED_CHARS
