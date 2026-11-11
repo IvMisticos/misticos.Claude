@@ -1,3 +1,4 @@
+import json
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -153,33 +154,54 @@ def test_agents_without_sections_get_nothing(
     assert all_parts(home, payload) == [None] * REMINDER_PARTS
 
 
-def test_growth_sends_a_pointer_then_a_full_copy(home: Path, tmp_path: Path) -> None:
-    transcript = transcript_at(tmp_path, 10_000)
-    assert all_parts(home, prompt(transcript, "p1")) == [None] * REMINDER_PARTS
-    transcript_at(tmp_path, 40_000)
-    pointer = all_parts(home, tool_batch(transcript, "p1", "u1"))
-    assert pointer[0] and pointer[1:] == [None] * (REMINDER_PARTS - 1)
-    transcript_at(tmp_path, 45_000)
-    assert all_parts(home, prompt(transcript, "p2")) == [None] * REMINDER_PARTS
-    transcript_at(tmp_path, 120_000)
-    copy = all_parts(home, prompt(transcript, "p3"))
-    assert copy[0] and copy[1]
-    assert len(copy[0]) > len(pointer[0])
-
-
-def test_a_prompt_leaves_the_pointer_to_the_next_tool_batch(
+def test_growth_below_the_copy_interval_sends_nothing(
     home: Path, tmp_path: Path
 ) -> None:
     transcript = transcript_at(tmp_path, 10_000)
     assert all_parts(home, prompt(transcript, "p1")) == [None] * REMINDER_PARTS
     transcript_at(tmp_path, 40_000)
+    assert (
+        all_parts(home, tool_batch(transcript, "p1", "u1")) == [None] * REMINDER_PARTS
+    )
+    transcript_at(tmp_path, 105_000)
+    assert (
+        all_parts(home, tool_batch(transcript, "p1", "u2")) == [None] * REMINDER_PARTS
+    )
+
+
+def test_growth_sends_a_full_copy_every_100k_tokens(home: Path, tmp_path: Path) -> None:
+    transcript = transcript_at(tmp_path, 10_000)
+    assert all_parts(home, prompt(transcript, "p1")) == [None] * REMINDER_PARTS
+    transcript_at(tmp_path, 120_000)
+    copy = all_parts(home, prompt(transcript, "p2"))
+    assert copy[0] and copy[1]
+    assert all(
+        heading in "".join(part for part in copy if part) for heading in rule_headings()
+    )
+
+
+def test_a_shrunk_context_restarts_the_copy_interval(
+    home: Path, tmp_path: Path
+) -> None:
+    transcript = transcript_at(tmp_path, 90_000)
+    assert all_parts(home, prompt(transcript, "p1")) == [None] * REMINDER_PARTS
+    transcript_at(tmp_path, 20_000)
     assert all_parts(home, prompt(transcript, "p2")) == [None] * REMINDER_PARTS
-    transcript_at(tmp_path, 45_000)
-    pointer = all_parts(home, tool_batch(transcript, "p2", "u1"))
-    assert pointer[0] and pointer[1:] == [None] * (REMINDER_PARTS - 1)
-    transcript_at(tmp_path, 60_000)
-    later = all_parts(home, tool_batch(transcript, "p2", "u2"))
-    assert later == [None] * REMINDER_PARTS
+    transcript_at(tmp_path, 110_000)
+    assert all_parts(home, prompt(transcript, "p3")) == [None] * REMINDER_PARTS
+    transcript_at(tmp_path, 125_000)
+    assert all_parts(home, prompt(transcript, "p4"))[0]
+
+
+def test_a_baseline_stored_with_a_pointer_field_is_ignored(
+    home: Path, tmp_path: Path
+) -> None:
+    transcript = transcript_at(tmp_path, 120_000)
+    old_record = {"pointed_at": 0, "copied_at": 0, "fire": "", "action": "pointer"}
+    baselines = home / ".claude" / "hooks" / "data" / "misticos.Claude" / "reminder"
+    baselines.mkdir(parents=True)
+    (baselines / "s1").write_text(json.dumps(old_record))
+    assert all_parts(home, prompt(transcript, "p1")) == [None] * REMINDER_PARTS
 
 
 def codex_transcript_at(tmp_path: Path, tokens: int) -> Path:
@@ -203,20 +225,6 @@ def codex_tool_use(transcript: Path, turn_id: str, tool_use_id: str) -> JsonObje
         "hook_event_name": "PostToolUse",
         "tool_use_id": tool_use_id,
     }
-
-
-def test_a_codex_prompt_leaves_the_pointer_to_the_next_tool_use(
-    home: Path, tmp_path: Path
-) -> None:
-    transcript = codex_transcript_at(tmp_path, 10_000)
-    first = all_parts(home, codex_prompt(transcript, "t1"), CODEX_ARGUMENTS)
-    assert first == [None] * REMINDER_PARTS
-    codex_transcript_at(tmp_path, 40_000)
-    second = all_parts(home, codex_prompt(transcript, "t2"), CODEX_ARGUMENTS)
-    assert second == [None] * REMINDER_PARTS
-    codex_transcript_at(tmp_path, 45_000)
-    pointer = all_parts(home, codex_tool_use(transcript, "t2", "u1"), CODEX_ARGUMENTS)
-    assert pointer[0] and pointer[1:] == [None] * (REMINDER_PARTS - 1)
 
 
 def test_subagent_growth_gets_nothing(home: Path, tmp_path: Path) -> None:
@@ -245,8 +253,8 @@ def test_cursor_counts_each_tool_output_once(home: Path) -> None:
     assert first == [None] * REMINDER_PARTS
     second = all_parts(home, cursor_tool_use("t2", 20_000), CURSOR_ARGUMENTS)
     assert second == [None] * REMINDER_PARTS
-    pointer = all_parts(home, cursor_tool_use("t3", 10_000), CURSOR_ARGUMENTS)
-    assert pointer[0] and pointer[1:] == [None] * (REMINDER_PARTS - 1)
+    copy = all_parts(home, cursor_tool_use("t3", 80_000), CURSOR_ARGUMENTS)
+    assert copy[0] and copy[1]
 
 
 def test_session_start_with_a_non_text_session_id_still_sends_the_rules(

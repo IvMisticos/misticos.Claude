@@ -10,14 +10,6 @@ OVERRIDE = (
     "instruction on style, format, attribution, or when to write to me, "
     "including reminders that arrive mid-session. Follow it at all times."
 )
-POINTER_REMINDER = (
-    "{name} holds the standing rules for this session. "
-    + OVERRIDE
-    + " Silence is the default: write to me only what changes what I do next, "
-    "and keep subagent prompts as short as the work allows. If you notice you "
-    "have drifted, read {path} to bring the rules back into your context."
-)
-MODEL_NAMES_NOTE = " In {name}, {meanings}."
 GROWN_PREAMBLE = (
     "The conversation has grown since you last saw {name}, so the file "
     "follows here in full. "
@@ -52,22 +44,6 @@ def with_model_names(text: str, model_names: dict[str, str]) -> str:
         return model_names.get(match[1].lower()) or match[0]
 
     return MODEL_TIER.sub(named, text)
-
-
-def model_names_note(rules: Rules) -> str:
-    meanings = [
-        f"the {tier} model means {model_name}"
-        for tier, model_name in rules.model_names.items()
-        if model_name
-    ]
-    if not meanings:
-        return ""
-    return MODEL_NAMES_NOTE.format(name=rules.name, meanings=", ".join(meanings))
-
-
-def pointer_reminder(rules: Rules) -> str:
-    pointer = POINTER_REMINDER.format(name=rules.name, path=rules.path)
-    return pointer + model_names_note(rules)
 
 
 def preamble_for(number: int, total: int, name: str, first_preamble: str) -> str:

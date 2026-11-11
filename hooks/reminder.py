@@ -36,7 +36,6 @@ from rules_copy import (
     SESSION_START_PREAMBLE,
     Rules,
     full_copy_messages,
-    pointer_reminder,
     rules_at,
 )
 from transcript import context_tokens, payload_tokens
@@ -52,12 +51,8 @@ class Options(NamedTuple):
     harness: Harness
 
 
-def message_for_part(
-    action: Action, part: int, messages: Sequence[str], rules: Rules
-) -> str | None:
+def message_for_part(action: Action, part: int, messages: Sequence[str]) -> str | None:
     match action:
-        case Action.POINTER:
-            return pointer_reminder(rules) if part == 1 else None
         case Action.COPY:
             return messages[part - 1] if part <= len(messages) else None
         case Action.IDLE:
@@ -94,9 +89,8 @@ def growth_reminder(
         fire,
         context,
         can_copy=len(messages) <= REMINDER_PARTS and bool(fire or len(messages) == 1),
-        can_point=event != HookEvent.USER_PROMPT_SUBMIT,
     )
-    return message_for_part(action, options.part, messages, rules)
+    return message_for_part(action, options.part, messages)
 
 
 def session_start_reminder(
@@ -115,8 +109,8 @@ def session_start_reminder(
         rules, SESSION_START_PREAMBLE, ALL_SECTIONS - sections
     )
     if len(messages) > REMINDER_PARTS:
-        return pointer_reminder(rules) if options.part == 1 else None
-    return message_for_part(Action.COPY, options.part, messages, rules)
+        return None
+    return message_for_part(Action.COPY, options.part, messages)
 
 
 def reminder_for(event: HookEvent, payload: JsonObject, options: Options) -> str | None:
