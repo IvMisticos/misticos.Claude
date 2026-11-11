@@ -45,6 +45,7 @@ from agents import ALL_SECTIONS, rule_sections_for
 
 RULES_PATH = str(PLUGIN_ROOT / "INSTRUCTIONS.md")
 REMINDER_PARTS = 4
+SOURCES_WITH_EARLIER_CONTEXT = ("resume", "fork")
 
 
 class Options(NamedTuple):
@@ -119,7 +120,17 @@ def session_start_reminder(
     return message_for_part(Action.COPY, options.part, messages, rules)
 
 
+def continues_earlier_context(event: HookEvent, payload: JsonObject) -> bool:
+    return (
+        event == HookEvent.SESSION_START
+        and not is_subagent(payload)
+        and payload.get("source") in SOURCES_WITH_EARLIER_CONTEXT
+    )
+
+
 def reminder_for(event: HookEvent, payload: JsonObject, options: Options) -> str | None:
+    if continues_earlier_context(event, payload):
+        return None
     rules = rules_at(RULES_PATH, options.harness.model_names)
     if event in (HookEvent.SESSION_START, HookEvent.SUBAGENT_START):
         return session_start_reminder(rules, event, payload, options)

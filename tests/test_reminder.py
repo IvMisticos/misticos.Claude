@@ -95,6 +95,35 @@ def test_session_start_sends_the_whole_file_in_parts(home: Path) -> None:
     assert all(len(part) <= 10_000 for part in sent)
 
 
+@pytest.mark.parametrize("source", ["startup", "clear", "compact"])
+def test_a_session_start_without_earlier_context_gets_the_file(
+    home: Path, source: str
+) -> None:
+    payload: JsonObject = {
+        "hook_event_name": "SessionStart",
+        "session_id": "s1",
+        "source": source,
+    }
+    assert context(reminder(home, 1, payload))
+
+
+@pytest.mark.parametrize("source", ["resume", "fork"])
+def test_a_continued_session_keeps_its_copy_and_growth_baseline(
+    home: Path, tmp_path: Path, source: str
+) -> None:
+    transcript = transcript_at(tmp_path, 10_000)
+    assert all_parts(home, prompt(transcript, "p1")) == [None] * REMINDER_PARTS
+    payload: JsonObject = {
+        "hook_event_name": "SessionStart",
+        "session_id": "s1",
+        "source": source,
+    }
+    assert all_parts(home, payload) == [None] * REMINDER_PARTS
+    transcript_at(tmp_path, 120_000)
+    copy = all_parts(home, prompt(transcript, "p2"))
+    assert copy[0] and copy[1]
+
+
 def test_a_main_session_of_a_skipped_type_gets_the_file(home: Path) -> None:
     payload: JsonObject = {
         "hook_event_name": "SessionStart",
