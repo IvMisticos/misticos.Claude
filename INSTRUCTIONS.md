@@ -179,4 +179,4 @@ An agent or thread idle or stopped for over an hour has an expired prompt cache.
 
 Pick the agent whose model fits the work. The cheap model takes data that is large and needs a model to filter it, split so each worker reads under 60k tokens of it. The fast model takes a bounded, verifiable task. The strong model takes open-ended work and anything that needs judgement. Never override an agent's effort and model unless I ask.
 
-Where work changes visuals or prose, the cheap model captures and saves each new visual and prose in every state, and checks both against the project and these rules. The strong model then cuts every addition that prevents no mistake, and reviews the wording of what stays. Run this as a workflow when there are many areas.
+Where work changes visuals or prose, the cheap model captures and saves each new visual and prose in every state, and checks both against the project and these rules. The strong model then reviews every changed screen, both how it looks and what it says, and cuts any addition that prevents no mistake. Run this as a workflow when there are many areas.
