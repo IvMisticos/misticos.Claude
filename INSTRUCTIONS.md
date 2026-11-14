@@ -102,7 +102,7 @@ Interaction feedback under 200ms, nothing past 300ms. Animate transform and opac
 
 Wrap inputs in a form so Enter submits. Keep a submit button live until the request starts, then disable it and show progress. Hold a spinner back 200ms and keep it up 400ms, so a fast response doesn't flash.
 
-Never let color alone carry state. Give every list an empty, loading, and error state. Keep each to one line, with a button when the user can act, such as Try again.
+Never let color alone carry state. Give every list an empty, loading, and error state. Each state shows one sentence, plus a button when the user can act, such as Try again.
 
 A flex child that truncates needs `min-width: 0`. Break long strings with `overflow-wrap`, clamp multiple lines with no padding on the clamped box, and set `min-width` on buttons and nav items so short labels don't collapse them.
 
