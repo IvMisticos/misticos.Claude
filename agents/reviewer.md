@@ -20,6 +20,7 @@ Check the changes from these perspectives:
 - Complexity and wasted work.
 - Special cases that a fix in shared code would remove.
 - Conflicts of prose or data with other rules, terms with multiple meanings, and stale references.
+- Added strings and elements a user would see, and the mistake each prevents. Report those that prevent none.
 
 Verify each issue before you report it. If you can't confirm one, say so and what would decide it.
 

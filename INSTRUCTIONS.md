@@ -16,7 +16,7 @@ Think as long as the task needs. Spend thinking on ambiguity, design tradeoffs, 
 
 # Clarity
 
-Make all code and prose (including UI and your responses) easy to understand on the first read, and with every word worth reading: nothing I'd skim past. Apply these rules unprompted, most specific wins, and don't say which one you applied.
+Make all code and prose (including UI and your responses) easy to understand on the first read, and with every word worth reading: nothing I'd skim past. Decide whether a sentence should exist before you decide how to write it. These rules shape the words that earn a place; they never justify adding words. Apply these rules unprompted, most specific wins, and don't say which one you applied.
 
 Orwell: no print-stock phrases or figures of speech, short word over long, cut any word you can, active voice, everyday English.
 
@@ -82,6 +82,12 @@ If a tool is missing, install it yourself. Don't block the work.
 
 These are the defaults. Use these numbers instead of inventing any. A documented project design system wins where it speaks; these rules cover the rest.
 
+Everything on a screen earns its place, prose or not. Show only what changes what the user does next. Before you add a string or an element, name the mistake a first-time user makes without it. If you can't, leave it out. This covers hints, intros, descriptions, examples, placeholders, toasts, icons, badges, eyebrow labels, numbering, borders, and whole panels.
+
+UI text is the comment of an interface: where it looks needed, remove the need. Fix the label, the control, the default, or the validation message first. A hint stays only for what the screen can't show: a choice that can't be undone, a rule the control can't enforce, or a step outside the app. Never explain how the system works inside, restate the label or the format, say "leave empty to" for the plain default, or give an example the placeholder or validation already teaches.
+
+Say each fact once per screen. No intro that restates its heading or the rows below it, no section heading that repeats the page title, no count of a list on screen, no toast or banner for a change the screen already shows, and no icon beside a word that already says it.
+
 The modern-web-guidance skill holds guides on current browser APIs: dialogs, popovers, view transitions, forms, passkeys, performance. Use Baseline widely available features without fallback. Use newly available features behind feature detection, with a fallback and never a polyfill.
 
 Hit targets are 24px, or 44px where fingers reach them. Grow the hit area when the visual is smaller. Leave no dead space between list items: grow padding until the gaps close.
@@ -100,7 +106,7 @@ Interaction feedback under 200ms, nothing past 300ms. Animate transform and opac
 
 Wrap inputs in a form so Enter submits. Keep a submit button live until the request starts, then disable it and show progress. Hold a spinner back 200ms and keep it up 400ms, so a fast response doesn't flash.
 
-Never let color alone carry state. Give every list an empty, loading, and error state.
+Never let color alone carry state. Give every list an empty, loading, and error state, each one line plus the action that fixes it.
 
 A flex child that truncates needs `min-width: 0`. Break long strings with `overflow-wrap`, clamp multiple lines with no padding on the clamped box, and set `min-width` on buttons and nav items so short labels don't collapse them.
 
@@ -177,4 +183,4 @@ An agent or thread idle or stopped for over an hour has an expired prompt cache.
 
 Pick the agent whose model fits the work. The cheap model takes data that is large and needs a model to filter it, split so each worker reads under 60k tokens of it. The fast model takes a bounded, verifiable task. The strong model takes open-ended work and anything that needs judgement. Never override an agent's effort and model unless I ask.
 
-Where work changes visuals or prose, the cheap model captures and saves each new visual and prose in every state, and checks both against the project and these rules. The strong model then reviews only what matters most, such as main-page prose, a public API, or key screenshots, not a tooltip few people see. Run this as a workflow when there are many areas.
+Where work changes visuals or prose, the cheap model captures and saves each new visual and prose in every state, lists every string and element the change adds, and checks both against the project and these rules. The strong model then asks of each added string and element which mistake it prevents, and cuts those that prevent none, tooltips included. It reviews wording only where it matters most, such as main-page prose, a public API, or key screenshots. Run this as a workflow when there are many areas.
