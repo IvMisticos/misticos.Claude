@@ -16,7 +16,7 @@ Think as long as the task needs. Spend thinking on ambiguity, design tradeoffs, 
 
 # Clarity
 
-Make all code and prose (including UI and your responses) easy to understand on the first read, and with every word worth reading: nothing I'd skim past. Apply these rules unprompted, most specific wins, and don't say which one you applied.
+Make all code and prose (including UI and your responses) easy to understand on the first read, and with every word worth reading: nothing I'd skim past. First decide whether a sentence should exist; these rules never justify adding one. Apply these rules unprompted, most specific wins, and don't say which one you applied.
 
 Orwell: no print-stock phrases or figures of speech, short word over long, cut any word you can, active voice, everyday English.
 
@@ -82,6 +82,8 @@ If a tool is missing, install it yourself. Don't block the work.
 
 These are the defaults. Use these numbers instead of inventing any. A documented project design system wins where it speaks; these rules cover the rest.
 
+Everything on a screen earns its place, prose or not: name the mistake a first-time user makes without it, or leave it out. Treat UI text like a code comment and remove the need: fix the label, control, default, or validation. A hint stays only for what the screen can't show: an action that can't be undone, a rule the control can't enforce, or a step outside the app. Say each fact once per screen, counting icons and toasts.
+
 The modern-web-guidance skill holds guides on current browser APIs: dialogs, popovers, view transitions, forms, passkeys, performance. Use Baseline widely available features without fallback. Use newly available features behind feature detection, with a fallback and never a polyfill.
 
 Hit targets are 24px, or 44px where fingers reach them. Grow the hit area when the visual is smaller. Leave no dead space between list items: grow padding until the gaps close.
@@ -100,7 +102,7 @@ Interaction feedback under 200ms, nothing past 300ms. Animate transform and opac
 
 Wrap inputs in a form so Enter submits. Keep a submit button live until the request starts, then disable it and show progress. Hold a spinner back 200ms and keep it up 400ms, so a fast response doesn't flash.
 
-Never let color alone carry state. Give every list an empty, loading, and error state.
+Never let color alone carry state. Give every list an empty, loading, and error state. Each state shows one sentence, plus a button when the user can act, such as Try again.
 
 A flex child that truncates needs `min-width: 0`. Break long strings with `overflow-wrap`, clamp multiple lines with no padding on the clamped box, and set `min-width` on buttons and nav items so short labels don't collapse them.
 
@@ -177,4 +179,4 @@ An agent or thread idle or stopped for over an hour has an expired prompt cache.
 
 Pick the agent whose model fits the work. The cheap model takes data that is large and needs a model to filter it, split so each worker reads under 60k tokens of it. The fast model takes a bounded, verifiable task. The strong model takes open-ended work and anything that needs judgement. Never override an agent's effort and model unless I ask.
 
-Where work changes visuals or prose, the cheap model captures and saves each new visual and prose in every state, and checks both against the project and these rules. The strong model then reviews only what matters most, such as main-page prose, a public API, or key screenshots, not a tooltip few people see. Run this as a workflow when there are many areas.
+Where work changes visuals or prose, the cheap model captures and saves each new visual and prose in every state, and checks both against the project and these rules. The strong model then reviews every changed screen, both how it looks and what it says, and cuts any addition that prevents no mistake. Run this as a workflow when there are many areas.
