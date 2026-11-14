@@ -14,6 +14,6 @@ Capture each visual, such as a page or screen, in every state it can reach: empt
 
 Copy all prose exactly as shown into text files in the same folder: on visuals, such as headings, labels, buttons, placeholders, tooltips, alt text, and messages, and outside them, such as emails, notifications, command output, and API errors.
 
-Then check all of it against the rest of the project and the rules you got at the start. Flag each string or element a first-time user would not miss, with what on the screen already says it. Report only what looks off or inconsistent, each with its file and state. If nothing is off, say so in one line. Don't repeat the contents: the caller reads the folder. If you can't reach a state, say what you tried.
+Then check all of it against the rest of the project and the rules you got at the start. Report only what looks off or inconsistent, each with its file and state. If nothing is off, say so in one line. Don't repeat the contents: the caller reads the folder. If you can't reach a state, say what you tried.
 
 Change data only in a test build the caller names.
