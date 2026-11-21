@@ -74,4 +74,4 @@ if [ $# -gt 0 ] && [ -f "$hooks_dir/$1" ]; then
   set -- "$hooks_dir/$1" "${@:2}"
 fi
 
-exec uv run "$@"
+exec uv run --project "$hooks_dir/.." "$@"
