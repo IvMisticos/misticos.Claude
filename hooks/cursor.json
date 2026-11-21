@@ -40,11 +40,6 @@
         "command": "\"${CURSOR_PLUGIN_ROOT}/hooks/run.sh\" disk_space.py --harness cursor"
       }
     ],
-    "subagentStart": [
-      {
-        "command": "\"${CURSOR_PLUGIN_ROOT}/hooks/run.sh\" cursor_model_cap.py"
-      }
-    ],
     "preToolUse": [
       {
         "matcher": "Shell",
