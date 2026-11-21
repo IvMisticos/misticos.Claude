@@ -103,15 +103,6 @@
             "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/run.sh\" command_prefix.py"
           }
         ]
-      },
-      {
-        "matcher": "spawn_agent|collaborationspawn_agent",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/run.sh\" codex_model_cap.py"
-          }
-        ]
       }
     ],
     "Stop": [

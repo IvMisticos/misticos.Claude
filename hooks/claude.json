@@ -213,17 +213,6 @@
         ]
       }
     ],
-    "PreToolUse": [
-      {
-        "matcher": "Agent|Task|mcp__Claude_Code_Remote__create_session|mcp__claude-code-remote__create_session",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/run.sh\" claude_model_cap.py"
-          }
-        ]
-      }
-    ],
     "PostToolUse": [
       {
         "matcher": "mcp__.*__create_pull_request",
