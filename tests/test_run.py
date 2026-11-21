@@ -10,6 +10,7 @@ import pytest
 from conftest import FakeBin, system_tool
 
 RUN = Path(__file__).resolve().parent.parent / "hooks" / "run.sh"
+UV_RUN = f"uv run --project {RUN.parent}/.."
 TOOLS = [
     "bash",
     "cat",
@@ -119,7 +120,7 @@ def run_hook(
 
 
 def test_installs_uv_and_runs_the_hook(environment: dict[str, str]) -> None:
-    assert run_hook(environment).stdout == "uv run hook.py\n"
+    assert run_hook(environment).stdout == f"{UV_RUN} hook.py\n"
 
 
 def test_installs_uv_again_after_a_finished_install(
@@ -127,7 +128,7 @@ def test_installs_uv_again_after_a_finished_install(
 ) -> None:
     run_hook(environment)
     (home / "mise-installs" / "uv").unlink()
-    assert run_hook(environment).stdout == "uv run hook.py\n"
+    assert run_hook(environment).stdout == f"{UV_RUN} hook.py\n"
 
 
 def mise_calls(home: Path) -> list[str]:
@@ -164,14 +165,14 @@ def test_installs_uv_from_home_inside_a_project(
     project.mkdir()
     (project / "mise.toml").write_text('[env]\nUNTRUSTED = "1"\n')
     result = run_hook(environment, cwd=project)
-    assert result.stdout == "uv run hook.py\n"
+    assert result.stdout == f"{UV_RUN} hook.py\n"
 
 
 def test_runs_hooks_when_the_global_mise_config_cannot_change(
     environment: dict[str, str], home: Path
 ) -> None:
     result = run_hook({**environment, "MISE_USE_FAILS": "1"})
-    assert result.stdout == "uv run hook.py\n"
+    assert result.stdout == f"{UV_RUN} hook.py\n"
     linked_uv = (home / ".local" / "bin" / "uv").readlink()
     assert linked_uv == home / "mise-x-installs" / "uv"
 
@@ -199,7 +200,7 @@ def test_takes_over_an_old_empty_lock(
 ) -> None:
     an_hour_ago = time.time() - 3600
     os.utime(empty_lock, (an_hour_ago, an_hour_ago))
-    assert run_hook(environment).stdout == "uv run hook.py\n"
+    assert run_hook(environment).stdout == f"{UV_RUN} hook.py\n"
 
 
 def test_waits_while_another_hook_installs_uv(
@@ -215,9 +216,9 @@ def test_installs_uv_after_another_hook_was_killed_while_installing(
     environment: dict[str, str], held_install: subprocess.Popen[bytes]
 ) -> None:
     kill_hook(held_install)
-    assert run_hook(environment).stdout == "uv run hook.py\n"
+    assert run_hook(environment).stdout == f"{UV_RUN} hook.py\n"
 
 
 def test_finds_scripts_next_to_itself(environment: dict[str, str]) -> None:
     script = RUN.parent / "reminder.py"
-    assert run_hook(environment, "reminder.py").stdout == f"uv run {script}\n"
+    assert run_hook(environment, "reminder.py").stdout == f"{UV_RUN} {script}\n"
