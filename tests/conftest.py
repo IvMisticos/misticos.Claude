@@ -208,9 +208,9 @@ def plugin_hook_command(script: str) -> str:
     return f'"${{CLAUDE_PLUGIN_ROOT}}/hooks/run.sh" {script}'
 
 
-def installed(tool: str) -> str:
-    path = shutil.which(tool)
-    assert path is not None, f"{tool} is not installed"
+def system_tool(tool: str) -> str:
+    path = shutil.which(tool, path=os.confstr("CS_PATH"))
+    assert path is not None, f"{tool} is not in the system PATH"
     return path
 
 

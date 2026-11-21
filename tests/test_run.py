@@ -7,7 +7,7 @@ from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
-from conftest import FakeBin, installed
+from conftest import FakeBin, system_tool
 
 RUN = Path(__file__).resolve().parent.parent / "hooks" / "run.sh"
 TOOLS = [
@@ -64,7 +64,7 @@ SCRIPT
 def environment(fake_bin: FakeBin, home: Path) -> dict[str, str]:
     bin_dir = fake_bin("curl", FAKE_CURL)
     for tool in TOOLS:
-        (bin_dir / tool).symlink_to(installed(tool))
+        (bin_dir / tool).symlink_to(system_tool(tool))
     return {"HOME": str(home), "PATH": str(bin_dir)}
 
 
