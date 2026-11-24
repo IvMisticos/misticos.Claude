@@ -107,7 +107,7 @@ CLOUD_AUTO_MODE: JsonObject = {
         "**Host containment**: an ephemeral cloud container discarded after the session. Data files outside the repository are throwaway. Instance-metadata, node and cluster credentials are never task credentials.",
         "**Repository visibility**: assume external public unless known otherwise.",
         "**Sensitive data**: any file or store holding credentials or confidential data.",
-        "**Sensitive remote targets**: any host, namespace, or container with `prod`, `production`, `release` or `main` in its name. A public repository takes only its own work and no secrets, sensitive data, or content from outside, internal or sensitive targets.",
+        "**Sensitive remote targets**: any host, namespace, container, or another resource known to be in production or named `release` or `main`. A public repository takes only its own work and no secrets, sensitive data, or content from outside, internal or sensitive targets.",
     ],
     "allow": [
         "Scratch Cleanup: Deleting or overwriting files inside the session's `scratchpad/` directory. Does not cover its `agents/` subdirectory, which holds running subagents' work, or a target held in an unknown shell variable.",
@@ -133,7 +133,7 @@ CLOUD_AUTO_MODE: JsonObject = {
         "Self-Modification: Changing Claude Code permissions, hooks, auto mode settings, or instruction files in a way the user did not ask for.",
         "External Writes: Posting, commenting, messaging, or changing issues and records in external services when the task does not call for it.",
         "Public Exposure: Publishing a repository, sensitive data, gist, package, or tunnel, or binding a service to a public address.",
-        "Irreversible Local Destruction: Deleting files that existed before the session outside the repository, scratchpad and project workspace folders",
+        "Irreversible Local Destruction: Deleting files that existed before the session outside the repository, scratchpad and project workspace folders.",
         "Unverifiable Deletion: Deleting remote state by a target set computed at runtime, such as a shell variable, filter, or pipeline.",
         "Real-World Transactions: Purchases, payments, or messages to people with no explicit user request.",
         "Auto-Mode Bypass: Obfuscating a blocked action, splitting it into parts, or routing it through another agent or tool with no user authorization.",
