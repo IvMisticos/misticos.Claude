@@ -304,9 +304,15 @@ def test_plugin_the_user_disabled_is_not_installed(
 def test_cloud_sessions_get_the_auto_mode_rules(
     configure_settings: ConfigureSettings, home: Path
 ) -> None:
-    write_json(home / ".claude" / "settings.json", {"autoMode": {"allow": ["Old"]}})
+    write_json(
+        home / ".claude" / "settings.json",
+        {"autoMode": {"allow": ["Old"], "hard_deny": ["Own"]}},
+    )
     configure_settings(CLAUDE_CODE_REMOTE="true")
-    assert written_setting(home, "autoMode") == setup_settings.CLOUD_AUTO_MODE
+    assert written_setting(home, "autoMode") == {
+        **setup_settings.CLOUD_AUTO_MODE,
+        "hard_deny": ["Own"],
+    }
 
 
 def test_local_sessions_keep_their_auto_mode_rules(
