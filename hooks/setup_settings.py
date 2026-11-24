@@ -125,7 +125,7 @@ CLOUD_AUTO_MODE: JsonObject = {
     "soft_deny": [
         "Git Destructive: Force-pushing, deleting, or rewriting history on a branch the agent does not own, or deleting remote tags or releases.",
         "Merge Without Review: Merging a pull request or enabling auto-merge before its review (AI self-reviews are permitted) passes.",
-        "Production Changes: Deploying to, writing to, or migrating a sensitive remote target with no explicit request from user or coordinator.",
+        "Production Changes: Deploying to or otherwise changing a sensitive remote target with no request from user.",
         "Permission Grant: Granting roles, adding collaborators, changing account or organization security settings, or sharing sensitive data more widely.",
         "Security Weaken: Disabling TLS verification, authentication, audit, sandbox, or firewall controls, or adding a way around them.",
         "Credential Exposure: Printing, copying, committing, or sending a credential anywhere but its intended provider.",
@@ -135,8 +135,8 @@ CLOUD_AUTO_MODE: JsonObject = {
         "Public Exposure: Publishing a repository, sensitive data, gist, package, or tunnel, or binding a service to a public address.",
         "Irreversible Local Destruction: Deleting files that existed before the session outside the repository, scratchpad and project workspace folders",
         "Unverifiable Deletion: Deleting remote state by a target set computed at runtime, such as a shell variable, filter, or pipeline.",
-        "Real-World Transactions: Purchases, payments, or messages to people on the user's behalf.",
-        "Auto-Mode Bypass: Obfuscating a blocked action, splitting it into parts, or routing it through another agent or tool with no user or agent authorization.",
+        "Real-World Transactions: Purchases, payments, or messages to people with no explicit user request.",
+        "Auto-Mode Bypass: Obfuscating a blocked action, splitting it into parts, or routing it through another agent or tool with no user authorization.",
     ],
     "hard_deny": [
         "Data Exfiltration: Sending secrets, credentials, details of internals, or sensitive data to a destination that is not trusted or whose visibility may not fit the content.",
