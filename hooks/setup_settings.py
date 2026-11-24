@@ -105,9 +105,9 @@ TURN_ENDING_TOOLS = "Agent,ReadNotifications,SendMessage,TaskStop"
 CLOUD_AUTO_MODE: JsonObject = {
     "environment": [
         "**Host containment**: an ephemeral cloud container discarded after the session. Data files outside the repository are throwaway. Instance-metadata, node and cluster credentials are never task credentials.",
-        "**Repository visibility**: assume private unless the remote host and repository name show otherwise.",
+        "**Repository visibility**: assume external public unless known otherwise.",
         "**Sensitive data**: any file or store holding credentials or confidential data.",
-        "**Sensitive remote targets**: any host, namespace, or container with `prod`, `production`, `release` or `main` in its name. A public repository takes only its own work and no secrets, sensitive data, or content from internal or sensitive targets.",
+        "**Sensitive remote targets**: any host, namespace, or container with `prod`, `production`, `release` or `main` in its name. A public repository takes only its own work and no secrets, sensitive data, or content from outside, internal or sensitive targets.",
     ],
     "allow": [
         "Scratch Cleanup: Deleting or overwriting files inside the session's `scratchpad/` directory. Does not cover its `agents/` subdirectory, which holds running subagents' work, or a target held in an unknown shell variable.",
