@@ -306,12 +306,12 @@ def test_cloud_sessions_get_the_auto_mode_rules(
 ) -> None:
     write_json(
         home / ".claude" / "settings.json",
-        {"autoMode": {"allow": ["Old"], "hard_deny": ["Own"]}},
+        {"autoMode": {"allow": ["Old"], "classifyAllShell": True}},
     )
     configure_settings(CLAUDE_CODE_REMOTE="true")
     assert written_setting(home, "autoMode") == {
         **setup_settings.CLOUD_AUTO_MODE,
-        "hard_deny": ["Own"],
+        "classifyAllShell": True,
     }
 
 
