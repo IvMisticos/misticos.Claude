@@ -8,6 +8,7 @@
 # ///
 
 import json
+import os
 import shutil
 import sys
 import tomllib
@@ -101,6 +102,46 @@ DENIED_TOOLS = (
 )
 
 TURN_ENDING_TOOLS = "Agent,ReadNotifications,SendMessage,TaskStop"
+CLOUD_AUTO_MODE: JsonObject = {
+    "environment": [
+        "**Host containment**: an ephemeral cloud container discarded after the session. Data files outside the repository are throwaway. Instance-metadata, node and cluster credentials are never task credentials.",
+        "**Repository visibility**: assume external public unless known otherwise.",
+        "**Sensitive data**: any file or store holding credentials or confidential data.",
+        "**Sensitive remote targets**: any host, namespace, container, or another resource known to be in production or named `release` or `main`. A public repository takes only its own work and no secrets, sensitive data, or content from outside, internal or sensitive targets.",
+    ],
+    "allow": [
+        "Scratch Cleanup: Deleting or overwriting files inside the session's `scratchpad/` directory. Does not cover its `agents/` subdirectory, which holds running subagents' work, or a target held in an unknown shell variable.",
+        "Repository Files: Deleting or overwriting files in the session's repository in this container, by literal path or glob, and running its development servers and local tests. Discarding uncommitted work the agent did not create stays blocked.",
+        "Read-Only Operations: Listing, reading, and searching files in this container, and GET requests, read-only API calls, or queries that change no state, carry no sensitive information in the URL, and return no credentials, secrets, or PII. Does not cover sensitive data locations, credential stores, cloud metadata endpoints.",
+        "Dependencies: Installing with the standard command packages already declared in the repository's manifests and relevant common widely used tooling. Does not cover unpopular packages and unusual package sources.",
+        "Standard Credentials: Sending a credential from the agent's own config to its intended provider.",
+        "Git Push Destination: Pushing to any branch of the session's repository, and force-pushing owned branches. Does not cover sensitive remote targets.",
+        "Pull Request Work: Creating a pull request in the session's repository from the agent's own branch when the task calls for one, and editing its title, body, and draft state.",
+        "Multi-Agent Coordination: Starting subagents and workflows through the Agent and Workflow tools, messaging them, and replying in the conversation the task was launched from.",
+        "Transient Retry: Retrying after a network error, 5xx, timeout, rate limit, lock contention, or an unexpected error from the agent's own tool. Does not cover obfuscated retries or refusal bypasses.",
+        "Security Discussion: Reading, writing, or reviewing security-related code and docs. Running an exploit, scanning for credentials, or weakening a control is still judged on its own terms.",
+        "Test Artifacts: Placeholder credentials and test values authored as placeholders. A value copied from a real secret is never a test artifact.",
+    ],
+    "soft_deny": [
+        "Git Destructive: Force-pushing, deleting, or rewriting history on a branch the agent does not own, or deleting remote tags or releases.",
+        "Merge Without Review: Merging a pull request or enabling auto-merge before its review (AI self-reviews are permitted) passes.",
+        "Production Changes: Deploying to or otherwise changing a sensitive remote target with no request from user.",
+        "Permission Grant: Granting roles, adding collaborators, changing account or organization security settings, or sharing sensitive data more widely.",
+        "Security Weaken: Disabling TLS verification, authentication, audit, sandbox, or firewall controls, or adding a way around them.",
+        "Credential Exposure: Printing, copying, committing, or sending a credential anywhere but its intended provider.",
+        "Untrusted Code: Running code from an unknown, uncommon or unpopular source or library, piping remote content into a shell, or running code inside an untrusted clone or archive.",
+        "Self-Modification: Changing Claude Code permissions, hooks, auto mode settings, or instruction files in a way the user did not ask for.",
+        "External Writes: Posting, commenting, messaging, or changing issues and records in external services when the task does not call for it.",
+        "Public Exposure: Publishing a repository, sensitive data, gist, package, or tunnel, or binding a service to a public address.",
+        "Irreversible Local Destruction: Deleting files that existed before the session outside the repository, scratchpad and project workspace folders.",
+        "Unverifiable Deletion: Deleting remote state by a target set computed at runtime, such as a shell variable, filter, or pipeline.",
+        "Real-World Transactions: Purchases, payments, or messages to people with no explicit user request.",
+        "Auto-Mode Bypass: Obfuscating a blocked action, splitting it into parts, or routing it through another agent or tool with no user authorization.",
+    ],
+    "hard_deny": [
+        "Data Exfiltration: Sending secrets, credentials, details of internals, or sensitive data to a destination that is not trusted or whose visibility may not fit the content.",
+    ],
+}
 
 
 def read_json(path: Path) -> JsonObject:
@@ -182,6 +223,11 @@ def configure_claude_settings() -> None:
         "CLAUDE_CODE_TOTAL_TOKENS_REMINDER": "off",
         "CLAUDE_CODE_TURN_UPDATES": "0",
     }
+    if os.environ.get("CLAUDE_CODE_REMOTE") == "true":
+        wanted["autoMode"] = {
+            **setting(settings, "autoMode", dict),
+            **CLOUD_AUTO_MODE,
+        }
     if wanted != settings:
         write_atomically(CLAUDE_SETTINGS, json.dumps(wanted, indent=2) + "\n")
 
