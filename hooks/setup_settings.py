@@ -8,6 +8,7 @@
 # ///
 
 import json
+import os
 import shutil
 import sys
 import tomllib
@@ -101,6 +102,25 @@ DENIED_TOOLS = (
 )
 
 TURN_ENDING_TOOLS = "Agent,ReadNotifications,SendMessage,TaskStop"
+CLOUD_AUTO_MODE: JsonObject = {
+    "environment": [
+        "**Host containment**: an ephemeral cloud container that runs only this session and is discarded after it. Network egress goes through a proxy with its own host allowlist. Every file in it, /tmp and ~/.claude included, is throwaway.",
+        "**Trusted repo**: the repositories in the working directory and their GitHub remotes.",
+        "**Sensitive remote targets**: any host, namespace, or container with `prod` or `production` as a whole name segment.",
+    ],
+    "allow": [
+        "Container Files: Creating, changing, or deleting any file in this container, by name, glob, or variable, outside the session's repositories. The container is discarded after the session.",
+        "Repository Files: Creating, changing, or deleting files in the session's repositories, except discarding uncommitted or unpushed work the agent did not create.",
+        "Read-Only Operations: Listing, reading, and searching any path, and commands or API calls that change no state.",
+        "Tool Installs: Installing toolchains, CLIs, and packages with their official installers or package managers.",
+        "Git Push Destination: Pushing to any branch of the session's repositories, except force-pushing the default branch.",
+        "Pull Request Work: Creating, updating, commenting on, and marking ready pull requests in the session's repositories.",
+        "Multi-Agent Coordination: Starting, messaging, and stopping subagents, teammates, and workflows.",
+        "Transient Retry: Retrying an action after a network error, 5xx, timeout, rate limit, or lock contention.",
+        "Security Discussion: Reading, writing, or reviewing security-related code, configs, or docs as part of the task.",
+        "Test Artifacts: Placeholder credentials and hard-coded values written for tests or examples.",
+    ],
+}
 
 
 def read_json(path: Path) -> JsonObject:
@@ -182,6 +202,8 @@ def configure_claude_settings() -> None:
         "CLAUDE_CODE_TOTAL_TOKENS_REMINDER": "off",
         "CLAUDE_CODE_TURN_UPDATES": "0",
     }
+    if os.environ.get("CLAUDE_CODE_REMOTE") == "true":
+        wanted["autoMode"] = CLOUD_AUTO_MODE
     if wanted != settings:
         write_atomically(CLAUDE_SETTINGS, json.dumps(wanted, indent=2) + "\n")
 
