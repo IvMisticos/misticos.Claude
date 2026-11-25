@@ -124,8 +124,6 @@ CLOUD_AUTO_MODE: JsonObject = {
     ],
     "soft_deny": [
         "Git Destructive: Force-pushing, deleting, or rewriting history on a branch the agent does not own, or deleting remote tags or releases.",
-        "Merge Without Review: Merging a pull request or enabling auto-merge before its review (AI self-reviews are permitted) passes.",
-        "Production Changes: Deploying to or otherwise changing a sensitive remote target with no request from user.",
         "Permission Grant: Granting roles, adding collaborators, changing account or organization security settings, or sharing sensitive data more widely.",
         "Security Weaken: Disabling TLS verification, authentication, audit, sandbox, or firewall controls, or adding a way around them.",
         "Credential Exposure: Printing, copying, committing, or sending a credential anywhere but its intended provider.",
